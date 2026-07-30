@@ -24,11 +24,15 @@ services:
       - "8000:8000"
     environment:
       - LOG_LEVEL=info
-      # Set to 1/true to allow providing a database connection URL (db-url) for
-      # resolving metadata-dependent constructs (e.g. Oracle %TYPE/%ROWTYPE).
-      # When enabled, the web UI shows an optional "Database connection" field.
+      # Set to 1/true to allow database connections (db-url) for resolving
+      # metadata-dependent constructs (e.g. Oracle %TYPE/%ROWTYPE).
       # Off by default: connecting to a live database is a privileged action.
+      # The web UI shows the "Database connection" field only when this is on
+      # AND there is something usable: a named DSN (UNIQUE_DSN_<NAME>, add
+      # yours below) for the picker, and/or UNIQUE_ALLOW_RAW_DB_URL=1 for the
+      # structured host/port/user builder (single-user labs only).
       - UNIQUE_ALLOW_DB_CONNECTION=${UNIQUE_ALLOW_DB_CONNECTION:-0}
+      - UNIQUE_ALLOW_RAW_DB_URL=${UNIQUE_ALLOW_RAW_DB_URL:-0}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
@@ -51,6 +55,7 @@ services:
     environment:
       - LOG_LEVEL=debug
       - UNIQUE_ALLOW_DB_CONNECTION=${UNIQUE_ALLOW_DB_CONNECTION:-0}
+      - UNIQUE_ALLOW_RAW_DB_URL=${UNIQUE_ALLOW_RAW_DB_URL:-0}
     profiles:
       - dev
     command: ["uvicorn", "unique.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

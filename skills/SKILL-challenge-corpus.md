@@ -42,6 +42,18 @@ termination authority belongs to PURPLE alone (see each role's rules).
 > keeps the cycle's `main` commits **local** until a RED & BLUE cycle
 > completes, then pushes **once** — so CI is not hammered with a run per
 > intermediate commit.
+>
+> **Worker branch discipline (mandatory, learned 2026-07-30).** A worker
+> operates **exclusively inside its own dedicated worktree/branch — never the
+> `main` checkout**. Concretely: `cd` into the assigned worktree at session
+> start and stay there; before **every** `git commit`, verify
+> `git rev-parse --abbrev-ref HEAD` prints the worker branch (if it prints
+> `main`, STOP — wrong checkout); stage **explicit paths only**, never
+> `git add -A`/`-a`/`.` — the main checkout may hold *another session's
+> uncommitted work*, and a blanket stage will sweep it into your commit (this
+> happened: a RED worker committing in the main checkout absorbed unrelated
+> web-UI changes into its finding commits). A worker commit on `main` is a
+> rule violation even when its content is correct.
 
 ### 🔴 RED — find breaks only
 

@@ -892,3 +892,23 @@ SELECT x FROM (SELECT 1 x UNION SELECT 2) t GROUP BY x WITH ROLLUP
 -- CASE[fixed]: mysql-qdrop-SQL_CALC_FOU — SQL_CALC_FOUND_ROWS has no equivalent on other engines; the drop is now surfaced as a carrier + warning (mirrored by the no-silent-loss scan), no longer silent.
 SELECT SQL_CALC_FOUND_ROWS x FROM (SELECT 1 x) t LIMIT 1
 
+
+-- CASE[open][class=func]: my-concat-null-col — CONCAT with a NULL arg returns NULL in MySQL, but PG/T-SQL/Oracle CONCAT IGNORE NULLs. The existing my-concat-null fix only constant-folds LITERAL-NULL args; with a runtime (column) NULL the CONCAT is emitted verbatim and the null-propagation is lost. MySQL=NULL; PG/T-SQL/Oracle='1'. No warning. (Faithful map: PG/T-SQL `||`/`+` propagate NULL; Oracle needs a CASE.)
+SELECT CONCAT(a, b) AS c FROM (SELECT 1 AS a, CAST(NULL AS CHAR) AS b) t
+
+-- CASE[open][class=func]: my-groupconcat-distinct-numord — GROUP_CONCAT(DISTINCT x ORDER BY x DESC) over a NUMERIC column orders numerically in MySQL, but the PG rewrite STRING_AGG(DISTINCT CAST(x AS TEXT) ORDER BY CAST(x AS TEXT) DESC) orders LEXICALLY (PG forces the ORDER BY key to equal the DISTINCT'd text arg). The [fixed] my-groupconcat-distinct case only used single-digit values {1,1,2} where text and numeric order coincide, so it locked in a fix that is wrong for multi-digit values. MySQL/Oracle='10-2-1'; PG='2-10-1'. No warning.
+SELECT GROUP_CONCAT(DISTINCT x ORDER BY x DESC SEPARATOR '-') AS g FROM (SELECT 2 x UNION ALL SELECT 10 UNION ALL SELECT 1 UNION ALL SELECT 2) t
+
+-- CASE[open][class=func]: my-timestampdiff-mon-pgora — TIMESTAMPDIFF(MONTH,...) counts COMPLETE months in MySQL, but the PG and Oracle rewrites use a naive (year*12+month) boundary difference, which overcounts when the end day-of-month precedes the start's. The [fixed] my-timestampdiff-mon fix was applied to T-SQL ONLY (DATEADD>end adjustment); PG/Oracle still give the boundary count. MySQL/T-SQL=1; PG/Oracle=2. No warning. (Same source shape as the existing case reproduces it on PG/Oracle.)
+SELECT TIMESTAMPDIFF(MONTH, '2020-01-31', '2020-03-30') AS r
+
+-- CASE[open][class=consistency]: my-enum-order — a MySQL ENUM carries an implicit ORDERING by declaration index (lo<mid<hi), and ORDER BY on the column sorts by that index. Converting the column to VARCHAR + CHECK (statement 1) silently changes what ORDER BY means in statement 3: MySQL orders ('lo','mid','hi'); the VARCHAR target orders alphabetically ('hi','lo','mid'). No warning. Cross-statement metadata loss.
+CREATE TABLE redb_en (a ENUM('lo','mid','hi'));
+INSERT INTO redb_en VALUES ('hi'),('lo'),('mid');
+SELECT a FROM redb_en ORDER BY a;
+
+-- CASE[open][class=invalid]: my-multitable-delete-join — a MySQL multi-table DELETE (DELETE t1 FROM t1 JOIN t2 ON ... WHERE t2....) has its JOIN clause DROPPED on every target while the WHERE that references the joined alias t2 is kept, so the output references an undefined t2 and is rejected (PG: 'missing FROM-clause entry for table t2'; T-SQL/Oracle likewise). All three targets CAN express this (T-SQL DELETE t1 FROM t1 JOIN t2, PG DELETE USING, Oracle EXISTS subquery), but the join is lost. Only the vague internal 'unread tables on Delete' tripwire fires — no message that the JOIN was dropped or the output is invalid.
+CREATE TABLE redb_d1 (id INT, flag INT); CREATE TABLE redb_d2 (id INT, flag INT); DELETE t1 FROM redb_d1 t1 JOIN redb_d2 t2 ON t1.id = t2.id WHERE t2.flag = 1
+
+-- CASE[open][class=invalid]: my-to-days-year-zero — TO_DAYS(d) is rewritten as (d - DATE '0000-01-01') + 1 on all targets, but year 0000 is invalid on every target engine, so the output ERRORS: PG DatetimeFieldOverflow ('0000-01-01' out of range), T-SQL 'Conversion failed' (241), Oracle ORA-01841 (year must be -4713..9999, not 0). No warning. MySQL TO_DAYS('2020-01-01')=737790.
+SELECT TO_DAYS('2020-01-01') AS d

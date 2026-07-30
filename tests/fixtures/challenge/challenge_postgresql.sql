@@ -813,3 +813,62 @@ SELECT x FROM (VALUES (1),(2)) v(x) FOR UPDATE
 -- CASE[fixed]: postgresql-qdrop-ROWS\s+BETWE — fails on mysql, oracle, tsql. SILENT CLAUSE DROP: 'ROWS\s+BETWEEN' absent from valid tsql output, no warning
 SELECT x, SUM(x) OVER (ORDER BY x ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM (VALUES (1),(2)) v(x)
 
+
+-- CASE[open][class=func]: pg-distinct-on — DISTINCT ON (a) returns ONE row per a (the first by ORDER BY); it is rewritten to a plain SELECT DISTINCT a, b, which returns every distinct (a,b) PAIR. Different result set, no warning. PG=[(1,10),(2,5)]; MySQL/Oracle/T-SQL=[(1,10),(1,20),(2,5),(2,7)].
+SELECT DISTINCT ON (a) a, b FROM (VALUES (1,10),(1,20),(2,5),(2,7)) v(a,b) ORDER BY a, b
+
+-- CASE[open][class=lying-warning]: pg-window-over-falsewarn — EVERY window function (any OVER clause) emits the tripwire warning "internal: unread sqlglot arg 'over' on Window — construct may be dropped", but nothing is dropped: the OVER clause is emitted faithfully and the result is correct on all targets. sqlglot 30.14 populates Window.args['over']='OVER' (a keyword marker, not a droppable construct — the real spec lives in partition_by/order/spec, all read), so the unread-args tripwire false-fires on all sources/targets. This drowns the warning signal (real drops indistinguishable from noise).
+SELECT a, SUM(a) OVER (ORDER BY a) AS s FROM (VALUES (1),(2),(3)) v(a) ORDER BY a
+
+-- CASE[open][class=silent-drop]: pg-fk-onupdate-oracle — FK ON UPDATE CASCADE is silently dropped into Oracle (Oracle FKs support no ON UPDATE action at all). ON DELETE actions survive but the cascade-on-parent-key-update behavior vanishes with NO warning. (The existing [fixed] postgresql-drop-ON UPDATE CASCADE only covers MySQL, which now PRESERVES it; Oracle is uncovered and silent.) Oracle can't express it, so the correct outcome is a carrier + warning like the NULLS-FIRST-index drop, not silence.
+CREATE TABLE redb_p (id INT PRIMARY KEY); CREATE TABLE redb_c (pid INT REFERENCES redb_p(id) ON UPDATE CASCADE)
+
+-- CASE[open][class=invalid]: pg-window-groups-frame — a GROUPS window-frame mode (ORDER BY x GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) is emitted verbatim to T-SQL and MySQL, which support only ROWS/RANGE frames and REJECT it at runtime (SQL Server 102 'Incorrect syntax near GROUPS'; MySQL 1235 'does not yet support GROUPS'). No warning (sqlglot parses GROUPS so the target-parse gate passes). Oracle supports GROUPS. NOTE: the [fixed] pg-groups2 case (a JSON-type fix) also emits this invalid GROUPS clause to T-SQL/MySQL — same class.
+SELECT x, SUM(x) OVER (ORDER BY x GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) AS s FROM (VALUES (1),(2),(2),(3)) v(x)
+
+-- CASE[open][class=invalid]: pg-multifield-interval-arith — a multi-field INTERVAL literal ('1 year 2 months 3 days') in date arithmetic is emitted VERBATIM to T-SQL/MySQL/Oracle, none of which accept PG's multi-field text interval, with NO warning. Single-unit intervals ('1 month') DO convert (DATEADD / INTERVAL 1 MONTH). The [fixed] pg-interval-out case only passes because its justify_interval() trips the output_gate and degrades the whole batch; a multi-field interval WITHOUT an unmapped builtin slips through invalid. (Bare `SELECT INTERVAL '1 year 2 months 3 days'` also fails identically.) PG=2021-03-04.
+SELECT TIMESTAMP '2020-01-01 00:00:00' + INTERVAL '1 year 2 months 3 days' AS d
+
+-- CASE[open][class=consistency]: pg-temp-oncommit-oracle — a PG TEMP table defaults to ON COMMIT PRESERVE ROWS (session-scoped); it maps to Oracle CREATE GLOBAL TEMPORARY TABLE with NO ON COMMIT clause, which defaults to ON COMMIT DELETE ROWS (transaction-scoped). With per-statement commits the rows vanish before the later SELECT: PG COUNT=2, Oracle COUNT=0. Silent cross-statement divergence, no warning.
+CREATE TEMP TABLE redb_tmp (id INT);
+INSERT INTO redb_tmp VALUES (1),(2);
+SELECT COUNT(*) AS c FROM redb_tmp;
+
+-- CASE[open][class=composition]: pg-boolagg-filter — bool_or/bool_and (boolean aggregate) alone wraps its boolean argument into 1/0 for T-SQL (MAX(CAST(CASE WHEN a>5 THEN 1 WHEN NOT (a>5) THEN 0 END AS INT))); FILTER alone rewrites to COUNT(CASE WHEN cond THEN ...). COMBINED, the FILTER rewrite emits MAX(CAST(CASE WHEN b=1 THEN a>5 END AS INT)) — the raw boolean a>5 as a CASE THEN-value, which T-SQL rejects (error 102, no boolean value type). The 1/0 wrapping bool_or does alone is lost. No warning. Components green alone: bool_or (live-valid on T-SQL) and FILTER (corpus pg-filter-subquery, line ~266).
+SELECT bool_or(a > 5) FILTER (WHERE b = 1) AS r FROM (VALUES (10,1),(2,1),(3,2)) v(a,b)
+
+-- CASE[open][class=invalid]: pg-round-bare-half-literal — ROUND on a BARE fractional literal (0.5, no ::numeric cast) becomes T-SQL ROUND(0.5, 0). T-SQL types the literal 0.5 as numeric(1,1) (range ±0.9), and ROUND preserves that precision/scale, so the rounded 1.0 OVERFLOWS (error 8115). PG ROUND(0.5)=1 (arbitrary precision). No warning. The existing round cases all use ::numeric casts that widen the type and dodge this; a bare literal does not.
+SELECT ROUND(0.5) AS r
+
+-- CASE[open][class=func]: pg-substring-neg-from-for — 3-arg SUBSTRING(s FROM start FOR len) with a NEGATIVE start: PG counts len from the (out-of-range) negative position and keeps only positions >= 1, so SUBSTRING('abcde' FROM -2 FOR 2) = '' (the [ -2, -1 ] range is entirely before position 1). It is emitted VERBATIM as SUBSTRING/SUBSTR('abcde', -2, 2); MySQL/Oracle read a negative start as counting from the END → 'de'. The pg-fsubstr / pg-substr-edge fixes only handle the 2-arg (no length) negative-start form. PG=''; MySQL/Oracle='de'. No warning. (T-SQL matches PG.)
+SELECT SUBSTRING('abcde' FROM -2 FOR 2) AS s
+
+-- CASE[open][class=lying-warning]: pg-insert-default-values-falsewarn — INSERT ... DEFAULT VALUES is correctly translated to MySQL `INSERT INTO t () VALUES ()` (live-equivalent: both insert one all-defaults row), yet it emits the tripwire warning "internal: unread sqlglot arg 'default' on Insert — construct may be dropped". Nothing was dropped. The converter consumes Insert.args['default'] to emit () VALUES () but never marks it read, so the unread-args tripwire false-fires. (Distinct from the Window.over false-warning: a different node/arg.)
+CREATE TABLE redb_dv (id INT DEFAULT 7, v INT DEFAULT 3); INSERT INTO redb_dv DEFAULT VALUES
+
+-- CASE[open][class=func]: pg-repeat-negative — repeat(s, n) with n<=0 returns '' in PostgreSQL (and MySQL REPEAT), but the T-SQL (REPLICATE) and Oracle (RPAD(s, len*n, s)) emulations return NULL for a negative count. PG/MySQL=''; T-SQL/Oracle=NULL. No warning. (The pg-pad-repeat / pg-repeat-left-right cases only use positive counts.)
+SELECT repeat('ab', -1) AS r
+
+-- CASE[open][class=invalid]: pg-row-value-comparison — a row-value inequality comparison (a, b) > (1, 5) (lexicographic; used for keyset pagination) is emitted VERBATIM to T-SQL, which has no row-value comparison and rejects it (error 4145 'non-boolean type ... where a condition is expected'). No warning. PG=(3,4). Oracle and MySQL both accept row inequality, so only T-SQL is invalid.
+SELECT a, b FROM (VALUES (1,2),(3,4)) v(a,b) WHERE (a, b) > (1, 5)
+
+-- CASE[open][class=invalid]: pg-bool-to-int-cast — the idiomatic PG cast of a boolean predicate to int, (a > 1)::int, is emitted verbatim as CAST(a > 1 AS INT) on T-SQL and Oracle, which have no boolean value type and reject a predicate as a CAST operand (T-SQL error 156; Oracle ORA-02000). No warning. PG=(1). Shares the root cause with pg-boolagg-filter (boolean value not wrapped to 1/0) but via a direct cast, not an aggregate.
+SELECT (a > 1)::int AS r FROM (VALUES (2)) v(a)
+
+-- CASE[open][class=invalid]: pg-group-by-ordinal — positional GROUP BY (GROUP BY 1, meaning the first select item) is emitted verbatim to T-SQL and Oracle, neither of which supports positional GROUP BY: T-SQL rejects the integer (error 164 'GROUP BY expression must contain at least one column that is not an outer reference') and Oracle raises ORA-03162 (group_by_position_enabled is FALSE). No warning. PG/MySQL support it. PG=[(1,2),(2,1)].
+SELECT a, COUNT(*) AS c FROM (VALUES (1),(1),(2)) v(a) GROUP BY 1
+
+-- CASE[open][class=silent-drop]: pg-groupby-multi-cube-rollup — a GROUP BY with MULTIPLE grouping elements (CUBE(a, b), ROLLUP(c)) silently keeps only the LAST element (ROLLUP(c)) and DROPS CUBE(a, b), even though T-SQL and Oracle support the multi-element form natively (live: T-SQL GROUP BY CUBE(a,b),ROLLUP(c) returns the same 18 rows as PG). The output GROUP BY ROLLUP(c) then leaves a and b ungrouped, so SELECT a, b is invalid (T-SQL error 8120). No warning. Both a wrong result (missing grouping sets) and invalid output.
+SELECT a, b, c, SUM(x) AS s FROM (VALUES (1,1,1,10),(1,2,1,20),(2,1,2,30)) v(a,b,c,x) GROUP BY CUBE(a, b), ROLLUP(c)
+
+-- CASE[open][class=silent-drop]: pg-serial-identity-oracle — a SERIAL column maps correctly to T-SQL IDENTITY and MySQL AUTO_INCREMENT, but into Oracle it becomes a plain `id NUMBER PRIMARY KEY` — the auto-generation is silently DROPPED (Oracle supports GENERATED BY DEFAULT AS IDENTITY since 12c). The later INSERTs omit id, so on Oracle they fail with ORA-01400 (cannot insert NULL into id). No warning. PG auto-assigns 1,2.
+CREATE TABLE redb_ser (id SERIAL PRIMARY KEY, v INT);
+INSERT INTO redb_ser (v) VALUES (10);
+INSERT INTO redb_ser (v) VALUES (20);
+SELECT id, v FROM redb_ser ORDER BY id;
+
+-- CASE[open][class=func]: pg-date-trunc-week — date_trunc('week', d) starts the week on MONDAY in PostgreSQL (ISO). T-SQL DATETRUNC(week, d) starts on SUNDAY, so it returns a DIFFERENT date (PG 2020-06-15 vs T-SQL 2020-06-14) with no warning. Oracle is worse: it emits TRUNC(d, 'WEEK'), but 'WEEK' is not a valid Oracle format model (ORA-01898) — the Monday-based form is TRUNC(d, 'IW') (which returns 2020-06-15, matching PG). Both defects silent.
+SELECT date_trunc('week', DATE '2020-06-17') AS d
+
+-- CASE[open][class=func]: pg-date-minus-integer — date + integer correctly maps to DATEADD/DATE_ADD, but date - integer is emitted VERBATIM (CAST(... AS DATE) - 7): MySQL coerces the date to the number 20200301 and subtracts, returning garbage 20200294 (not 2020-02-23); T-SQL rejects it (error 206, 'date is incompatible with int'). No warning. PG=2020-02-23. Asymmetric: the '+' path is handled, the '-' path is not.
+SELECT DATE '2020-03-01' - 7 AS d

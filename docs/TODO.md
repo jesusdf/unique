@@ -27,6 +27,143 @@ DONE §47). The discrete backlog is empty.*
 
 ---
 
+## Feature backlog
+
+### F1 — `unique compare`: structural similarity score between two scripts (P2)
+
+Full brief below, in the `audit/2026-07-24/09-fix-briefs.md` format — the
+implementing session starts **here** (plus the two standing skills), not from
+scratch. File:line references are at HEAD of 2026-07-30 (`a5295d7`) —
+re-confirm cited sites before patching.
+
+**Goal / scope:** a new capability that takes two SQL scripts — same dialect or
+**different dialects** — and reports a *normalized structural similarity*
+percentage plus a per-dimension breakdown. Primary use case (maintainer
+decision, 2026-07-30): **cross-dialect migration audit** — "how close is this
+hand-migrated PL/SQL to the original T-SQL?". Explicitly **NOT** semantic
+equivalence: query equivalence is undecidable in general, and SMT-based provers
+(Cosette/SPES/SQLSolver) cover SELECT-only fragments with no procedural code.
+The number must be presented as *structural similarity*, never "probability of
+equivalence". Document that boundary in `docs/03-unsupported.md`.
+
+**Assets already in the repo (verified 2026-07-30):**
+
+- `tests/helpers/functional_equivalence.py` — `fingerprint(sql, dialect) ->
+  ProcedureFingerprint` with `.differences(other)`: counts DML verbs, column
+  multisets, predicates, control flow, using the hybrid path (procedural IR for
+  the shell, sqlglot per DML fragment). This *is* the embryonic dimension
+  layer; only `tests/integration/test_functional_equivalence.py` imports it.
+- **sqlglot 30.14.0 ships a tree-diff**: `sqlglot.diff(a, b)` returns
+  Change-Distiller-style edits (`Keep`/`Insert`/`Remove`/`Move`/`Update`).
+  Verified live in the project venv. `2·|Keep| / (|nodes A| + |nodes B|)` is a
+  ready-made per-statement score.
+- The transpiler itself is the cross-dialect normalizer (see Approach step 1).
+- `tests/fixtures/procedures/procedures_{sqlserver,oracle,postgresql,mysql}.sql`
+  hold the *same routines in all four dialects* — a ready-made corpus of
+  "different SQL, same function" pairs that must score HIGH.
+
+**Approach — layered score, MVP = layers 0–2:**
+
+1. **Layer 0, normalization via the existing pipeline.** To compare
+   cross-dialect, transpile *both* inputs to one pivot dialect (postgresql)
+   with the existing `transpile` entry point, then re-parse the outputs. This
+   reuses the whole IR pipeline as the canonicalizer (dialect idioms like
+   `ISNULL` vs `NVL` vs `COALESCE` collapse for free) and is the project's
+   unique advantage — do NOT hand-write a second normalizer. On top of the
+   pivot output, normalize comparison-only noise: alias alpha-renaming,
+   commutative AND/OR operand order (sort by canonical key), literal quoting.
+   Comments are trivia (already the project rule). Same-dialect comparisons go
+   through the same pivot path — one code path, no special case.
+2. **Layer 1, dimension fingerprints.** Promote the fingerprint logic from
+   `tests/helpers/functional_equivalence.py` into a new
+   `src/unique/core/similarity.py` (move the logic; leave the tests helper as a
+   thin re-export so `test_functional_equivalence.py` keeps working). Dimensions
+   for the report: DML structure, predicates, control flow — per-dimension
+   scores are more honest than one opaque number (maintainer decision).
+3. **Layer 2, tree matching.**
+   - *Statement alignment first:* scripts hold N vs M statements; align with
+     `difflib.SequenceMatcher` over statement-kind signatures, then greedy
+     best-match within replace-blocks by per-pair score (Hungarian is
+     overkill for MVP). Unmatched statements count fully against similarity.
+   - *Per aligned DML pair:* `sqlglot.diff` on the pivot-dialect ASTs; score
+     `2·|Keep|/(|A|+|B|)` with **node-type weights** — losing a WHERE/JOIN/ON
+     predicate must cost far more than an alias or literal delta. Start with a
+     small weight table (predicate/join/source nodes heavy; identifiers,
+     literals, aliases light) and tune against the fixture corpus.
+   - *Procedural shell:* recursive statement-list alignment over the project
+     IR (`IfStatement`/`WhileStatement`/`ForLoopStatement`/… branches recurse;
+     embedded DML delegates to the sqlglot layer above). Plain sequence
+     alignment + kind matching is enough for MVP — full tree-edit-distance on
+     the procedural IR is NOT required.
+   - Overall % = weighted mean of dimensions; report all components.
+4. **Layer 3 — deferred, NOT in this brief:** empirical live check (run both
+   scripts on the four Docker engines over seeded data via
+   `tests/helpers/live_validation.py` and compare results). It yields
+   equivalent/not-on-this-data, not a % — if ever built, it's a separate
+   brief; do not scope-creep it into the MVP.
+
+**Surface (MVP):** `unique compare A.sql B.sql` as a new `@cli.command()` in
+`src/unique/cli/main.py:24`-style (group at `main.py:18`), options
+`--dialect-a/--dialect-b` (fall back to `core/detection.py` auto-detect, echo
+what was detected), `--json` for machine-readable output. Python API:
+`unique.core.similarity.compare(sql_a, sql_b, dialect_a=None, dialect_b=None)
+-> SimilarityReport` (dataclass: overall, per-dimension, per-statement pairs,
+unmatched statements, warnings). REST endpoint: follow-up, not MVP.
+
+**Edge semantics to decide up front (defaults chosen; change consciously):**
+empty vs empty → 100; empty vs non-empty → 0; a script that fails to parse →
+hard error naming which input (never a silent 0); transpiler warnings during
+pivot normalization → surface them in `SimilarityReport.warnings` (a degraded
+statement compared as a carrier comment would inflate similarity — count
+degraded statements as unmatched instead).
+
+**Rejected paths (do not revisit):**
+
+- Text/token-level diff as the main signal — dialect noise dominates and it
+  violates the no-text-transform architecture rule; acceptable only as a
+  debug extra, never in the score.
+- Formal equivalence proving — undecidable; out of scope permanently
+  (document in `03-unsupported.md`).
+- ML/embedding similarity — unexplainable number, unjustifiable in an audit.
+- Diffing the two *source*-dialect sqlglot ASTs directly without the pivot
+  transpile — dialect idioms would read as structural differences, which
+  undercounts exactly the pairs this project exists to normalize.
+
+**Tests first (assertion quality bar applies — every test must fail under a
+`return 100.0` stub AND under a `return 0.0` stub):**
+
+- Identity: a script vs itself → 100 on every dimension.
+- Cross-dialect same-function: each pair of the four
+  `tests/fixtures/procedures/` variants scores above a high floor (calibrate
+  the floor empirically, then ratchet it — same pattern as the validity
+  floors); unrelated script pairs score below a low ceiling.
+- Weight ordering: dropping a WHERE clause from B lowers the score strictly
+  more than renaming an alias in B.
+- Alignment: statement reordering is tolerated (Move ≠ Remove); an extra
+  unmatched statement lowers the score.
+- Degraded-statement rule: a pair where one side degrades to a carrier during
+  pivot normalization does NOT score as matched.
+- CLI: `--json` output schema, dialect auto-detect echo, parse-failure exit
+  code distinct from "low similarity".
+
+**Acceptance:** CLI + Python API working on the fixture corpus with the floors
+above; gate green (black + isort + ruff + mypy + full parallel suite); ratchets
+untouched (new module, no emitter growth); docs updated in the same change —
+`07-interfaces.md` (command + API), `03-unsupported.md` (no formal
+equivalence), README example runnable as written.
+
+**Blast radius:** new `src/unique/core/similarity.py`; `src/unique/cli/main.py`
+(one command); `tests/helpers/functional_equivalence.py` becomes a re-export;
+new `tests/unit/test_similarity.py` + CLI test; three doc files. Core
+transpiler untouched — if the pivot normalization surfaces transpiler bugs,
+file them as separate findings (brief-first), do not fix inline.
+
+**Estimated effort:** MVP (layers 0–2, CLI, tests, docs) — days, not weeks.
+Procedural weight tuning is the open-ended part; time-box it and ship with the
+calibrated floors.
+
+---
+
 ## Continuously tracked (not a discrete backlog)
 
 - Challenge corpus (`tests/fixtures/challenge/`) remains the live intake for
