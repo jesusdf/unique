@@ -521,9 +521,11 @@ CASES.update(
         "pg-groups2": Case(
             "pg-groups2 ",
             {
-                "tsql": Expect(("data NVARCHAR(MAX)",), ("data JSON",)),
+                "tsql": Expect(("data NVARCHAR(MAX)",), ("data JSON", "GROUPS")),
                 "oracle": Expect(("data CLOB",), ("data JSON",)),
-                "mysql": Expect(("ORDER BY id ASC GROUPS",), ("ORDER BY id GROUPS",)),
+                # A GROUPS window frame has no MySQL form; it degrades to a
+                # warned NULL carrier (was silently emitting an invalid GROUPS).
+                "mysql": Expect(("id, n, NULL",), ("GROUPS",), warn=True),
             },
         ),
         "pg-left-round": Case(

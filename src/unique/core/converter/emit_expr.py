@@ -2077,6 +2077,20 @@ def _emit_window(node: WindowFunction, dialect: str) -> str:
         spec_parts.append("ORDER BY (SELECT NULL)")
 
     if node.window.frame:
+        # A GROUPS frame (peer-group counting) exists on PostgreSQL and Oracle
+        # but not T-SQL or MySQL (only ROWS/RANGE). There is no faithful
+        # ROWS/RANGE rewrite (with ORDER-BY ties a GROUPS frame spans whole peer
+        # groups), so the framed aggregate is not computable — degrade to a
+        # warned carrier rather than emit an invalid GROUPS clause silently
+        # (T-SQL 102 / MySQL 1235).
+        if dialect in ("tsql", "mysql") and re.match(
+            r"(?i)\s*GROUPS\b", node.window.frame
+        ):
+            return (
+                f"NULL /* UNIQUE: a GROUPS window frame has no {dialect} "
+                "equivalent (only ROWS/RANGE, and no faithful rewrite with "
+                "ORDER-BY ties) — see docs/03-unsupported.md */"
+            )
         spec_parts.append(node.window.frame)
 
     spec = " ".join(spec_parts)

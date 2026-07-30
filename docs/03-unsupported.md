@@ -391,6 +391,17 @@ rejects). Both are validated live. Only date parts outside the common
 year/month/day/hour/minute/second set (e.g. `WEEKDAY`, `QUARTER` on Oracle) may
 still need review.
 
+### 3.25 `GROUPS` Window Frame → T-SQL / MySQL
+
+PostgreSQL and Oracle support the SQL:2011 `GROUPS` frame mode
+(`OVER (ORDER BY x GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW)`), which frames
+by *peer groups* of the `ORDER BY` value. T-SQL and MySQL support only `ROWS`
+and `RANGE`. With ties in the `ORDER BY` key a `GROUPS` frame spans whole peer
+groups, so there is **no faithful `ROWS`/`RANGE` rewrite**. Transpiling to
+T-SQL/MySQL degrades the framed aggregate to a warned `NULL` carrier rather than
+emit an invalid `GROUPS` clause (T-SQL error 102 / MySQL 1235). Oracle and
+PostgreSQL keep the native `GROUPS` frame.
+
 ### 3.24 T-SQL Money Literal Shorthand (`$12.50`) — Handled (2026-07-25)
 
 T-SQL's bare currency literal (`$12.50`, `$100`) is mis-parsed by sqlglot as a
