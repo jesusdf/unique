@@ -1,7 +1,5 @@
 """Tests for the shared converter (parse_sql and emit_sql)."""
 
-import re
-
 import pytest
 
 from unique.core.ast_nodes import (
@@ -494,4 +492,4 @@ class TestRawSQLEmission:
             if line.strip() and not line.lstrip().startswith("--")
         ]
         assert not leaked, f"executable lines leaked: {leaked!r}"
-        assert re.search(re.escape("UNIQUE") + r"(?:-\d{4})?" + re.escape(": x"), out)
+        assert "UNIQUE-1003: x" in out

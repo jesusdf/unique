@@ -33,19 +33,19 @@ class TestPgGucSettings:
     @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
     def test_guc_assignment_degrades(self, target: str) -> None:
         out = _t("SET extra_float_digits = 0;", target)
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1218:" in out, out
         assert not re.search(r"(?im)^\s*SET\s+extra_float_digits", out), out
 
     @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
     def test_guc_to_spelling_degrades(self, target: str) -> None:
         out = _t("set enable_presorted_aggregate to off;", target)
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1218:" in out, out
         assert not re.search(r"(?im)^\s*set\s+enable_", out), out
 
     @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
     def test_reset_degrades(self, target: str) -> None:
         out = _t("RESET enable_seqscan;", target)
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1003:" in out, out
         assert not re.search(r"(?im)^\s*RESET\b", out), out
 
     def test_guc_kept_on_pg_target(self) -> None:
@@ -464,7 +464,7 @@ class TestPgTableInheritance:
     @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
     def test_inherits_degrades_whole(self, target: str) -> None:
         r = Transpiler().transpile(self._INH, source="postgresql", target=target)
-        assert "UNIQUE-" in r.sql, r.sql
+        assert "UNIQUE-1003:" in r.sql, r.sql
         assert "INHERITS" in r.sql.upper(), r.sql
         code = [
             ln
@@ -477,7 +477,7 @@ class TestPgTableInheritance:
     @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
     def test_partition_of_degrades_whole(self, target: str) -> None:
         r = Transpiler().transpile(self._PART, source="postgresql", target=target)
-        assert "UNIQUE-" in r.sql, r.sql
+        assert "UNIQUE-1003:" in r.sql, r.sql
         assert "PARTITION OF" in r.sql.upper(), r.sql
         code = [
             ln
@@ -694,7 +694,7 @@ class TestMysqlFunctionNotice:
         )
         assert re.search(r"(?i)SET @uq_notice = CONCAT\('v ',\s*a\)", r.sql), r.sql
         assert not re.search(r"(?im)^\s*SELECT CONCAT", r.sql), r.sql
-        assert "UNIQUE-" in r.sql, r.sql
+        assert "UNIQUE-1162:" in r.sql, r.sql
 
     def test_notice_in_procedure_keeps_select(self) -> None:
         out = _t(
@@ -1226,7 +1226,7 @@ class TestIndexRebuildRefinements:
         out = _t("create index i1 on j1(id1) where id1 % 1000 = 1;", "tsql")
         assert "WHERE" not in out.upper(), out
         assert re.search(r"(?i)CREATE INDEX i1 ON j1 \(id1\)", out), out
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1007:" in out, out
 
     def test_complex_predicate_unique_degrades(self) -> None:
         r = Transpiler().transpile(
@@ -1331,7 +1331,7 @@ class TestPgIndexToMysql:
         out = _t("create index i1 on j1(id1) where id1 is not null;", "mysql")
         assert "WHERE" not in out.upper(), out
         assert re.search(r"(?i)CREATE INDEX i1 ON j1 \(id1\)", out), out
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1007:" in out, out
 
     def test_partial_unique_degrades_mysql(self) -> None:
         r = Transpiler().transpile(
@@ -2255,7 +2255,7 @@ class TestParseFallbackDegradesCrossDialect:
             if ln.strip() and not ln.strip().startswith("--")
         ]
         assert not code, out
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1171:" in out, out
 
 
 class TestTableColumnAliases:
@@ -3500,7 +3500,7 @@ class TestReturningOracle:
         ]
         assert any("UPDATE cv" in ln for ln in code), out
         assert not any("RETURNING" in ln.upper() for ln in code), out
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1139:" in out, out
 
 
 class TestOnConflictMysqlAndEStrings:
@@ -3823,7 +3823,7 @@ class TestFetchStatusTopLevel:
     def test_fetch_status_neutral_pg(self) -> None:
         out = _t2("SELECT 1 WHERE @@FETCH_STATUS = 0;", "tsql", "postgresql")
         assert "@@FETCH_STATUS" not in out.split("/*")[0], out
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1028:" in out, out
 
 
 class TestForeignBuiltinNote:
@@ -3837,7 +3837,7 @@ class TestForeignBuiltinNote:
         # Wave 209 upgraded the inline note (still invalid SQL: error
         # 195) to the whole-statement carrier.
         out = _t("SELECT CORR(b, a) FROM aggtest;", "tsql")
-        assert "UNIQUE-" in out and "Corr" in out, out
+        assert "UNIQUE-1003:" in out and "Corr" in out, out
         assert not re.search(r"(?im)^\s*SELECT CORR", out), out
 
     def test_native_builtin_unnoted(self) -> None:
@@ -4590,7 +4590,7 @@ class TestFetchDirections:
             if ln.strip() and not ln.strip().startswith("--")
         ]
         assert not any(re.search(r"(?i)FETCH LAST", ln) for ln in code), out
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1166:" in out, out
 
     def test_plain_fetch_unchanged_pg(self) -> None:
         src = (
@@ -5962,7 +5962,7 @@ class TestWave157HavingAliasStringAggDistinct:
             "mysql",
             "tsql",
         )
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1003:" in out, out
         assert "STRING_AGG(DISTINCT" not in out.upper(), out
 
     def test_string_agg_distinct_kept_pg(self) -> None:
@@ -6150,7 +6150,7 @@ class TestWave162AdddateSqlMode:
             "mysql",
             "tsql",
         )
-        assert "UNIQUE-" in out and "SQL_MODE" in out.upper(), out
+        assert "UNIQUE-1197:" in out and "SQL_MODE" in out.upper(), out
         assert "SET @sql_mode" not in out, out
 
     def test_set_sql_mode_kept_mysql(self) -> None:
@@ -6302,7 +6302,7 @@ class TestWave166PrefixIndexFlush:
             "mysql",
             "tsql",
         )
-        assert "UNIQUE-" in out and "FLUSH" in out.upper(), out
+        assert "UNIQUE-1171:" in out and "FLUSH" in out.upper(), out
         assert "flush AS" not in out, out
         assert re.search(r"(?i)UPDATE t3 SET a = 1", out), out
 
@@ -6328,7 +6328,7 @@ class TestWave167MysqlSystemVars:
             "mysql",
             "tsql",
         )
-        assert "UNIQUE-" in out and "server_id" in out, out
+        assert "UNIQUE-1171:" in out and "server_id" in out, out
         assert re.search(r"(?im)^\s*RETURN @@server_id", out) is None, out
 
     def test_sysvar_kept_mysql(self) -> None:
@@ -6370,7 +6370,7 @@ class TestWave168InsertSetUservarIsTrue:
 
     def test_top_level_set_uservar_carrier(self) -> None:
         out = _t2("set @v0 = '2';", "mysql", "tsql")
-        assert "UNIQUE-" in out and "@v0" in out, out
+        assert "UNIQUE-1003:" in out and "@v0" in out, out
         assert not re.search(r"(?im)^\s*SET @v0", out), out
 
     def test_top_level_set_uservar_kept_mysql(self) -> None:
@@ -6472,7 +6472,7 @@ class TestWave171KillConnectionId:
             "mysql",
             "tsql",
         )
-        assert "UNIQUE-" in out and "kill query id" in out.lower(), out
+        assert "UNIQUE-1171:" in out and "kill query id" in out.lower(), out
 
     def test_connection_id_spid_tsql(self) -> None:
         out = _t2(
@@ -6617,7 +6617,7 @@ class TestWave175AllComputedTable:
             "mysql",
             "tsql",
         )
-        assert "UNIQUE-" in out and "non-computed" in out, out
+        assert "UNIQUE-1003:" in out and "non-computed" in out, out
         assert not re.search(r"(?im)^\s*CREATE TABLE", out), out
 
     def test_mixed_table_untouched(self) -> None:
@@ -6693,7 +6693,7 @@ class TestWave178SysvarGateExecImmediate:
 
     def test_sysvar_insert_carrier_oracle(self) -> None:
         out = _t2("insert into t1 values (@@connect_timeout);", "mysql", "oracle")
-        assert "UNIQUE-" in out and "connect_timeout" in out, out
+        assert "UNIQUE-1003:" in out and "connect_timeout" in out, out
         assert not re.search(r"(?im)^\s*INSERT INTO", out), out
 
     def test_sysvar_insert_carrier_pg(self) -> None:
@@ -6702,7 +6702,7 @@ class TestWave178SysvarGateExecImmediate:
             "mysql",
             "postgresql",
         )
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1003:" in out, out
 
     def test_ddl_in_body_exec_immediate(self) -> None:
         out = _t2(
@@ -6831,7 +6831,7 @@ class TestWave182ShowRepairInBody:
             "mysql",
             "oracle",
         )
-        assert "UNIQUE-" in out and "show create table tm1" in out.lower(), out
+        assert "UNIQUE-1171:" in out and "show create table tm1" in out.lower(), out
         assert not re.search(r"(?m)^\s*;\s*$", out), out
 
     def test_optimize_carrier_tsql(self) -> None:
@@ -6868,7 +6868,7 @@ class TestWave183CommentOnlyBody:
             "mysql",
             "oracle",
         )
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1171:" in out, out
         assert re.search(r"(?im)^\s*NULL;", out), out
 
     def test_executable_body_no_extra_null(self) -> None:
@@ -6957,7 +6957,7 @@ class TestWave186PgBodySemisSetopOrder:
             "mysql",
             "postgresql",
         )
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1171:" in out, out
         assert re.search(r"(?im)^\s*NULL;", out), out
 
     def test_setop_order_aggregate_carrier_pg(self) -> None:
@@ -6966,7 +6966,7 @@ class TestWave186PgBodySemisSetopOrder:
             "mysql",
             "postgresql",
         )
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1003:" in out, out
         assert not re.search(r"(?im)^\s*SELECT MAX", out), out
 
     def test_setop_order_column_untouched_pg(self) -> None:
@@ -7073,7 +7073,7 @@ class TestWave191PgSearchCte:
 
     def test_search_clause_carrier_mysql(self) -> None:
         out = _t2(self._SQL, "postgresql", "mysql")
-        assert "UNIQUE-" in out and "SEARCH/CYCLE" in out, out
+        assert "UNIQUE-1124:" in out and "SEARCH/CYCLE" in out, out
         assert not re.search(r"(?im)^\s*with recursive", out), out
 
     def test_plain_recursive_cte_untouched(self) -> None:
@@ -7138,7 +7138,7 @@ class TestWave193UpdateFromDerived:
 
     def test_carrier_mysql(self) -> None:
         out = _t2(self._SQL, "postgresql", "mysql")
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1003:" in out, out
         assert not re.search(r"(?im)^\s*UPDATE utrtest", out), out
 
     def test_plain_update_from_table_untouched(self) -> None:
@@ -7162,7 +7162,7 @@ class TestWave194NotTupleInStar:
             "postgresql",
             "tsql",
         )
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1003:" in out, out
         assert not re.search(r"(?im)^\s*SELECT \* FROM o", out), out
 
     def test_scalar_in_star_untouched(self) -> None:
@@ -7300,7 +7300,7 @@ class TestWave199CteDeleteUsingAlterUsing:
         )
         assert "USING" not in out.upper(), out
         assert re.search(r"(?i)ALTER COLUMN name INT\b", out), out
-        assert "UNIQUE-" in out and "nullability" in out, out
+        assert "UNIQUE-1010:" in out and "nullability" in out, out
 
     def test_alter_using_expression_carriers(self) -> None:
         out = _t2(
@@ -7308,7 +7308,7 @@ class TestWave199CteDeleteUsingAlterUsing:
             "postgresql",
             "tsql",
         )
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1110:" in out, out
 
     def test_alter_using_kept_pg(self) -> None:
         out = _t2(
@@ -7389,12 +7389,12 @@ class TestWave202RefcursorReturn:
 
     def test_refcursor_return_carrier_mysql(self) -> None:
         out = _t2(self._SQL, "postgresql", "mysql")
-        assert "UNIQUE-" in out and "cursor-valued" in out, out
+        assert "UNIQUE-1171:" in out and "cursor-valued" in out, out
         assert not re.search(r"(?im)^\s*CREATE FUNCTION rt", out), out
 
     def test_refcursor_return_carrier_tsql(self) -> None:
         out = _t2(self._SQL, "postgresql", "tsql")
-        assert "UNIQUE-" in out and "cursor-valued" in out, out
+        assert "UNIQUE-1171:" in out and "cursor-valued" in out, out
 
     def test_refcursor_kept_pg(self) -> None:
         out = _t2(self._SQL, "postgresql", "postgresql")
@@ -7451,7 +7451,7 @@ class TestWave204ExpressionIndexes:
             "postgresql",
             "tsql",
         )
-        assert "UNIQUE-" in out and "computed column" in out, out
+        assert "UNIQUE-1005:" in out and "computed column" in out, out
 
     def test_column_index_untouched(self) -> None:
         out = _t2("create index i1 on t1(a, b);", "postgresql", "mysql")
@@ -7515,7 +7515,7 @@ class TestWave206OracleReturningShapes:
             "postgresql",
             "oracle",
         )
-        assert "UNIQUE-" in out and "UPDATE … FROM" in out, out
+        assert "UNIQUE-1138:" in out and "UPDATE … FROM" in out, out
         assert not re.search(r"(?im)^\s*WITH t", out), out
 
 
@@ -7534,7 +7534,7 @@ class TestWave207SystemReservedNtileNull:
             "postgresql",
             "mysql",
         )
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1003:" in out, out
 
     def test_ntile_int_untouched_mysql(self) -> None:
         out = _t2(
@@ -7557,7 +7557,7 @@ class TestWave208IntervalCastSrfWindow:
             "postgresql",
             "mysql",
         )
-        assert "UNIQUE-" in out and "INTERVAL" in out, out
+        assert "UNIQUE-1003:" in out and "INTERVAL" in out, out
 
     def test_interval_cast_kept_pg(self) -> None:
         out = _t2(
@@ -7573,7 +7573,7 @@ class TestWave208IntervalCastSrfWindow:
             "postgresql",
             "tsql",
         )
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1003:" in out, out
 
     def test_plain_window_untouched(self) -> None:
         out = _t2(
@@ -7592,7 +7592,7 @@ class TestWave209UnmappedOperatorGate:
 
     def test_corr_carrier_tsql(self) -> None:
         out = _t2("select corr(b, a) from aggtest;", "postgresql", "tsql")
-        assert "UNIQUE-" in out and "Corr" in out, out
+        assert "UNIQUE-1003:" in out and "Corr" in out, out
         assert not re.search(r"(?im)^\s*SELECT CORR", out), out
 
     def test_corr_verbatim_pg(self) -> None:
@@ -7631,7 +7631,7 @@ class TestWave211OracleBinaryCastBoolLiterals:
             "mysql",
             "oracle",
         )
-        assert "UNIQUE-" in out and "BINARY" in out, out
+        assert "UNIQUE-1003:" in out and "BINARY" in out, out
 
     def test_bool_literal_numeric_oracle(self) -> None:
         out = _t2(
@@ -7711,7 +7711,7 @@ class TestWave214WholeRowCast:
             "postgresql",
             "mysql",
         )
-        assert "UNIQUE-" in out and "whole-row" in out, out
+        assert "UNIQUE-1003:" in out and "whole-row" in out, out
 
     def test_whole_row_cast_kept_pg(self) -> None:
         out = _t2(
@@ -7792,7 +7792,7 @@ class TestWave217EmbeddedUservarGate:
 
     def test_top_level_uservar_still_gated(self) -> None:
         out = _t2("insert into t1 values (@value);", "mysql", "tsql")
-        assert "UNIQUE-" in out and "@value" in out, out
+        assert "UNIQUE-1003:" in out and "@value" in out, out
 
 
 class TestWave218NoBeginCallBody:
@@ -7879,7 +7879,7 @@ class TestWave221MysqlRefcursorVariable:
 
     def test_refcursor_var_carrier_mysql(self) -> None:
         out = _t2(self._SQL, "postgresql", "mysql")
-        assert "UNIQUE-" in out and "refcursor" in out, out
+        assert "UNIQUE-1171:" in out and "refcursor" in out, out
         assert not re.search(r"(?im)^\s*DELIMITER", out), out
 
     def test_refcursor_var_kept_pg(self) -> None:
@@ -7923,7 +7923,7 @@ class TestWave223ValuesFnOutfile:
             "mysql",
             "tsql",
         )
-        assert "UNIQUE-" in out and "OUTFILE" in out.upper(), out
+        assert "UNIQUE-1171:" in out and "OUTFILE" in out.upper(), out
         assert "@outfile" not in out, out
         assert re.search(r"(?i)INSERT INTO t1 VALUES \(@x\)", out), out
 
@@ -7949,7 +7949,7 @@ class TestWave224ReturnsTableNoBody:
             "postgresql",
             "tsql",
         )
-        assert "UNIQUE-" in out and "returnable" in out, out
+        assert "UNIQUE-1171:" in out and "returnable" in out, out
 
     def test_returns_table_with_return_inline(self) -> None:
         out = _t2(
@@ -7974,12 +7974,12 @@ class TestWave225CommentOnInBody:
 
     def test_comment_on_carrier_mysql(self) -> None:
         out = _t2(self._SQL, "postgresql", "mysql")
-        assert "UNIQUE-" in out and "COMMENT ON" in out, out
+        assert "UNIQUE-1171:" in out and "COMMENT ON" in out, out
         assert re.search(r"(?i)RETURN 1", out), out
 
     def test_comment_on_carrier_oracle(self) -> None:
         out = _t2(self._SQL, "postgresql", "oracle")
-        assert "UNIQUE-" in out and "COMMENT ON" in out.upper(), out
+        assert "UNIQUE-1171:" in out and "COMMENT ON" in out.upper(), out
 
 
 class TestWave226IntoFirstSelect:
@@ -8088,7 +8088,7 @@ class TestWave230WritingFunctions:
             "postgresql",
             "tsql",
         )
-        assert "UNIQUE-" in out and "side-effecting" in out, out
+        assert "UNIQUE-1171:" in out and "side-effecting" in out, out
 
     def test_readonly_function_untouched(self) -> None:
         out = _t2(
@@ -8150,7 +8150,7 @@ class TestWave233StarIntoMultipleVars:
             "mysql",
             "tsql",
         )
-        assert "UNIQUE-" in out and "column list" in out, out
+        assert "UNIQUE-1186:" in out and "column list" in out, out
         assert "@x = *" not in out, out
 
     def test_expr_into_single_untouched(self) -> None:
@@ -8280,7 +8280,7 @@ class TestWave238MysqlNonconstNthValue:
             "postgresql",
             "mysql",
         )
-        assert "UNIQUE-" in out, out
+        assert "UNIQUE-1003:" in out, out
 
     def test_const_nth_value_untouched(self) -> None:
         out = _t2(
@@ -8357,7 +8357,7 @@ class TestB10RunningColumnTypeAlterNullability:
             "postgresql",
             "tsql",
         )
-        assert "UNIQUE-" in res.sql, res.sql
+        assert "UNIQUE-1010:" in res.sql, res.sql
         assert res.warnings, res.warnings
         # best-effort executable statement still present
         assert re.search(r"(?i)ALTER COLUMN x BIGINT", res.sql), res.sql
