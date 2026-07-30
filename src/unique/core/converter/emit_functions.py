@@ -1159,6 +1159,193 @@ _PG_EXOTIC_EXTRACT = frozenset(
 )
 
 
+#: The base DATE_TRUNC part map (shared across sources). Oracle format models
+#: whose meaning differs (e.g. 'DAY' = start of week) are overridden per source.
+_TRUNC_PART_MAP: dict[str, str] = {
+    "DD": "day",
+    "DAY": "day",
+    "DDD": "day",
+    "MM": "month",
+    "MON": "month",
+    "MONTH": "month",
+    "YYYY": "year",
+    "YY": "year",
+    "YEAR": "year",
+    "HH": "hour",
+    "HH24": "hour",
+    "MI": "minute",
+    "MINUTE": "minute",
+    "Q": "quarter",
+    "QUARTER": "quarter",
+    "WW": "week",
+    "WEEK": "week",
+}
+
+#: Oracle-source overrides: TRUNC(d,'DAY'/'DY'/'D') is the START OF THE WEEK
+#: (locale default Sunday), NOT day truncation ('DD'/'DDD'/'J'); 'IW' is the ISO
+#: (Monday) week. ('W' = week-of-month has no portable form and degrades.)
+_ORACLE_TRUNC_OVERRIDE: dict[str, str] = {
+    "DAY": "week_sunday",
+    "DY": "week_sunday",
+    "D": "week_sunday",
+    "DD": "day",
+    "DDD": "day",
+    "J": "day",
+    "IW": "week",
+}
+
+
+def _trunc_week_sunday(value: str, dialect: str) -> str | None:
+    """Truncate to the start of the (Sunday-based, locale-default) week."""
+    return {
+        "postgresql": (
+            f"DATE_TRUNC('day', {value}) - "
+            f"CAST(EXTRACT(DOW FROM {value}) AS INT) * INTERVAL '1 day'"
+        ),
+        "oracle": f"TRUNC({value}, 'DAY')",
+        "tsql": (
+            f"DATEADD(DAY, -(DATEDIFF(DAY, '19000107', {value}) % 7), "
+            f"CAST({value} AS DATE))"
+        ),
+        "mysql": (
+            f"DATE_SUB(DATE({value}), INTERVAL (DAYOFWEEK(DATE({value})) - 1) DAY)"
+        ),
+    }.get(dialect)
+
+
+def _trunc_render(trunc_part: str, value: str, dialect: str) -> str | None:
+    """Render a normalized DATE_TRUNC part per target (or None to fall through)."""
+    if trunc_part == "week_sunday":
+        return _trunc_week_sunday(value, dialect)
+    if dialect == "postgresql":
+        return f"DATE_TRUNC('{trunc_part}', {value})"
+    if dialect == "oracle":
+        if trunc_part == "day":
+            return f"TRUNC({value})"
+        # Oracle codes differ from the source spelling; 'IW' is the ISO week.
+        return f"TRUNC({value}, '{_ORACLE_TRUNC_CODE[trunc_part]}')"
+    if dialect == "tsql":
+        # PG's week is ISO (Monday); T-SQL DATETRUNC(week) is Sunday-based, so use
+        # ISO_WEEK for the same Monday start.
+        if trunc_part == "day":
+            return f"CAST({value} AS DATE)"
+        ts_part = "ISO_WEEK" if trunc_part == "week" else trunc_part
+        return f"DATETRUNC({ts_part}, {value})"
+    # mysql
+    _my = {
+        "day": f"DATE({value})",
+        "month": f"DATE_FORMAT({value}, '%Y-%m-01')",
+        "year": f"DATE_FORMAT({value}, '%Y-01-01')",
+        # ISO/Monday week start (WEEKDAY: Monday=0), matching PG.
+        "week": f"DATE_SUB(DATE({value}), INTERVAL WEEKDAY(DATE({value})) DAY)",
+        "quarter": (
+            f"MAKEDATE(YEAR({value}), 1) + INTERVAL (QUARTER({value}) - 1) QUARTER"
+        ),
+        # No native DATE_TRUNC — strip the sub-unit fields to the boundary.
+        "hour": (
+            f"DATE_SUB({value}, "
+            f"INTERVAL (MINUTE({value}) * 60 + SECOND({value})) SECOND)"
+        ),
+        "minute": f"DATE_SUB({value}, INTERVAL SECOND({value}) SECOND)",
+    }
+    return _my.get(trunc_part)
+
+
+_ORACLE_TRUNC_CODE: dict[str, str] = {
+    "month": "MM",
+    "year": "YYYY",
+    "quarter": "Q",
+    "week": "IW",
+    "hour": "HH24",
+    "minute": "MI",
+}
+
+
+#: Format models that make ROUND a date rounding (never a numeric precision).
+_DATE_ROUND_FMTS = frozenset(
+    {
+        "DAY",
+        "DY",
+        "D",
+        "DD",
+        "DDD",
+        "J",
+        "MONTH",
+        "MM",
+        "MON",
+        "YEAR",
+        "YYYY",
+        "YY",
+        "Q",
+        "IW",
+        "W",
+        "WW",
+        "HH",
+        "HH24",
+        "MI",
+    }
+)
+
+
+def _emit_date_round(node: FunctionCall, dialect: str) -> str | None:
+    """Emit Oracle ROUND(date, fmt) — rounding to the nearest fmt boundary.
+
+    A string format-model second argument marks a date round (numeric ROUND uses
+    an integer precision). Kept native on Oracle; the general nearest-boundary
+    rounding has no faithful cross-engine form, so it degrades to a warned
+    carrier off Oracle instead of the invalid numeric ROUND it used to ship.
+    Returns None when *node* is not a date ROUND.
+    """
+    if node.name.upper() != "ROUND" or len(node.args) != 2:
+        return None
+    fmt_node = node.args[1]
+    if not (isinstance(fmt_node, Literal) and isinstance(fmt_node.value, str)):
+        return None
+    fmt = fmt_node.value.strip().upper()
+    if fmt not in _DATE_ROUND_FMTS:
+        return None
+    if dialect in ("oracle",):
+        # Keep the native date ROUND (the operand stays a DATE literal/expression).
+        return f"ROUND({_emit_expression(node.args[0], dialect)}, '{fmt}')"
+    return (
+        f"NULL /* UNIQUE: Oracle ROUND(date, '{fmt}') (nearest {fmt} boundary) "
+        f"has no faithful {dialect} equivalent — the value was not computed "
+        "(docs/03-unsupported.md) */"
+    )
+
+
+def _emit_date_trunc(node: FunctionCall, dialect: str) -> str | None:
+    """Emit Oracle TRUNC(date[, fmt])/PG date_trunc per target, or None.
+
+    The Oracle format model is source-disambiguated: 'DAY'/'DY'/'D' is the start
+    of the (Sunday) week, 'DD'/'DDD'/'J' is day truncation, 'IW' the ISO week.
+    A model with no portable truncation ('W' week-of-month) is kept native on
+    Oracle and degrades to a warned carrier elsewhere — never invalid SQL.
+    """
+    a0 = node.args[0]
+    if isinstance(a0, Literal):
+        raw_up = str(a0.value).strip("'").upper()
+    elif isinstance(a0, RawSQL):
+        raw_up = a0.sql.strip("'").upper()
+    else:
+        return None
+    src = SOURCE_DIALECT.get()
+    trunc_part = _TRUNC_PART_MAP.get(raw_up)
+    if src in ("oracle",):
+        trunc_part = _ORACLE_TRUNC_OVERRIDE.get(raw_up, trunc_part)
+    value = _emit_expression(node.args[1], dialect)
+    if trunc_part is None:
+        if src in ("oracle",):
+            if dialect in ("oracle",):
+                return f"TRUNC({value}, '{raw_up}')"
+            return (
+                f"NULL /* UNIQUE: Oracle TRUNC(date, '{raw_up}') has no {dialect} "
+                "equivalent — the value was not computed (docs/03-unsupported.md) */"
+            )
+        return None
+    return _trunc_render(trunc_part, value, dialect)
+
+
 def _emit_week_year_field(part: str, value: str, dialect: str) -> str | None:
     """Emit ISO/non-ISO week, ISO year, or a PG-only exotic EXTRACT field.
 
@@ -1378,6 +1565,14 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             f"CASE WHEN DAYOFMONTH({_d}) < 16 THEN {_first} "
             f"ELSE DATE_ADD({_first}, INTERVAL 1 MONTH) END"
         )
+
+    # Oracle ROUND(date, fmt) rounds a date to the nearest boundary (not a
+    # numeric round). Kept native on Oracle; no faithful cross-engine rewrite
+    # for the general case, so it degrades to a warned carrier off Oracle rather
+    # than the invalid ROUND(CAST(date AS NUMERIC), 'DAY') it used to ship.
+    _drnd = _emit_date_round(node, dialect)
+    if _drnd is not None:
+        return _drnd
 
     # T-SQL AVG returns the *input* type, so AVG over an integer column truncates
     # (AVG of 1, 2 = 1), whereas MySQL/Oracle/PostgreSQL always average as a
@@ -2624,86 +2819,15 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         return f"CAST({value} AS {target_type})"
 
     # Date truncation (Oracle TRUNC(date[, fmt]) arrives canonicalized as
-    # DATE_TRUNC): each engine spells it differently — audit D7: the Oracle
-    # part 'DD' leaked into T-SQL's nonexistent DATE_TRUNC, and PostgreSQL
-    # rejects 'DD' as a field too.
+    # DATE_TRUNC): each engine spells it differently — audit D7.
     if (
         fn_name == "DATE_TRUNC"
         and len(node.args) == 2
         and isinstance(node.args[0], (Literal, RawSQL))
     ):
-        raw_part = (
-            str(node.args[0].value)
-            if isinstance(node.args[0], Literal)
-            else node.args[0].sql.strip("'")
-        )
-        trunc_part = {
-            "DD": "day",
-            "DAY": "day",
-            "DDD": "day",
-            "MM": "month",
-            "MON": "month",
-            "MONTH": "month",
-            "YYYY": "year",
-            "YY": "year",
-            "YEAR": "year",
-            "HH": "hour",
-            "HH24": "hour",
-            "MI": "minute",
-            "MINUTE": "minute",
-            "Q": "quarter",
-            "QUARTER": "quarter",
-            "WW": "week",
-            "WEEK": "week",
-        }.get(raw_part.upper())
-        if trunc_part is not None:
-            value = _emit_expression(node.args[1], dialect)
-            if dialect == "postgresql":
-                return f"DATE_TRUNC('{trunc_part}', {value})"
-            if dialect == "oracle":
-                if trunc_part == "day":
-                    return f"TRUNC({value})"
-                # Oracle TRUNC format codes are NOT the source spelling: 'WEEK'
-                # (ORA-01898), 'QUARTER'/'MINUTE' (ORA-01821) are all rejected.
-                # Map each unit to Oracle's valid code — 'IW' is the ISO
-                # (Monday-based) week, matching PG's date_trunc('week').
-                ora_fmt = {
-                    "month": "MM",
-                    "year": "YYYY",
-                    "quarter": "Q",
-                    "week": "IW",
-                    "hour": "HH24",
-                    "minute": "MI",
-                }[trunc_part]
-                return f"TRUNC({value}, '{ora_fmt}')"
-            if dialect == "tsql":
-                # CAST AS DATE works on every supported version; DATETRUNC
-                # (2022+) covers the other parts. PG's week is ISO (Monday);
-                # T-SQL DATETRUNC(week) is Sunday-based, so use ISO_WEEK to
-                # return the same Monday start.
-                if trunc_part == "day":
-                    return f"CAST({value} AS DATE)"
-                ts_part = "ISO_WEEK" if trunc_part == "week" else trunc_part
-                return f"DATETRUNC({ts_part}, {value})"
-            if dialect == "mysql":
-                if trunc_part == "day":
-                    return f"DATE({value})"
-                if trunc_part == "month":
-                    return f"DATE_FORMAT({value}, '%Y-%m-01')"
-                if trunc_part == "year":
-                    return f"DATE_FORMAT({value}, '%Y-01-01')"
-                if trunc_part == "week":
-                    # ISO/Monday week start (WEEKDAY: Monday=0), matching PG.
-                    return (
-                        f"DATE_SUB(DATE({value}), INTERVAL WEEKDAY(DATE({value})) DAY)"
-                    )
-                if trunc_part == "quarter":
-                    return (
-                        f"MAKEDATE(YEAR({value}), 1) + "
-                        f"INTERVAL (QUARTER({value}) - 1) QUARTER"
-                    )
-                # hour/minute have no faithful MySQL date-truncation spelling —
-                # fall through to the warned validity-gate degrade.
+        _dt = _emit_date_trunc(node, dialect)
+        if _dt is not None:
+            return _dt
 
     # Date formatting/parsing. sqlglot canonicalizes TO_CHAR(date,fmt) to
     # TIME_TO_STR and TO_TIMESTAMP/TO_DATE(str,fmt) to STR_TO_TIME, with the

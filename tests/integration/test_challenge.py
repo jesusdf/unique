@@ -5642,3 +5642,61 @@ class TestExtractUnitSpace:
         src = "SELECT DATEPART(ISO_WEEK, '2021-01-01') AS w"
         assert "WEEK('2021-01-01', 3)" in _tx(src, "tsql", "mysql")
         assert "TO_CHAR('2021-01-01', 'IW')" in _tx(src, "tsql", "oracle")
+
+
+class TestOracleTruncRoundFormatModels:
+    """RED round-2 Oracle TRUNC/ROUND date-format models.
+
+    * red2-ora-trunc-day-weekstart: TRUNC(d,'DAY') is the START OF THE (Sunday)
+      WEEK, not day truncation ('DD'); mapped to a Sunday week-start per target.
+      Live-verified 2021-06-13 on PG/T-SQL/MySQL.
+    * red2-ora-trunc-format-unmapped: 'IW' (ISO week) maps to the ISO-week
+      truncation; 'W' (week-of-month, no portable form) degrades to a warned
+      carrier off Oracle; MySQL hour/minute now truncate instead of shipping an
+      invalid DATE_TRUNC. Live-verified 'IW' = 2021-06-14.
+    * red2-ora-round-date-fmt: ROUND(date, fmt) is date rounding, not numeric —
+      kept native on Oracle, degrades to a warned carrier off Oracle (was invalid
+      ROUND(CAST(date AS NUMERIC), ...)).
+    """
+
+    def test_trunc_day_is_week_start(self) -> None:
+        case = _case("challenge_oracle.sql", "red2-ora-trunc-day-weekstart")
+        pg = _tx(case, "oracle", "postgresql")
+        assert "EXTRACT(DOW FROM DATE '2021-06-15')" in pg, pg
+        assert (
+            "DATE_TRUNC('day', DATE '2021-06-15') AS d" not in pg
+        ), pg  # not plain day
+        assert "DATEDIFF(DAY, '19000107'" in _tx(case, "oracle", "tsql")
+        assert "DAYOFWEEK(DATE(" in _tx(case, "oracle", "mysql")
+
+    def test_trunc_dd_stays_day(self) -> None:
+        # Neighbor: 'DD' is genuine day truncation and must be unaffected.
+        src = "SELECT TRUNC(DATE '2021-06-15', 'DD') AS d FROM dual"
+        assert "DATE_TRUNC('day', DATE '2021-06-15')" in _tx(
+            src, "oracle", "postgresql"
+        )
+        assert "DATE(CAST" in _tx(src, "oracle", "mysql")
+
+    def test_trunc_week_of_month_degrades(self) -> None:
+        case = _case("challenge_oracle.sql", "red2-ora-trunc-format-unmapped")
+        for target in ("postgresql", "tsql", "mysql"):
+            r = Transpiler().transpile(case, source="oracle", target=target)
+            assert r.warnings and "UNIQUE:" in r.sql, r.sql
+            body = _exec_lines(r.sql)
+            assert "DATE_TRUNC(W" not in body and "DATE_TRUNC('W'" not in body, body
+
+    def test_trunc_iso_week_maps(self) -> None:
+        src = "SELECT TRUNC(DATE '2021-06-15', 'IW') AS d FROM dual"
+        assert "DATE_TRUNC('week', DATE '2021-06-15')" in _tx(
+            src, "oracle", "postgresql"
+        )
+        assert "DATETRUNC(ISO_WEEK," in _tx(src, "oracle", "tsql")
+
+    def test_round_date_degrades_off_oracle(self) -> None:
+        case = _case("challenge_oracle.sql", "red2-ora-round-date-fmt")
+        for target in ("postgresql", "tsql", "mysql"):
+            r = Transpiler().transpile(case, source="oracle", target=target)
+            assert r.warnings and "UNIQUE:" in r.sql, r.sql
+            body = _exec_lines(r.sql)
+            assert "AS NUMERIC" not in body.upper(), body  # not the numeric round
+            assert "NULL" in body, body
