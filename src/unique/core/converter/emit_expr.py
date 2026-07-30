@@ -83,6 +83,51 @@ __all__ = [
     "_emit_window",
 ]
 
+# Integer-family CAST targets: an error-safe (TRY) cast of a non-literal value
+# must reject a decimal/float string the way T-SQL TRY_CAST('1.5' AS INT) yields
+# NULL, so these guard on an integer-only pattern; the other numeric families
+# accept the general numeric form.
+_INT_SAFE_CAST_BASES = frozenset(
+    {
+        "INT",
+        "INTEGER",
+        "BIGINT",
+        "SMALLINT",
+        "TINYINT",
+        "MEDIUMINT",
+        "SIGNED",
+        "UNSIGNED",
+        "UBIGINT",
+        "UINT",
+        "UINTEGER",
+        "USMALLINT",
+        "UTINYINT",
+        "UMEDIUMINT",
+    }
+)
+# All numeric CAST targets eligible for the PG/MySQL runtime error-safe guard.
+_SAFE_NUMERIC_CAST_BASES = _INT_SAFE_CAST_BASES | frozenset(
+    {"DECIMAL", "NUMERIC", "NUMBER", "DEC", "FLOAT", "DOUBLE", "REAL"}
+)
+# PG/MySQL have no error-safe cast; a numeric target is guarded by a validation
+# test so a non-numeric value yields the fallback (Oracle DEFAULT) / NULL (TRY)
+# instead of raising (PG) or coercing to 0 (MySQL). Dict dispatch — the pattern
+# uses only POSIX classes (no backslashes) so it survives MySQL's string-literal
+# unescaping. ``rx`` is the numeric pattern; ``inner`` the value expression.
+_NUMERIC_SAFE_GUARD: dict[str, Callable[[str, str], str]] = {
+    "postgresql": lambda inner, rx: f"{inner}::text ~ '{rx}'",
+    "mysql": lambda inner, rx: f"CAST({inner} AS CHAR) REGEXP '{rx}'",
+}
+
+
+def _safe_numeric_regex(base: str) -> str:
+    """POSIX pattern a value must match for the target's error-safe numeric cast
+    to fire — integer-only for INT-family targets, the general numeric form
+    otherwise."""
+    if base in _INT_SAFE_CAST_BASES:
+        return "^[+-]?[0-9]+$"
+    return "^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?$"
+
 
 def _emit_expression(node: ASTNode, dialect: str) -> str:
     """Emit an expression node as SQL text."""
@@ -732,6 +777,15 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
                     "1",
                 ):
                     return "NULL"  # non-boolean literal -> safe cast is NULL
+            elif _sup in _SAFE_NUMERIC_CAST_BASES:
+                # A non-literal numeric target (column/expr) can't be folded at
+                # transpile time — guard it so a non-numeric value yields NULL
+                # (T-SQL TRY semantics) instead of a MySQL 0 or a PG runtime abort
+                # (red3-ts-trycast-column-nonliteral / -tryconvert-). A non-numeric
+                # target has no such failure mode here (a string cast never fails),
+                # so it keeps the faithful plain CAST below.
+                guard = _NUMERIC_SAFE_GUARD[dialect](inner, _safe_numeric_regex(_sup))
+                return f"CASE WHEN {guard} THEN CAST({inner} AS {dtype}) ELSE NULL END"
         if node.on_error_default is not None:
             # Oracle ``CAST(x AS T DEFAULT d ON CONVERSION ERROR)`` returns d when
             # the conversion fails. Dropping the clause silently ships a cast that
@@ -766,13 +820,10 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             if _oerr_num:
                 # PG/MySQL have no error-safe cast; guard a numeric target with a
                 # validation test so a non-numeric value yields the fallback
-                # instead of raising. The pattern uses only POSIX classes (no
-                # backslashes) so it survives MySQL's string-literal unescaping.
+                # instead of raising (shared _NUMERIC_SAFE_GUARD dispatch; the
+                # general numeric pattern, unchanged from the prior inline form).
                 num_re = "^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?$"
-                if dialect == "postgresql":
-                    guard = f"{inner}::text ~ '{num_re}'"
-                else:  # mysql
-                    guard = f"CAST({inner} AS CHAR) REGEXP '{num_re}'"
+                guard = _NUMERIC_SAFE_GUARD[dialect](inner, num_re)
                 return (
                     f"CASE WHEN {guard} THEN CAST({inner} AS {dtype}) "
                     f"ELSE {default_sql} END"

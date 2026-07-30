@@ -5537,6 +5537,55 @@ class TestTryCastMysqlNull:
         assert "CAST('123' AS SIGNED)" in out, out
 
 
+class TestTryCastColumnNonliteral:
+    """red3-ts-trycast-column-nonliteral + red3-ts-tryconvert-column-nonliteral
+    (func): TRY_CAST/TRY_CONVERT over a COLUMN can't be folded, so the TRY
+    (null-on-failure) semantics were dropped — MySQL returned 0, PG aborted the
+    query. Wrap the numeric cast in a runtime guard so a bad row yields NULL.
+    Live-verified (blue8 stack, c in ('abc','42')): PG/MySQL/Oracle all return
+    (42, NULL), matching T-SQL. Oracle already had DEFAULT NULL ON CONVERSION
+    ERROR."""
+
+    def _assert_guarded(self, case: str) -> None:
+        src = _case("challenge_sqlserver.sql", case)
+        # MySQL: REGEXP guard on the string form, ELSE NULL.
+        my = _exec_lines(_tx(src, "tsql", "mysql"))
+        assert "REGEXP '^[+-]?[0-9]+$'" in my, my
+        assert "ELSE NULL END" in my, my
+        assert_statements_parse(my, "mysql", context=case)
+        # PG: ``~`` regex guard on ::text, ELSE NULL — no bare CAST that aborts.
+        pg = _exec_lines(_tx(src, "tsql", "postgresql"))
+        assert "~ '^[+-]?[0-9]+$'" in pg, pg
+        assert "ELSE NULL END" in pg, pg
+        assert_statements_parse(pg, "postgresql", context=case)
+        # Oracle keeps its native error-safe cast.
+        ora = _exec_lines(_tx(src, "tsql", "oracle"))
+        assert "DEFAULT NULL ON CONVERSION ERROR" in ora, ora
+
+    def test_trycast_column_guarded(self) -> None:
+        self._assert_guarded("red3-ts-trycast-column-nonliteral")
+
+    def test_tryconvert_column_guarded(self) -> None:
+        self._assert_guarded("red3-ts-tryconvert-column-nonliteral")
+
+    def test_decimal_target_uses_general_numeric_pattern(self) -> None:
+        # A DECIMAL target must accept decimal strings (the general pattern),
+        # unlike the integer-only guard for an INT target.
+        out = _tx("SELECT TRY_CAST(c AS DECIMAL(10,2)) AS r FROM t", "tsql", "mysql")
+        assert "([0-9]+([.][0-9]*)?" in out, out
+        assert "ELSE NULL END" in out, out
+
+    def test_string_target_stays_plain_cast_no_warning(self) -> None:
+        # A cast to a string type never fails, so TRY == plain CAST — no guard,
+        # no (lying) warning about failure.
+        r = Transpiler().transpile(
+            "SELECT TRY_CAST(c AS VARCHAR(10)) AS r FROM t", "tsql", "postgresql"
+        )
+        assert "CASE WHEN" not in r.sql, r.sql
+        assert "CAST(c AS VARCHAR(10))" in r.sql, r.sql
+        assert r.warnings == [], r.warnings
+
+
 class TestExecNamedParamMysql:
     """red2-ts-exec-named-param-mysql: T-SQL ``EXEC proc @p = v`` (named
     binding) became ``CALL proc(v_p = v)`` on MySQL — 1054 (no named-argument
