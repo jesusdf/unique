@@ -766,6 +766,7 @@ class Transformer:
                 self._drop_oracle_concat_nulls(node)  # type: ignore[misc]
                 for node in result
             ]
+            result = [self._gate_oracle_partition_extension(node) for node in result]
         if self.context.source == "mysql" and self.context.target != "mysql":
             result = [self._gate_column_position(node) for node in result]
         if self.context.source == "tsql" and self.context.target != "tsql":
@@ -1367,6 +1368,40 @@ class Transformer:
                 if found is not None:
                     return found
         return None
+
+    def _gate_oracle_partition_extension(self, node: ASTNode) -> ASTNode:
+        """Degrade Oracle's partition-extended table reference ``FROM t
+        PARTITION (p)`` — WHOLE. sqlglot mis-parses it as a column-renaming
+        alias (``t AS PARTITION(p)``), which silently drops the partition FILTER
+        and returns ALL rows on the target. No engine has partition-extended
+        syntax and the partition's key/values are not visible here, so there is
+        no faithful rewrite: preserve it whole with an honest warning."""
+        if not self._find_partition_extension(node):
+            return node
+        reason = (
+            "Oracle partition-extended table reference (PARTITION/SUBPARTITION) "
+            "has no target equivalent and its row filter cannot be reconstructed; "
+            "statement preserved as a comment"
+        )
+        self.context.warn(reason, "partition_extension")
+        self.context.mark_unsupported("partition-extended table reference")
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
+
+    def _find_partition_extension(self, value: object) -> bool:
+        if (
+            isinstance(value, TableRef)
+            and (value.alias or "").upper() in ("PARTITION", "SUBPARTITION")
+            and value.column_aliases
+        ):
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._find_partition_extension(getattr(value, f.name))
+                for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._find_partition_extension(item) for item in value)
+        return False
 
     def _gate_tsql_regexp(self, node: ASTNode) -> ASTNode:
         """Degrade a POSIX-regex match into T-SQL — WHOLE. Oracle REGEXP_LIKE /

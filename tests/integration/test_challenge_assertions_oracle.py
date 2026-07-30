@@ -557,6 +557,28 @@ CASES.update(
                 ),
             },
         ),
+        # BLUE 2026-07-30 (func): partition-extended table reference FROM t
+        # PARTITION (p) has no target equivalent and its row filter is not
+        # reconstructable -> honest warned carrier (was a silent alias rename).
+        "reda-ora-partition-extension": Case(
+            "reda-ora-partition-extension ",
+            {
+                "postgresql": Expect(warn=True),
+                "tsql": Expect(warn=True),
+                "mysql": Expect(warn=True),
+            },
+        ),
+        # BLUE 2026-07-30 (lying-warning): KEEP (DENSE_RANK …) is an ordered
+        # AGGREGATE, not a window; it was silently rendered as a running OVER.
+        # No portable form -> honest warned carrier on every target.
+        "reda-ora-keep-denserank": Case(
+            "reda-ora-keep-denserank ",
+            {
+                "postgresql": Expect(warn=True),
+                "tsql": Expect(warn=True),
+                "mysql": Expect(warn=True),
+            },
+        ),
         # BLUE 2026-07-30 (lying-warning): Oracle GREATEST returns NULL if any
         # arg is NULL; PG and T-SQL ignore NULL. Guard with the same CASE the
         # MySQL-source path uses so the value = NULL. MySQL target propagates

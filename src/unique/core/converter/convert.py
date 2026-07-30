@@ -1206,6 +1206,17 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
             )
         return RawSQL(sql=_source_sql(expr), reason="Complex subquery")
     if isinstance(expr, exp.Window):
+        if str(expr.args.get("over") or "").upper() == "KEEP":
+            # Oracle ``agg(x) KEEP (DENSE_RANK FIRST/LAST ORDER BY y)`` is an
+            # ordered AGGREGATE (one value per group, taken from the rows with
+            # the extreme y) — NOT a window function. Rendering it as ``agg(x)
+            # OVER (ORDER BY y)`` silently changed it to a per-row running
+            # aggregate. There is no portable form, so preserve it whole and
+            # degrade honestly (carrier + warning via _gate_unmapped_operator).
+            return RawSQL(
+                sql=_source_sql(expr),
+                reason="unmapped operator KEEP (DENSE_RANK) ordered aggregate",
+            )
         return _convert_window(expr)
     if isinstance(expr, exp.Paren):
         return convert_expression(expr.this)
