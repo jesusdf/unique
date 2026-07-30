@@ -22,6 +22,9 @@ unique dialects
 # Validate a script's syntax (errors are located by line)
 unique validate script.sql -d postgresql
 
+# Suppress specific diagnostics from the warning output (repeatable)
+unique transpile in.sql --from postgresql --to tsql --ignore UNIQUE-1218 --ignore UNIQUE-1015
+
 # Structural-similarity of two scripts (e.g. a migration audit: how close is a
 # hand-migrated PL/SQL to the original T-SQL?). Dialects auto-detect if omitted.
 unique compare original.sql migrated.sql --dialect-a tsql --dialect-b oracle
@@ -32,6 +35,16 @@ unique compare a.sql b.sql --json          # machine-readable report
 (exit 1), listing each error by line — for example a `CREATE PROCEDURE` with no
 preceding `GO` (the batch it must start). Pass `--ignore-syntax-errors` to
 transpile anyway. `validate` reports the same located errors without emitting.
+
+Every warning carries a stable **`UNIQUE-NNNN` diagnostic code** (printed as
+`WARNING [UNIQUE-1218]: …`; the same code prefixes the carrier comment left in
+the SQL — see the [reference catalog](reference/warnings.md)). Pass
+**`--ignore UNIQUE-NNNN`** (repeatable) to drop matching warnings from the
+warning output; a trailing `N warning(s) suppressed by --ignore` line records
+how many were hidden, and an **unregistered code is rejected** (exit 1) so a
+typo cannot silently suppress nothing. `--ignore` governs **only the warning
+channel** — the `-- UNIQUE-NNNN: …` carriers stay in the transpiled SQL, which
+is the artifact; suppression never rewrites the output.
 
 `compare` reports a **structural similarity** percentage plus a per-dimension
 breakdown (DML structure, predicates, control flow, tree match) — it is *not* a
@@ -117,6 +130,14 @@ located errors (`{error, message, issues: [{line, column, message, snippet}]}`);
 set `"ignore_syntax_errors": true` in the body to transpile anyway. A `source` of
 `auto` is detected before validating. `/api/v1/validate` returns the same
 structured issues (`valid: false` with `issues`).
+
+Each response warning carries its `code` (`UNIQUE-NNNN`). The request may set
+**`"ignore": ["UNIQUE-1218", …]`** (mirrors the CLI `--ignore`): matching
+warnings are dropped from `warnings` and `suppressed_warning_count` reports how
+many; an unregistered code is rejected with `422`
+(`{error: "unknown_diagnostic_code", codes: [...]}`). As on the CLI, `ignore`
+governs **only the warning channel** — the `-- UNIQUE-NNNN: …` carriers stay in
+the returned `sql`.
 
 ## Web UI
 

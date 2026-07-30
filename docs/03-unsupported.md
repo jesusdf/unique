@@ -8,7 +8,20 @@ transpilation, along with the reasoning.
 `rustc E0308`). Carrier comments therefore read `-- UNIQUE-1234: …` /
 `/* UNIQUE-1234: … */`, and the matching `warnings` entry exposes it as
 `.code`. Codes are **append-only**: never renumbered, never reused. The
-authoritative catalog is `src/unique/core/diagnostics.py`.
+authoritative catalog is `src/unique/core/diagnostics.py`; the generated
+reference is [`reference/warnings.md`](reference/warnings.md).
+
+A **completeness gate** (`tests/unit/core/test_diagnostic_completeness.py`)
+holds the warning channel to the contract *no warning ships uncoded*, as a
+ratchet that only goes down. Carrier-backed warnings inherit their code from the
+`-- UNIQUE-NNNN:` carrier (reconciliation backfill); non-carrier warnings pass
+the code at the emission site. The current floor is the **procedural-layer
+carrier residual** — the T-SQL/MySQL/Oracle procedural emitters still emit some
+legacy uncoded `/* UNIQUE: … */` carriers (they map to existing codes; coding
+them at the procedural emitters and regenerating `tests/fixtures/procedures/*`
+is a follow-up). Users can suppress a code from the warning channel with the CLI
+`--ignore UNIQUE-NNNN` / API `ignore` field; suppression never touches the SQL —
+the carriers are the artifact.
 
 ---
 
