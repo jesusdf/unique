@@ -67,7 +67,30 @@ engines we transpile (ORA-00942, SQLSTATE) and modern compilers (rustc E0308).*
 - **Locks in:** every `docs/rationale/` claim about a degrade becomes
   traceable to a registry entry; new degrades cannot ship without a rationale.
 
-### F2 — web UI "Compare" button for F1 (P3; depends on F1; approved 2026-07-30)
+### Q1 — Oracle-source / MySQL-source procedural degrade rate on the PG pivot (P2)
+
+*Measured by F1's acceptance corpus (2026-07-30): `oracle→postgresql` and
+`mysql→postgresql` degrade **~19–21 of ~32** `tests/fixtures/procedures/`
+routines to carriers, while `sqlserver↔postgresql` keeps ~31–32. This is the
+transpiler-quality reason those cross-dialect same-function pairs score
+17–34% instead of ~99%. Front: triage the degraded routines by carrier code
+(the B32 catalog makes this a `grep -c` per `UNIQUE-NNNN`), rank mechanisms
+by frequency, and work them as briefs — same method as the campaign fronts.
+Also aligns with the standing "Oracle-source Tier-1 promotion" goal in
+`docs/STATUS.md`.*
+
+### Q2 — small emitter/degrade coherence bugs (P3, observed 2026-07-30)
+
+- The PG-pivot output can contain a stray `$$` inside a `--` commented body
+  line (found by F1's splitter work) — desyncs naive statement scanners;
+  find the emitter that leaks it and keep the comment self-contained.
+- A parse-failed statement's sibling transaction closer survives the degrade:
+  `begin \nSELECT 1;\nend` (invalid PG source) comments the failed opener but
+  still emits a lone `COMMIT TRANSACTION` (T-SQL error 3902 at runtime).
+  Warned (UNIQUE-1003), so within the honesty rules — but the coherent
+  degrade is to carrier the whole transactional unit when its opener fails.
+
+### F2 — web UI "Compare" button for F1 (P3; depends on F1 — LANDED 2026-07-30; approved 2026-07-30)
 
 *Maintainer-specified UI (2026-07-30):*
 
