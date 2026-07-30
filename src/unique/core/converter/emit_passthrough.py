@@ -137,6 +137,26 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 return f"ALTER TABLE {_mt} ALTER COLUMN {_mc} {_mtype}"
             return f"ALTER TABLE {_mt} MODIFY COLUMN {_mc} {_mtype}"
 
+    # T-SQL source ``ALTER TABLE t ALTER COLUMN c <type> [NULL|NOT NULL]`` -> Oracle
+    # ``MODIFY (c type [NOT NULL])``. sqlglot renders the Oracle form as an invalid
+    # ``ALTER COLUMN c SET DATA TYPE …`` (ORA-01735). A single-statement batch is
+    # handled by ``_transpile_alter_column`` (anchored ^…$), but the ALTER inside a
+    # multi-statement ``;``-batch reaches the AST/passthrough path, so map it here
+    # too. Oracle MODIFY keeps the current nullability, and an explicit NULL on an
+    # already-nullable column raises ORA-01451 — so emit NOT NULL only.
+    if node.kind == "ALTER" and node.source_dialect == "tsql" and dialect == "oracle":
+        m_tsc = re.match(
+            r"(?is)^\s*ALTER\s+TABLE\s+(\S+)\s+ALTER\s+COLUMN\s+(\S+)\s+"
+            r"([A-Za-z0-9_]+(?:\s*\([\d,\s]*\))?)"
+            r"(?:\s+(NOT\s+NULL|NULL))?\s*;?\s*$",
+            node.sql,
+        )
+        if m_tsc:
+            _tt, _tc, _tty, _tnull = m_tsc.groups()
+            _tty = _portable_types_in_sql(_tty, "oracle")
+            _nn = " NOT NULL" if " ".join((_tnull or "").upper().split()) == "NOT NULL" else ""
+            return f"ALTER TABLE {_tt} MODIFY ({_tc} {_tty}{_nn})"
+
     # ``ALTER TABLE t ALTER COLUMN c SET DEFAULT v``: the MySQL/PostgreSQL-native
     # spelling (T-SQL uses ADD DEFAULT … FOR, handled by the guard/default paths,
     # so this stays gated to those sources). Oracle uses MODIFY c DEFAULT v;
@@ -391,8 +411,28 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         if m_idx:
             _uni, _iname, _itbl, _itgt = m_idx.groups()
             _itgt = _itgt.strip()
-            is_expr = bool(re.search(r"[*/%+]|\|\||\b\w+\s*\(", _itgt)) and (
-                "," not in _itgt
+            # The greedy ``\((.*)\)`` also swallows a trailing physical clause
+            # (T-SQL ``WITH (FILLFACTOR = 80)``): ``_itgt`` becomes
+            # ``a) WITH (FILLFACTOR=80`` and the ``\w+\s*\(`` heuristic mistakes
+            # ``WITH (`` for a function call, folding the option INTO the key
+            # parens (MySQL 1064). A real single expression has balanced parens
+            # that never close before they open — require that, so a malformed
+            # capture falls through to the generic path (which drops WITH with a
+            # carrier via ``_portable_index``).
+            _balanced, _depth = True, 0
+            for _ch in _itgt:
+                if _ch == "(":
+                    _depth += 1
+                elif _ch == ")":
+                    _depth -= 1
+                    if _depth < 0:
+                        _balanced = False
+                        break
+            _balanced = _balanced and _depth == 0
+            is_expr = (
+                _balanced
+                and bool(re.search(r"[*/%+]|\|\||\b\w+\s*\(", _itgt))
+                and ("," not in _itgt)
             )
             if is_expr:
                 _uni = _uni or ""
@@ -1167,6 +1207,14 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 result = _portable_types_in_sql(result, dialect)
             if node.kind == "CREATE SEQUENCE" and dialect == "oracle":
                 result = _oracle_sequence_drop_type(result)
+                # Oracle spells the sequence negatives as one word
+                # (NOMAXVALUE / NOMINVALUE / NOCYCLE / NOCACHE); T-SQL and
+                # PostgreSQL use two words (NO MAXVALUE, …), which Oracle
+                # rejects (ORA-03049). Collapse them (mirror of the
+                # Oracle->PG/T-SQL expansion above).
+                result = re.sub(
+                    r"(?i)\bNO\s+(CYCLE|CACHE|MAXVALUE|MINVALUE)\b", r"NO\1", result
+                )
             if node.kind == "MERGE":
                 # sqlglot keeps the USING subquery's FROM DUAL on engines
                 # that have no dual relation, and T-SQL *requires* MERGE to

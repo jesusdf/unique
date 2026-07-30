@@ -59,7 +59,6 @@ Notes: Oracle-source PIVOT is the same converter mechanism as reda-ts-pivot (als
 |----|-------|-------------|--------------|--------------------------|
 | reda-ts-avg-int-trunc | func | tsql→pg,mysql,oracle | AVG(x) passed through | T-SQL integer AVG truncates=1; others=1.5. Live tsql=1, pg=1.5, mysql=1.5. |
 | reda-ts-cte-merge | composition | tsql→mysql,oracle | CTE dropped/misplaced | WITH src..MERGE: MySQL upsert drops the CTE (live 1146 "Table 'src' doesn't exist"); Oracle keeps WITH before MERGE (live ORA-00928), no warning. Components green alone. |
-| reda-ts-alter-column-oracle | invalid | tsql→oracle | ALTER COLUMN a SET DATA TYPE NUMBER | Oracle needs MODIFY. Live ORA-01735. No warning. (MySQL-source MODIFY path is handled, T-SQL path isn't.) |
 | reda-ts-identity-insert | consistency | tsql→pg,oracle,mysql | SET IDENTITY_INSERT = t AS OFF | ON->comment+warn, OFF->mangled live SQL, invalid (PG syntax error near "AS"), no warning. Identity-override bracket incoherent. |
 
 Batch running totals: func 25, invalid 10, silent-drop 8, lying-warning 6, composition 5, consistency 4 = 58 pts; 6 classes; func 43%.
@@ -72,8 +71,6 @@ Batch running totals: func 25, invalid 10, silent-drop 8, lying-warning 6, compo
 | reda-ts-like-escape | lying-warning | tsql→pg,oracle,mysql | whole SELECT commented out | LIKE..ESCAPE is standard, supported identically on all 3 (live-verified). Falsely warned 'no mapping'. |
 | reda-ts-datepart-weekday | invalid | tsql→pg,oracle,mysql | EXTRACT(DAYOFWEEK FROM d) | no engine has DAYOFWEEK extract unit. Live PG/MySQL/Oracle all error. No warning. |
 | reda-ora-date-literal-subquery | invalid | oracle→pg,tsql,mysql | DATE literal->bare string in subquery | DATE '..' loses typing as a derived-table projection; outer date-minus-date -> text-text. Live PG 'text - text'. |
-| reda-ts-sequence-no-cycle | invalid | tsql→oracle | NO MAXVALUE NO CYCLE verbatim | Oracle needs NOMAXVALUE/NOCYCLE (one word). Live ORA-03049. No warning. |
-| reda-ts-index-fillfactor-mysql | invalid | tsql→mysql | ON t ((a) WITH (FILLFACTOR=80)) | WITH folded into key list. Live MySQL 1064. No warning (Oracle path warns). |
 | reda-ora-interval-literal-arith | invalid | oracle→tsql,mysql | INTERVAL '1-6' YEAR TO MONTH verbatim | T-SQL has no INTERVAL literal (err 102); MySQL uses YEAR_MONTH not YEAR TO MONTH (1064). No warning. |
 
 Batch totals: func 25, invalid 20, silent-drop 12, lying-warning 10, composition 5, consistency 4 = **76 pts**; **6 classes** (max class invalid 26%). All 25 open cases smoke-pass test_challenge.py (601 passed).

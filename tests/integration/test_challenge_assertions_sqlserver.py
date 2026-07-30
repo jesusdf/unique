@@ -397,6 +397,30 @@ CASES.update(
                 "absent": ["INNER JOIN"],
             },
         },
+        # invalid: T-SQL ALTER COLUMN <type> inside a multi-statement batch
+        # reaches the AST path; sqlglot emits an invalid Oracle "SET DATA TYPE".
+        "reda-ts-alter-column-oracle": {
+            "oracle": {
+                "present": ["MODIFY (a NUMBER)"],
+                "absent": ["SET DATA TYPE", "ALTER COLUMN a"],
+            },
+        },
+        # invalid: Oracle spells sequence negatives as one word.
+        "reda-ts-sequence-no-cycle": {
+            "oracle": {
+                "present": ["NOMAXVALUE", "NOCYCLE"],
+                "absent": ["NO MAXVALUE", "NO CYCLE"],
+            },
+        },
+        # invalid: MySQL has no FILLFACTOR — drop it with a warning + carrier,
+        # never fold it into the index key parens.
+        "reda-ts-index-fillfactor-mysql": {
+            "mysql": {
+                "present": ["CREATE INDEX ix ON t(a)"],
+                "absent": ["FILLFACTOR"],
+                "degrade": True,
+            },
+        },
         "reda-ts-pivot": {
             "oracle": {
                 "present": ["PIVOT (SUM(v) FOR dept IN ('A' AS A, 'B' AS B))"],
