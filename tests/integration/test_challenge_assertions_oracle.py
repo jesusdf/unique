@@ -557,6 +557,17 @@ CASES.update(
                 ),
             },
         ),
+        # BLUE 2026-07-30 (lying-warning): Oracle ``||`` treats NULL as ''; a
+        # provably-NULL operand (CAST(NULL AS ...)) is now dropped so the value
+        # survives ('a'||'b' = 'ab' everywhere), not just a bare NULL literal.
+        "reda-ora-concat-null-cast": Case(
+            "reda-ora-concat-null-cast ",
+            {
+                "postgresql": Expect(("'a' || 'b'",), ("CAST(NULL",)),
+                "tsql": Expect(("'a' + 'b'",), ("CAST(NULL",)),
+                "mysql": Expect(("CONCAT('a', 'b')",), ("CAST(NULL",)),
+            },
+        ),
         # BLUE 2026-07-30 (lying-warning): REGEXP_LIKE maps to PG ``~`` and MySQL
         # REGEXP (both live-verified); only T-SQL genuinely lacks POSIX regex and
         # degrades to a warned carrier. Previously ALL three were falsely dropped.

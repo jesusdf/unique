@@ -173,6 +173,23 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
         "oracle": {"degrade": True},
         "postgresql": {"degrade": True},
     },
+    # func: MySQL CONCAT propagates NULL (any NULL arg -> NULL) while PG/T-SQL/
+    # Oracle CONCAT ignore NULL. A runtime-nullable operand is now NULL-guarded
+    # with a CASE so the result matches MySQL (all three targets = NULL live).
+    "my-concat-null-col": {
+        "postgresql": {
+            "present": ["WHEN a IS NULL OR b IS NULL THEN NULL", "CONCAT(a, b)"],
+            "absent": [],
+        },
+        "tsql": {
+            "present": ["WHEN a IS NULL OR b IS NULL THEN NULL", "CONCAT(a, b)"],
+            "absent": [],
+        },
+        "oracle": {
+            "present": ["WHEN a IS NULL OR b IS NULL THEN NULL", "CONCAT(a, b)"],
+            "absent": [],
+        },
+    },
     "my-concat-ws": {
         "oracle": {"degrade": True},
     },

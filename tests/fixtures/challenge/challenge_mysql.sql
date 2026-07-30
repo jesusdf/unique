@@ -893,7 +893,7 @@ SELECT x FROM (SELECT 1 x UNION SELECT 2) t GROUP BY x WITH ROLLUP
 SELECT SQL_CALC_FOUND_ROWS x FROM (SELECT 1 x) t LIMIT 1
 
 
--- CASE[open][class=func]: my-concat-null-col — CONCAT with a NULL arg returns NULL in MySQL, but PG/T-SQL/Oracle CONCAT IGNORE NULLs. The existing my-concat-null fix only constant-folds LITERAL-NULL args; with a runtime (column) NULL the CONCAT is emitted verbatim and the null-propagation is lost. MySQL=NULL; PG/T-SQL/Oracle='1'. No warning. (Faithful map: PG/T-SQL `||`/`+` propagate NULL; Oracle needs a CASE.)
+-- CASE[fixed][class=func]: my-concat-null-col — CONCAT with a NULL arg returns NULL in MySQL, but PG/T-SQL/Oracle CONCAT IGNORE NULLs. The existing my-concat-null fix only constant-folds LITERAL-NULL args; with a runtime (column) NULL the CONCAT is emitted verbatim and the null-propagation is lost. MySQL=NULL; PG/T-SQL/Oracle='1'. No warning. (Faithful map: PG/T-SQL `||`/`+` propagate NULL; Oracle needs a CASE.)
 SELECT CONCAT(a, b) AS c FROM (SELECT 1 AS a, CAST(NULL AS CHAR) AS b) t
 
 -- CASE[open][class=func]: my-groupconcat-distinct-numord — GROUP_CONCAT(DISTINCT x ORDER BY x DESC) over a NUMERIC column orders numerically in MySQL, but the PG rewrite STRING_AGG(DISTINCT CAST(x AS TEXT) ORDER BY CAST(x AS TEXT) DESC) orders LEXICALLY (PG forces the ORDER BY key to equal the DISTINCT'd text arg). The [fixed] my-groupconcat-distinct case only used single-digit values {1,1,2} where text and numeric order coincide, so it locked in a fix that is wrong for multi-digit values. MySQL/Oracle='10-2-1'; PG='2-10-1'. No warning.

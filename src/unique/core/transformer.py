@@ -22,6 +22,7 @@ from unique.core.ast_nodes import (
     ASTNode,
     BinaryOp,
     BinaryOperator,
+    CaseExpression,
     CastExpression,
     ColumnRef,
     CreateTableStatement,
@@ -35,6 +36,8 @@ from unique.core.ast_nodes import (
     Star,
     SubqueryExpression,
     TableRef,
+    UnaryOp,
+    UnaryOperator,
 )
 from unique.core.mappings import CANONICAL_FUNCTION_NAMES
 
@@ -807,6 +810,7 @@ class Transformer:
         if self.context.source == "mysql" and self.context.target != "mysql":
             result = [self._gate_mysql_user_var(node) for node in result]
             result = [self._strip_mysql_charset_marks(node) for node in result]
+            result = [self._wrap_mysql_concat_null(node) for node in result]
             result = [
                 n2
                 for n in result
@@ -2051,18 +2055,31 @@ class Transformer:
         assert isinstance(having, ASTNode)
         return replace(node, having=having)
 
+    @staticmethod
+    def _is_provably_null(node: object) -> bool:
+        """A statically-known-NULL operand: a bare NULL literal or a CAST of one
+        (``CAST(NULL AS VARCHAR2(10))``). Oracle concatenation treats such an
+        operand as ``''``; the other engines propagate NULL — so it must be
+        dropped for the value to survive (extends the literal-NULL case)."""
+        if isinstance(node, Literal) and node.dtype == "null":
+            return True
+        if isinstance(node, CastExpression):
+            return Transformer._is_provably_null(node.expression)
+        return False
+
     def _drop_oracle_concat_nulls(self, value: object) -> object:
         """Oracle's ``||`` treats NULL as the empty string (``'a'||NULL||'b'`` =
         ``'ab'``); the other engines propagate NULL. When the source is Oracle,
-        drop a NULL *literal* operand from a concat so the target keeps Oracle's
-        value (RC-2 compensation, annotated). Runtime NULLs in columns/variables
-        are schema/scope-dependent and out of reach here."""
+        drop a provably-NULL operand (a bare NULL literal or a CAST of one) from
+        a concat so the target keeps Oracle's value (RC-2 compensation,
+        annotated). Runtime NULLs in columns/variables are schema/scope-dependent
+        and out of reach here."""
         if isinstance(value, BinaryOp) and value.operator == BinaryOperator.CONCAT:
             left = self._drop_oracle_concat_nulls(value.left)
             right = self._drop_oracle_concat_nulls(value.right)
-            left_null = isinstance(left, Literal) and left.dtype == "null"
-            right_null = isinstance(right, Literal) and right.dtype == "null"
-            if left_null != right_null:  # exactly one NULL literal — drop it
+            left_null = self._is_provably_null(left)
+            right_null = self._is_provably_null(right)
+            if left_null != right_null:  # exactly one NULL operand — drop it
                 self.context.warn(
                     "Oracle || treats NULL as '' (a NULL concat operand was "
                     "dropped to preserve the value)",
@@ -2073,6 +2090,40 @@ class Transformer:
                 return replace(value, left=left, right=right)  # type: ignore[arg-type]
             return value
         return self._map_children(value, self._drop_oracle_concat_nulls)
+
+    def _wrap_mysql_concat_null(self, value: object) -> object:
+        """MySQL CONCAT returns NULL if ANY argument is NULL; PG/T-SQL/Oracle
+        CONCAT *ignore* a NULL operand. When a runtime-nullable operand (a
+        column or expression, not a non-NULL literal) is present, guard the call
+        so NULL-propagation survives: ``CASE WHEN a IS NULL OR … THEN NULL ELSE
+        CONCAT(…) END``. A literal-NULL operand is already folded to NULL by the
+        emitter; an all-non-NULL-literal call needs no guard."""
+        if isinstance(value, FunctionCall) and value.name.upper() == "CONCAT":
+            new_args = tuple(self._wrap_mysql_concat_null(a) for a in value.args)
+            call = value if new_args == value.args else replace(value, args=new_args)
+            if any(self._is_provably_null(a) for a in call.args):
+                return call  # the emitter folds a provably-NULL operand to NULL
+            nullable = [
+                a
+                for a in call.args
+                if not (isinstance(a, Literal) and a.value is not None)
+            ]
+            if not nullable:
+                return call
+            guard: ASTNode = UnaryOp(
+                operator=UnaryOperator.IS_NULL, operand=nullable[0]
+            )
+            for arg in nullable[1:]:
+                guard = BinaryOp(
+                    operator=BinaryOperator.OR,
+                    left=guard,
+                    right=UnaryOp(operator=UnaryOperator.IS_NULL, operand=arg),
+                )
+            return CaseExpression(
+                whens=((guard, Literal(value=None, dtype="null")),),
+                else_expr=call,
+            )
+        return self._map_children(value, self._wrap_mysql_concat_null)
 
     def _map_children(self, value: object, fn: Callable[[object], object]) -> object:
         """Rebuild ``value`` with ``fn`` mapped over its child nodes
