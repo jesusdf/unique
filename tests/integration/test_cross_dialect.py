@@ -411,7 +411,7 @@ class TestCrossDialectDDL:
         body = executable_lines(result.sql)
         assert "CREATE TABLE" in body.upper(), result.sql
         assert "PRIMARY KEY" in body.upper(), result.sql
-        assert "UNIQUE-" in result.sql, result.sql
+        assert "UNIQUE-1209:" in result.sql, result.sql
         assert result.warnings, "dropped physical clause must be signalled"
 
     @pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
@@ -545,7 +545,7 @@ class TestCrossDialectDDL:
         result = transpiler.transpile(sql, "tsql", target)
         assert "total VARCHAR" not in result.sql.upper()
         assert "GENERATED ALWAYS AS" not in result.sql.upper()
-        assert "UNIQUE-" in result.sql
+        assert "UNIQUE-1147:" in result.sql
         assert "total" in result.sql
         assert ",\n)" not in result.sql  # CREATE TABLE stays valid
 
@@ -668,7 +668,7 @@ class TestComputedColumnPortability:
         for target in ("postgresql", "oracle"):
             out = transpiler.transpile(sql, "tsql", target).sql
             assert ",\n)" not in out  # valid CREATE TABLE, no dangling comma
-            assert "UNIQUE-" in out
+            assert "UNIQUE-1147:" in out
             assert "GENERATED ALWAYS AS" not in out.upper()
 
     def test_mysql_also_gets_comment(self, transpiler: Transpiler) -> None:
@@ -676,7 +676,7 @@ class TestComputedColumnPortability:
         # column too, so it also gets a documented comment.
         sql = "CREATE TABLE t (id INT, total AS (id * 2) PERSISTED)"
         out = transpiler.transpile(sql, "tsql", "mysql").sql
-        assert "UNIQUE-" in out
+        assert "UNIQUE-1147:" in out
         assert "GENERATED ALWAYS AS" not in out.upper()
 
     def test_terminator_not_swallowed_by_trailing_comment(
