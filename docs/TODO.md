@@ -67,6 +67,16 @@ engines we transpile (ORA-00942, SQLSTATE) and modern compilers (rustc E0308).*
 - **Locks in:** every `docs/rationale/` claim about a degrade becomes
   traceable to a registry entry; new degrades cannot ship without a rationale.
 
+### B33 — code the procedural-layer legacy carriers (P3; follow-up of B32 wave 3)
+
+*The completeness gate's whole residual floor (14 uncoded `lossy_conversion`
+signatures, 59 uncoded warnings corpus-wide) is ONE cause: the procedural
+emitters (tsql/mysql/oracle) still emit legacy `/* UNIQUE: */` carriers whose
+diagnostics already own codes (1140/1163/1177/1193/1196/1201/1202/…). Same
+shape as B32 waves 1–2 but for the procedural pipeline: attach the codes at
+those emitters, regenerate `tests/fixtures/procedures/*` via the sanctioned
+live-validated path, then drive the completeness floor 14 → 0 and lower it.*
+
 ### Q1 — Oracle-source / MySQL-source procedural degrade rate on the PG pivot (P2)
 
 *Measured by F1's acceptance corpus (2026-07-30): `oracle→postgresql` and

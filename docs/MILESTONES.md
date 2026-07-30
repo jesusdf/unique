@@ -10,7 +10,27 @@ Newest first.
 
 ---
 
-## Challenge campaign 2026-07-30 — CLOSED (cycle 3, PURPLE termination decision)
+## Post-campaign backlog executed — B29/B30/B31/B32×3/T8/F1/F2 (2026-07-30)
+
+The approved backlog worked in agentic team mode, closing the loop the
+campaign opened. **B29** ENUM declaration-order (with a live-verified brief
+correction: MySQL index-order applies only in sort context) and **B30**
+bounded date-type propagation closed the last two `[open]` cases — the
+challenge corpus reached **0 `[open]`** (791/169/0 of 960). **B32** landed
+whole: 232 append-only `UNIQUE-NNNN` diagnostic codes at every carrier,
+warning objects carrying `.code` end-to-end (carrier-backed warnings inherit
+their code via reconciliation backfill), 84 codes pinned by live-probed test
+assertions, the `[limit]` contract requiring a *registered* code, a
+completeness gate (uncoded warnings 240 → 59; floor 14, all one procedural
+residual → B33), and `--ignore UNIQUE-NNNN` in CLI + API (warning channel
+only — carriers stay in the SQL). **B31**: rationale side-table keyed on the
+codes (32 live-probed entries, coverage floor ratchet) feeding the generated
+`docs/reference/warnings.md`. **T8** had landed in cycle 2; **F1**
+`unique compare` shipped (pivot normalization, per-dimension fingerprints,
+weighted tree diff; clean acceptance separation — and measured the Q1
+oracle/mysql-source procedural degrade rate as a filed front). **F2**: the
+web UI Compare button (version-badge tokens, boundary wording beside the
+score). Remaining backlog: B33, Q1, Q2.
 
 Final narrow cycle: a 30-minute closed-list RED batch re-validated the four
 uncased observations left by cycle 2 — **all four reproduced** (UPDATE …
