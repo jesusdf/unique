@@ -25,7 +25,7 @@ procedure with the same name or signature.
 > action itself is lost and must be performed through the target's own
 > tooling.
 
-**See Also.** `reda-ts-exec-swallow-next`, `mysql-drop2` family (see below) ·
+**See Also.** [`reda-ts-exec-swallow-next`](../../tests/fixtures/challenge/challenge_sqlserver.sql), `mysql-drop2` family (see below) ·
 [`UNIQUE-1211`](../reference/warnings.md#unique-1211).
 
 ### Statement-after-`EXEC` survival fix
@@ -58,7 +58,7 @@ affected.
 > **Note** faithful for the `UPDATE` — no-silent-loss
 > restored. `[limit]` for the `sp_rename` call itself, as above.
 
-**See Also.** `reda-ts-exec-swallow-next` ·
+**See Also.** [`reda-ts-exec-swallow-next`](../../tests/fixtures/challenge/challenge_sqlserver.sql) ·
 [`UNIQUE-1211`](../reference/warnings.md#unique-1211).
 
 ## `SET IDENTITY_INSERT` coherent degrade
@@ -98,7 +98,7 @@ explicit value in the `INSERT` column list (PostgreSQL 15+ additionally has
 > invalid** SQL with no warning (PostgreSQL: `syntax error at or near "AS"`)
 > — a real defect this fix closes.
 
-**See Also.** `reda-ts-identity-insert` ·
+**See Also.** [`reda-ts-identity-insert`](../../tests/fixtures/challenge/challenge_sqlserver.sql) ·
 [`UNIQUE-1002`](../reference/warnings.md#unique-1002).
 
 ## SQL*Plus directives preserved as comments
@@ -178,7 +178,7 @@ know what `employees.id`'s type is.
 > not match the real column type's behaviour exactly). Faithful with
 > `--db-url`, and faithful on the Oracle-to-Oracle round trip either way.
 
-**See Also.** `docs/03-unsupported.md` §6 ("Oracle → T-SQL specifics") ·
+**See Also.** [§6](../03-unsupported.md) ("Oracle → T-SQL specifics") ·
 `src/unique/core/procedural/transformer/base.py` (`_transform_data_type`,
 the `%TYPE`/`%ROWTYPE` branch) · `tests/integration/test_procedural.py`
 (`TestUniqueCommentRestore::test_type_reference_documented_then_restored`) —
@@ -226,7 +226,7 @@ Unique can assume about arbitrary procedure bodies.
 
 > **Note** faithful — live-compiled valid on T-SQL and MySQL.
 
-**See Also.** `ora-cursor-attr` · `docs/03-unsupported.md` §3.23 (audit
+**See Also.** [`ora-cursor-attr`](../../tests/fixtures/challenge/challenge_oracle.sql) · [§3.23](../03-unsupported.md) (audit
 B7/N5+N6) — the same section also covers the related but distinct
 `SQL%ROWCOUNT`/`ROW_COUNT()` "matched vs. changed rows" divergence onto
 MySQL (§3.22).
@@ -284,8 +284,8 @@ unmodified inside the target engine.
 > valid). `[limit]`/warned for a runtime-built string or a complex `format()`
 > template.
 
-**See Also.** `pg-dyn-count`, `pg-format-func`, `ts-sp-executesql` ·
-`docs/03-unsupported.md` §6 (Dynamic SQL, audit N10/B11, 2026-07-25) ·
+**See Also.** [`pg-dyn-count`](../../tests/fixtures/challenge/challenge_postgresql.sql), [`pg-format-func`](../../tests/fixtures/challenge/challenge_postgresql.sql), [`ts-sp-executesql`](../../tests/fixtures/challenge/challenge_sqlserver.sql) ·
+[§6](../03-unsupported.md) (Dynamic SQL, audit N10/B11, 2026-07-25) ·
 [`UNIQUE-1161`](../reference/warnings.md#unique-1161) ·
 [`UNIQUE-1180`](../reference/warnings.md#unique-1180).
 
@@ -315,7 +315,7 @@ equivalent operation to translate to.
 
 > **Warning** `[limit]` — approved degrade.
 
-**See Also.** `ts-scroll-cursor` · `docs/03-unsupported.md` §2 (scroll
+**See Also.** [`ts-scroll-cursor`](../../tests/fixtures/challenge/challenge_sqlserver.sql) · [§2](../03-unsupported.md) (scroll
 cursor row).
 
 ## Topics left out for lack of source support

@@ -48,8 +48,8 @@ extra days it stuck past the source's day-of-month (corpus
 > behaviour only when built from Oracle's already-correct value (corpus
 > `ora-add-months`).
 
-**See Also.** Corpus `reda-ts-addmonths-lastday`, `ora-add-months` ·
-`src/unique/core/mappings.py::oracle_month_add_daypreserving` (docstring).
+**See Also.** Corpus [`reda-ts-addmonths-lastday`](../../tests/fixtures/challenge/challenge_sqlserver.sql), [`ora-add-months`](../../tests/fixtures/challenge/challenge_oracle.sql) ·
+[`oracle_month_add_daypreserving`](../../src/unique/core/mappings.py) (docstring).
 
 ---
 
@@ -111,8 +111,8 @@ Monday-based ISO week, so a bare unit copy silently returns the wrong date
 > truncation unit) is built from `WEEKDAY()` instead (Monday=0) and is likewise
 > faithful. No warning.
 
-**See Also.** Corpus `pg-date-trunc-week`, `pg-date-part`, `pg-week`,
-`pg-week-2016` · `tests/integration/test_challenge.py::TestExtractFieldTranslation`
+**See Also.** Corpus [`pg-date-trunc-week`](../../tests/fixtures/challenge/challenge_postgresql.sql), [`pg-date-part`](../../tests/fixtures/challenge/challenge_postgresql.sql), [`pg-week`](../../tests/fixtures/challenge/challenge_postgresql.sql),
+[`pg-week-2016`](../../tests/fixtures/challenge/challenge_postgresql.sql) · [`TestExtractFieldTranslation`](../../tests/integration/test_challenge.py)
 (pinned) · `emit_functions.py:2338-2419` (docstring, "Date truncation").
 
 ---
@@ -165,8 +165,8 @@ already handled; `-` was not).
 > second-count case is a **documented, warned** shape change (interval → scalar
 > seconds), not silent.
 
-**See Also.** Corpus `pg-date-minus-integer`, `reda-ts-date-plus-int` ·
-`docs/03-unsupported.md` §2 ("`timestamp - timestamp` → T-SQL/MySQL") ·
+**See Also.** Corpus [`pg-date-minus-integer`](../../tests/fixtures/challenge/challenge_postgresql.sql), [`reda-ts-date-plus-int`](../../tests/fixtures/challenge/challenge_sqlserver.sql) ·
+[§2](../03-unsupported.md) ("`timestamp - timestamp` → T-SQL/MySQL") ·
 `emit_functions.py:96-176` (docstring).
 
 ---
@@ -218,7 +218,7 @@ inherited the same adjustment.
 > not MySQL complete-period counting) deliberately keeps the unadjusted
 > boundary count.
 
-**See Also.** Corpus `my-timestampdiff-mon`, `my-timestampdiff-mon-pgora` ·
+**See Also.** Corpus [`my-timestampdiff-mon`](../../tests/fixtures/challenge/challenge_mysql.sql), [`my-timestampdiff-mon-pgora`](../../tests/fixtures/challenge/challenge_mysql.sql) ·
 `emit_functions.py::_complete_period_adjust` (docstring) ·
 `emit_functions.py::_emit_date_diff`.
 
@@ -257,7 +257,7 @@ produced a hard runtime error on every target with no warning
 > result matches MySQL's `TO_DAYS` for any post-Gregorian-reform date. No
 > warning.
 
-**See Also.** Corpus `my-to-days-year-zero` ·
+**See Also.** Corpus [`my-to-days-year-zero`](../../tests/fixtures/challenge/challenge_mysql.sql) ·
 `convert.py::_rebase_to_days` (docstring).
 
 ---
@@ -302,7 +302,7 @@ through invalid, with no warning).
 > associative and produce the same result date (`2021-03-04`) as PostgreSQL's
 > one-shot multi-field add. No warning.
 
-**See Also.** Corpus `pg-multifield-interval-arith` ·
+**See Also.** Corpus [`pg-multifield-interval-arith`](../../tests/fixtures/challenge/challenge_postgresql.sql) ·
 `emit_expr.py::_decompose_interval`, `emit_expr.py::_emit_interval_chain`.
 
 ---
@@ -369,8 +369,8 @@ Oracle `ORA-00907`) with no warning (`reda-ts-datepart-weekday`, class
 > that has changed `DATEFIRST` will see a different T-SQL result the transpiled
 > output cannot track, since Unique has no visibility into session state.
 
-**See Also.** Corpus `reda-ts-datediff-quarter`, `reda-ts-datepart-weekday`,
-`pg-extract-dow` ·
-`tests/integration/test_challenge.py::TestExtractFieldTranslation` (pinned) ·
+**See Also.** Corpus [`reda-ts-datediff-quarter`](../../tests/fixtures/challenge/challenge_sqlserver.sql), [`reda-ts-datepart-weekday`](../../tests/fixtures/challenge/challenge_sqlserver.sql),
+[`pg-extract-dow`](../../tests/fixtures/challenge/challenge_postgresql.sql) ·
+[`TestExtractFieldTranslation`](../../tests/integration/test_challenge.py) (pinned) ·
 `emit_functions.py::_emit_date_diff`, `emit_functions.py::_weekday_extract_expr`
 · [`UNIQUE-1083`](../reference/warnings.md#unique-1083).
