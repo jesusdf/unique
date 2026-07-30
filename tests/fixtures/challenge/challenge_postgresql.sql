@@ -857,3 +857,6 @@ SELECT (a > 1)::int AS r FROM (VALUES (2)) v(a)
 
 -- CASE[open][class=invalid]: pg-group-by-ordinal — positional GROUP BY (GROUP BY 1, meaning the first select item) is emitted verbatim to T-SQL and Oracle, neither of which supports positional GROUP BY: T-SQL rejects the integer (error 164 'GROUP BY expression must contain at least one column that is not an outer reference') and Oracle raises ORA-03162 (group_by_position_enabled is FALSE). No warning. PG/MySQL support it. PG=[(1,2),(2,1)].
 SELECT a, COUNT(*) AS c FROM (VALUES (1),(1),(2)) v(a) GROUP BY 1
+
+-- CASE[open][class=silent-drop]: pg-groupby-multi-cube-rollup — a GROUP BY with MULTIPLE grouping elements (CUBE(a, b), ROLLUP(c)) silently keeps only the LAST element (ROLLUP(c)) and DROPS CUBE(a, b), even though T-SQL and Oracle support the multi-element form natively (live: T-SQL GROUP BY CUBE(a,b),ROLLUP(c) returns the same 18 rows as PG). The output GROUP BY ROLLUP(c) then leaves a and b ungrouped, so SELECT a, b is invalid (T-SQL error 8120). No warning. Both a wrong result (missing grouping sets) and invalid output.
+SELECT a, b, c, SUM(x) AS s FROM (VALUES (1,1,1,10),(1,2,1,20),(2,1,2,30)) v(a,b,c,x) GROUP BY CUBE(a, b), ROLLUP(c)
