@@ -912,3 +912,103 @@ class TestCompareUI:
             assert (token in template) == (
                 token in static
             ), f"template/static drift on {token!r} — rerun web/build.py"
+
+
+class TestWarningCodeLinks:
+    """F3: every UNIQUE-NNNN diagnostic code shown in the UI (transpile
+    warnings, unsupported entries, Compare warning rows) links to its docs
+    entry, opening in a new tab. The doc anchor form (lowercase, bare
+    fragment — no ``user-content-`` prefix) was verified against GitHub's
+    actual rendered markdown for docs/reference/warnings.md: GitHub prefixes
+    every ``<a id="...">`` anchor's rendered DOM id with ``user-content-``,
+    but its own generated heading permalinks (``href="#the-bare-slug"``) link
+    to the SAME bare fragment, confirming GitHub's fragment-scroll resolves
+    the bare form — so the bare ``#unique-nnnn`` fragment is the one to ship.
+    """
+
+    @staticmethod
+    def _page() -> str:
+        from pathlib import Path
+
+        return (
+            Path(__file__).resolve().parents[3] / "src/unique/api/static/index.html"
+        ).read_text(encoding="utf-8")
+
+    def test_docs_base_and_link_helper_present(self) -> None:
+        page = self._page()
+        assert (
+            "https://github.com/jesusdf/unique/blob/main/docs/reference/warnings.md"
+            in page
+        )
+        assert "function codeLink(code)" in page
+        assert "function warningHtml(message, code)" in page
+
+    def test_link_opens_in_a_new_tab_at_the_lowercase_anchor(self) -> None:
+        page = self._page()
+        # The anchor is built from the lowercased code (docs/reference/warnings.md
+        # renders each entry as <a id="unique-nnnn">, lowercase).
+        assert "${code.toLowerCase()}" in page
+        assert 'target="_blank" rel="noopener" class="code-link"' in page
+
+    def test_coded_warning_links_uncoded_falls_back_to_regex(self) -> None:
+        # A structured `code` (transpile warnings, and similarity warnings
+        # since F3 added `code` to that endpoint too) always wins; only a
+        # message with no structured code (the `unsupported` list) is
+        # regex-scanned client-side for a bare UNIQUE-NNNN mention.
+        page = self._page()
+        assert "return code ? `${codeLink(code)} ${escaped}`" in page
+        assert "escaped.replace(CODE_RE, codeLink)" in page
+        assert "const CODE_RE = /UNIQUE-\\d{4}/g;" in page
+
+    def test_transpile_warnings_and_unsupported_both_go_through_warninghtml(
+        self,
+    ) -> None:
+        page = self._page()
+        assert 'w.feature || "warning", m: w.message, code: w.code' in page
+        assert 't: "unsupported", m: u, code: null' in page
+        assert "warningHtml(it.m, it.code)" in page
+
+    def test_compare_warnings_go_through_warninghtml(self) -> None:
+        page = self._page()
+        assert "warningHtml(w.message, w.code)" in page
+
+    def test_template_and_generated_page_agree(self) -> None:
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[3]
+        template = (root / "web/src/index.template.html").read_text(encoding="utf-8")
+        static = (root / "src/unique/api/static/index.html").read_text(encoding="utf-8")
+        for token in ("codeLink", "warningHtml", "WARNINGS_DOC_BASE", "code-link"):
+            assert (token in template) == (
+                token in static
+            ), f"template/static drift on {token!r} — rerun web/build.py"
+
+
+class TestSimilarityWarningsCarryCode:
+    """F3: the similarity endpoint's warnings[] now carries `code`, mirroring
+    TranspileWarning (B32), so the UI can link a coded warning the same way
+    on both the transpile and Compare panels."""
+
+    def test_similarity_warning_items_have_message_and_code_fields(
+        self, client: TestClient
+    ) -> None:
+        # @@ROWCOUNT in a top-level WHERE has no PostgreSQL-pivot equivalent
+        # (UNIQUE-1027) and raises a warning while normalizing side A; assert
+        # the response shape carries `code` alongside `message` (previously a
+        # bare string — see core.similarity.SimilarityWarning).
+        resp = client.post(
+            "/api/v1/similarity",
+            json={
+                "sql_a": "SELECT TOP 1 * FROM t WHERE @@ROWCOUNT > 0",
+                "sql_b": "SELECT TOP 1 * FROM t WHERE @@ROWCOUNT > 0",
+                "dialect_a": "tsql",
+                "dialect_b": "tsql",
+            },
+        )
+        assert resp.status_code == 200
+        warnings = resp.json()["warnings"]
+        assert warnings, "expected at least one normalization warning"
+        assert any(w["code"] == "UNIQUE-1027" for w in warnings)
+        for w in warnings:
+            assert set(w) == {"message", "code"}
+            assert isinstance(w["message"], str) and w["message"]

@@ -265,8 +265,9 @@ def _print_comparison(file_a: str, file_b: str, report: SimilarityReport) -> Non
         click.echo(
             f"\nTranspiler warnings during normalization: {len(report.warnings)}"
         )
-        for msg in report.warnings[:5]:
-            click.echo(f"  - {msg}", err=True)
+        for w in report.warnings[:5]:
+            prefix = f"[{w.code}] " if w.code else ""
+            click.echo(f"  - {prefix}{w.message}", err=True)
         if len(report.warnings) > 5:
             click.echo(f"  … and {len(report.warnings) - 5} more", err=True)
 
