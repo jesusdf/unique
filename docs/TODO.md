@@ -70,6 +70,40 @@ projections); only the T-SQL leg remains.*
   T-SQL `DATEDIFF` present / raw-minus absent assertion + live value; neighbors:
   the same shape through a CTE and through two nesting levels.
 
+### T8 — generated reference docs + freshness gate (P2, tooling; approved 2026-07-30)
+
+*Docs "phase 1" (maintainer-approved): generate what the code already knows.*
+
+- **Deliverable:** `scripts/generate_reference_docs.py` writing
+  `docs/reference/`: (a) per-engine-pair function/type/operator mapping
+  matrices from `core/mappings.py`; (b) the degradation catalog from the
+  `[limit]` case headers (id, class, description, 03-unsupported citation)
+  plus the carrier/warning texts; (c) per-direction coverage tables reusing
+  `scripts/challenge_stats.py`.
+- **Freshness gate:** a CI step regenerates and diffs (same pattern as the
+  ratchets/web build) so `docs/reference/` can never drift from the code.
+- **Fits with:** the hand-curated `docs/rationale/` pages (2026-07-30) link to
+  these matrices instead of duplicating tables.
+
+### B31 — structured rationale metadata on degrade sites (P3, feature brief; approved 2026-07-30)
+
+*Docs "phase 2" (maintainer-approved): make the narrative layer generable.*
+
+- **Symptom:** the *why* of each degrade/creative conversion (engine-level
+  reason, example, exact divergence) lives in free-form docstrings and case
+  headers; `docs/rationale/` must therefore be hand-written and can drift.
+- **Mechanism to build:** a declarative rationale registry — each
+  carrier/warning emission site registers `{construct, reason, example_case,
+  divergence}` (compile-time data, no runtime cost), the same way the degrade
+  registries already work. `generate_reference_docs.py` (T8) then emits the
+  rationale sections mechanically, and a coverage check reports degrade sites
+  with no registered rationale (ratcheting down, never up).
+- **Design constraint:** the registry must not fatten the emitters — a
+  side-table keyed by warning/carrier id, not per-site inline blobs; respects
+  all four architecture ratchets.
+- **Locks in:** every `docs/rationale/` claim about a degrade becomes
+  traceable to a registry entry; new degrades cannot ship without a rationale.
+
 ### F1 — `unique compare`: structural similarity score between two scripts (P2)
 
 Full brief below, in the `audit/2026-07-24/09-fix-briefs.md` format — the
