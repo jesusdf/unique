@@ -76,3 +76,5 @@ Batch totals: func 25, invalid 20, silent-drop 12, lying-warning 10, composition
 
 | id | class | src→targets | wrong output | expected / live evidence | BLUE note |
 |----|-------|-------------|--------------|--------------------------|-----------|
+| red2-ts-datediff-weekday-unit | invalid (2) | tsql→mysql,oracle | DATEDIFF(2020-03-01,'2020-01-01',WEEKDAY) 3-arg passthrough, dates unquoted | live tsql=valid; MySQL 1582 param count; Oracle ORA-00904 WEEKDAY. No warning (datetime-literal variant IS gated) | Reject/degrade unmapped DATEDIFF units; quote date args |
+| red2-pg-extract-isoyear-unit | invalid (2) | postgresql→tsql,mysql,oracle | EXTRACT(ISOYEAR..) passed through verbatim | live PG valid; tsql 155 not-a-datepart; MySQL 1064; Oracle ORA-00907. No warning | Compute ISOYEAR per target or degrade-with-warning; same for ISODOW/JULIAN/MILLENNIUM/DECADE/CENTURY |
