@@ -14,6 +14,10 @@ import logging
 import re
 from dataclasses import dataclass, field, replace
 
+import sqlglot
+from sqlglot import expressions as exp
+from sqlglot.errors import SqlglotError as _SqlglotError
+
 from unique.core.ast_nodes import (
     CommentStatement,
     CreateFunctionStatement,
@@ -60,7 +64,12 @@ from unique.core.converter._unread_args import drain_sink as _drain_unread_arg_s
 from unique.core.converter._unread_args import reset_sink as _reset_unread_arg_sink
 from unique.core.dialect import Dialect
 from unique.core.errors import UnsupportedFeatureError
-from unique.core.output_gate import annotate_divergence, degrade_to_carrier, gate_reason
+from unique.core.output_gate import (
+    _SQLGLOT_DIALECT,
+    annotate_divergence,
+    degrade_to_carrier,
+    gate_reason,
+)
 from unique.core.procedural.emitter import ProceduralEmitter
 from unique.core.procedural.parser import ProceduralParser
 from unique.core.procedural.transformer import ProceduralTransformer
@@ -103,6 +112,42 @@ from ._text_rules import (  # noqa: F401
 )
 
 logger = logging.getLogger(__name__)
+
+#: The leading keyword of a bare transaction opener (``begin`` / ``begin
+#: transaction`` / ``start transaction``). Only consulted for a batch that
+#: fails to parse — the very case that makes an opener degrade to a carrier.
+_TX_OPEN_LEADING = ("begin", "start")
+
+
+def _batch_transaction_role(sql: str, dialect: str) -> str | None:
+    """Classify a batch's top-level transaction effect: ``"open"``, ``"close"``
+    or ``None``.
+
+    Used only for degrade-coherence: when an opener batch dies in a
+    parse-failure carrier, its sibling closer must degrade too rather than ship
+    an orphan COMMIT (T-SQL error 3902). Classification is on the parsed AST via
+    sqlglot; on a parse failure — the situation that makes the opener degrade —
+    only the leading keyword is reliable.
+    """
+    read = _SQLGLOT_DIALECT.get(dialect)
+    if read is None:
+        return None
+    _, code = split_leading_trivia(sql)
+    code = code.strip()
+    if not code:
+        return None
+    try:
+        parsed = [e for e in sqlglot.parse(code, read=read) if e]
+    except _SqlglotError:
+        head = code.split(None, 1)[0].lower().rstrip(";")
+        return "open" if head in _TX_OPEN_LEADING else None
+    if len(parsed) != 1:
+        return None
+    if isinstance(parsed[0], exp.Transaction):
+        return "open"
+    if isinstance(parsed[0], (exp.Commit, exp.Rollback)):
+        return "close"
+    return None
 
 
 @dataclass(frozen=True)
@@ -476,6 +521,11 @@ class Transpiler:
             # tokens are string literals, so subsequent batches are preprocessed
             # to convert "..." -> '...' before parsing.
             quoted_identifier_off = False
+            # Transaction-coherence stack: one entry per open transaction, True
+            # if its opener emitted executable SQL, False if the opener degraded
+            # to a carrier. A closer whose opener is False must degrade too,
+            # never ship a bare COMMIT/ROLLBACK (T-SQL error 3902).
+            tx_stack: list[bool] = []
 
             for batch in batches:
                 # Skip empty batches, but keep explicit COMMENT batches: they
@@ -643,6 +693,40 @@ class Transpiler:
                                 ],
                                 unsupported=result.unsupported,
                             )
+
+                # Transaction-opener/closer coherence: track each open
+                # transaction; if its opener degraded to a carrier, degrade the
+                # matching closer too rather than orphan a COMMIT/ROLLBACK
+                # (T-SQL error 3902). Procedural/comment batches manage their
+                # own BEGIN…END and are handled inside their engine.
+                if batch.batch_type not in (BatchType.PROCEDURAL, BatchType.COMMENT):
+                    tx_role = _batch_transaction_role(batch.sql, source)
+                    if tx_role == "open":
+                        tx_stack.append(not _is_comment_only(result.sql))
+                    elif tx_role == "close" and tx_stack and not tx_stack.pop():
+                        reason = (
+                            "transaction closer preserved as a comment: its opener "
+                            "degraded to a parse-failure carrier, so a bare "
+                            "COMMIT/ROLLBACK would orphan the transaction "
+                            "(T-SQL error 3902)"
+                        )
+                        body = "\n".join(
+                            f"-- {ln}" for ln in batch.sql.strip().splitlines()
+                        )
+                        result = TranspileResult(
+                            sql=f"-- UNIQUE-1233: {reason}\n{body}",
+                            warnings=[
+                                *result.warnings,
+                                _warn(
+                                    reason,
+                                    "lossy_conversion",
+                                    source,
+                                    target,
+                                    code="UNIQUE-1233",
+                                ),
+                            ],
+                            unsupported=[*result.unsupported, reason],
+                        )
 
                 terminated = self._ensure_terminated(
                     result.sql, target, batch.batch_type

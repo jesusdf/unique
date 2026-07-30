@@ -1139,4 +1139,10 @@ DIAGNOSTICS: dict[str, Diagnostic] = {
         "procedural transpilation failed (internal error); the routine is preserved; "
         "the error is carried at runtime",
     ),
+    "UNIQUE-1233": _D(
+        "statement",
+        "transaction closer preserved as a comment: its opener degraded to a "
+        "parse-failure carrier, so shipping the COMMIT/ROLLBACK would orphan it "
+        "(no open transaction — T-SQL error 3902)",
+    ),
 }

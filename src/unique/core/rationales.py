@@ -460,4 +460,24 @@ RATIONALES: dict[str, Rationale] = {
             "set is documented, not produced."
         ),
     ),
+    "UNIQUE-1233": _R(
+        construct="A transaction closer (COMMIT/END/ROLLBACK) whose opener failed",
+        reason=(
+            "When a transaction opener (BEGIN) glues to the next statement and "
+            "fails to parse, that whole batch degrades to a parse-failure "
+            "carrier — no BEGIN reaches the output. Emitting the sibling closer "
+            "as an executable COMMIT/ROLLBACK would then run against no open "
+            "transaction (T-SQL error 3902), so the closer must degrade too."
+        ),
+        example_case=(
+            "tests/unit/core/test_transpiler.py::"
+            "TestTransactionOpenerDegradeCoherence::"
+            "test_orphan_closer_after_failed_opener_degrades"
+        ),
+        divergence=(
+            "Coherent degrade — the closer is preserved as a comment so the "
+            "output has no orphan COMMIT; both halves of the broken "
+            "transaction unit are carried, not silently dropped."
+        ),
+    ),
 }

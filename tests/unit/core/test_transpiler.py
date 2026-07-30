@@ -873,3 +873,41 @@ class TestOracleDateLiterals:
         out = self.t.transpile(sql, "postgresql", "oracle").sql
         assert "DATE '2024-01-15'" in out
         assert "CAST('2024-01-15' AS DATE)" not in out
+
+
+class TestTransactionOpenerDegradeCoherence:
+    """When a transaction opener dies into a parse-failure carrier, its sibling
+    closer must degrade too — never ship an orphan COMMIT (T-SQL error 3902)."""
+
+    def setup_method(self) -> None:
+        self.t = Transpiler()
+
+    def test_orphan_closer_after_failed_opener_degrades(self) -> None:
+        # ``begin`` with no terminator glues to ``SELECT 1`` -> the opener batch
+        # fails to parse and degrades to a carrier. The trailing ``end`` (PG
+        # COMMIT synonym) must NOT ship a bare COMMIT TRANSACTION.
+        result = self.t.transpile("begin \nSELECT 1;\nend", "postgresql", "tsql")
+        no_comment = _strip_sql_comments(result.sql)
+        assert "COMMIT TRANSACTION" not in no_comment.upper(), result.sql
+        # The opener's failure carrier is present, and so is the closer's.
+        assert "UNIQUE-1003" in result.sql  # failed opener
+        assert "UNIQUE-1233" in result.sql  # coherently-degraded closer
+        # Both carriers are reported (no silent loss).
+        assert result.warnings
+        assert any(w.code == "UNIQUE-1233" for w in result.warnings), result.warnings
+
+    def test_healthy_transaction_still_emits_begin_select_commit(self) -> None:
+        # A well-formed transaction (opener parses) is untouched by the fix:
+        # BEGIN TRANSACTION / SELECT / COMMIT, zero warnings.
+        result = self.t.transpile(
+            "begin transaction;\nSELECT 1;\ncommit;", "postgresql", "tsql"
+        )
+        assert "BEGIN TRANSACTION" in result.sql
+        assert "SELECT 1" in result.sql
+        assert "COMMIT TRANSACTION" in result.sql
+        assert result.warnings == []
+
+
+def _strip_sql_comments(sql: str) -> str:
+    no_block = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
+    return re.sub(r"--[^\n]*", "", no_block)
