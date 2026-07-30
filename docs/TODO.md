@@ -77,17 +77,22 @@ shape as B32 waves 1–2 but for the procedural pipeline: attach the codes at
 those emitters, regenerate `tests/fixtures/procedures/*` via the sanctioned
 live-validated path, then drive the completeness floor 14 → 0 and lower it.*
 
-### Q1 — Oracle-source / MySQL-source procedural degrade rate on the PG pivot (P2)
+### Q1 — oracle/mysql-source procedural degrades — TRIAGED, briefs ready (P2)
 
-*Measured by F1's acceptance corpus (2026-07-30): `oracle→postgresql` and
-`mysql→postgresql` degrade **~19–21 of ~32** `tests/fixtures/procedures/`
-routines to carriers, while `sqlserver↔postgresql` keeps ~31–32. This is the
-transpiler-quality reason those cross-dialect same-function pairs score
-17–34% instead of ~99%. Front: triage the degraded routines by carrier code
-(the B32 catalog makes this a `grep -c` per `UNIQUE-NNNN`), rank mechanisms
-by frequency, and work them as briefs — same method as the campaign fronts.
-Also aligns with the standing "Oracle-source Tier-1 promotion" goal in
-`docs/STATUS.md`.*
+*Triage report: [`audit/2026-07-30-q1-triage.md`](../audit/2026-07-30-q1-triage.md)
+(fresh measurement: actionable gap = 28/32 oracle→pg, 21/31 mysql→pg; two of
+the top mechanisms are transpiler BUGS, not degrades). Brief order by
+routines-unblocked and severity:*
+
+- **B34** — UNIQUE-1171 false positive: `_find_user_var` scans `@name` in raw
+  text without scrubbing comments (transformer.py:1897) → ~11 mysql routines.
+- **B35** — UNIQUE-1219 SET-var misclassification CORRUPTS output (closes the
+  `$$` body early, leaks statements as top-level SQL) — severity-first.
+- **B36** — the four UNIQUE-1151 mapping gaps (FROM DUAL residue,
+  SYS_REFCURSOR, ROW_COUNT(), NUMTODSINTERVAL) → ~22 routines.
+- **B37** — SQL%ROWCOUNT in expression position → GET DIAGNOSTICS hoist (8).
+- **B38** — UNIQUE-1170 temp-table parse giveup: isolate before briefing.
+- **B39** — 1230/1231 placeholder-code fidelity (quality, not coverage).
 
 ### Q2 — small emitter/degrade coherence bugs (P3, observed 2026-07-30)
 
