@@ -912,3 +912,6 @@ CREATE TABLE redb_d1 (id INT, flag INT); CREATE TABLE redb_d2 (id INT, flag INT)
 
 -- CASE[fixed][class=invalid]: my-to-days-year-zero — TO_DAYS(d) is rewritten as (d - DATE '0000-01-01') + 1 on all targets, but year 0000 is invalid on every target engine, so the output ERRORS: PG DatetimeFieldOverflow ('0000-01-01' out of range), T-SQL 'Conversion failed' (241), Oracle ORA-01841 (year must be -4713..9999, not 0). No warning. MySQL TO_DAYS('2020-01-01')=737790.
 SELECT TO_DAYS('2020-01-01') AS d
+
+-- CASE[open][class=invalid]: red2-my-bitstring-numeric-pg — fails on postgresql. A MySQL bit-string literal b'101' (equivalently 0b101) used in a numeric context evaluates to the integer 5 on MySQL, but is emitted verbatim as b'101' to PostgreSQL where it is a BIT string type: SELECT b'101' + 0 -> live PG "operator does not exist: bit + integer", and b'101' = 5 -> bit = integer error. No warning. (T-SQL and Oracle legs are correctly gated + warned; only PG ships the bare bit literal. Hex literals x'4D'/0x4D ARE folded to 77 — bit-strings are the gap.) Source valid on MySQL (=5). BLUE: fold a bit-string literal used numerically to its integer value (like the hex path), or cast on PG.
+SELECT b'101' + 0 AS r
