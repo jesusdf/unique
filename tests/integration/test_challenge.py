@@ -5558,3 +5558,48 @@ class TestMysqlCastUnsignedLenient:
             )
             assert "CAST(12 AS NUMERIC)" in out, out
             assert "'12x'" not in _exec_lines(out), out
+
+
+class TestDateAddDiffUnits:
+    """RED round-2 date-unit fixes (DATEADD/DATEDIFF unit space).
+
+    * red2-ts-datediff-weekday-unit: T-SQL DATEDIFF(WEEKDAY,..) counts day
+      boundaries exactly like DAY (it is not day-of-week) — mapped to DAY, was a
+      3-arg passthrough that shipped invalid. Live-verified value 60 on all four.
+    * red2-my-dateadd-compound-interval: MySQL INTERVAL '1:30' HOUR_MINUTE has no
+      single-count form; expanded into chained per-unit adds. Live-verified value
+      2021-06-15 09:30:00 on all four.
+    An unmapped unit now degrades to a warned NULL carrier (non-T-SQL), never an
+    invalid silent passthrough.
+    """
+
+    def test_datediff_weekday_is_day(self) -> None:
+        case = _case("challenge_sqlserver.sql", "red2-ts-datediff-weekday-unit")
+        assert "DATEDIFF('2020-03-01', '2020-01-01')" in _tx(case, "tsql", "mysql")
+        assert "DATEDIFF(DAY, '2020-01-01', '2020-03-01')" in _tx(case, "tsql", "tsql")
+        for target in ("mysql", "oracle", "postgresql"):
+            body = _exec_lines(_tx(case, "tsql", target))
+            assert "WEEKDAY" not in body.upper(), body
+
+    def test_compound_interval_expanded(self) -> None:
+        case = _case("challenge_mysql.sql", "red2-my-dateadd-compound-interval")
+        assert "INTERVAL '1 HOUR' + INTERVAL '30 MINUTE'" in _tx(
+            case, "mysql", "postgresql"
+        )
+        assert "DATEADD(MINUTE, 30, DATEADD(HOUR, 1," in _tx(case, "mysql", "tsql")
+        assert "NUMTODSINTERVAL(1, 'HOUR') + NUMTODSINTERVAL(30, 'MINUTE')" in _tx(
+            case, "mysql", "oracle"
+        )
+        for target in ("postgresql", "tsql", "oracle"):
+            body = _exec_lines(_tx(case, "mysql", target))
+            assert "HOUR_MINUTE" not in body.upper(), body
+
+    def test_unmapped_diff_unit_degrades_not_invalid(self) -> None:
+        # A unit with no cross-engine form -> warned NULL carrier off T-SQL, valid
+        # native DATEDIFF on T-SQL (a real datepart) — never invalid + silent.
+        src = "SELECT DATEDIFF(NANOSECOND, '2020-01-01', '2020-03-01') AS d"
+        for target in ("mysql", "oracle", "postgresql"):
+            r = Transpiler().transpile(src, source="tsql", target=target)
+            assert r.warnings and "UNIQUE:" in r.sql, r.sql
+            assert "NANOSECOND" in r.sql, r.sql  # unit named for review
+        assert "DATEDIFF(NANOSECOND" in _tx(src, "tsql", "tsql")

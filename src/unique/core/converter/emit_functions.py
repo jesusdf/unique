@@ -72,6 +72,73 @@ __all__ = [
 ]
 
 
+#: MySQL compound INTERVAL units → the component fields (high→low order) their
+#: multi-field string value fills, e.g. ``INTERVAL '1:30' HOUR_MINUTE``.
+_COMPOUND_INTERVAL_FIELDS: dict[str, tuple[str, ...]] = {
+    "YEAR_MONTH": ("YEAR", "MONTH"),
+    "DAY_HOUR": ("DAY", "HOUR"),
+    "DAY_MINUTE": ("DAY", "HOUR", "MINUTE"),
+    "DAY_SECOND": ("DAY", "HOUR", "MINUTE", "SECOND"),
+    "HOUR_MINUTE": ("HOUR", "MINUTE"),
+    "HOUR_SECOND": ("HOUR", "MINUTE", "SECOND"),
+    "MINUTE_SECOND": ("MINUTE", "SECOND"),
+}
+
+
+def _raw_unit_text(node: ASTNode) -> str | None:
+    """The raw unit token of a date-add/diff unit arg (uppercased), or None."""
+    if isinstance(node, RawSQL):
+        return node.sql.strip().upper()
+    if isinstance(node, Literal) and isinstance(node.value, str):
+        return node.value.strip().upper()
+    if isinstance(node, ColumnRef) and not node.table:
+        return node.name.strip().upper()
+    return None
+
+
+def _emit_compound_interval_add(node: FunctionCall, dialect: str) -> str | None:
+    """Expand a MySQL compound-INTERVAL DATE_ADD into a chain of per-unit adds.
+
+    ``DATE_ADD(ts, INTERVAL '1:30' HOUR_MINUTE)`` adds 1 hour and 30 minutes; no
+    other engine has multi-field intervals, so rewrite it as nested single-unit
+    DATE_ADDs the per-target emitter already spells. Returns None when *node* is
+    not a compound-interval add.
+    """
+    raw = _raw_unit_text(node.args[2])
+    fields = _COMPOUND_INTERVAL_FIELDS.get(raw) if raw else None
+    amount = node.args[1]
+    if fields is None or not (
+        isinstance(amount, Literal) and isinstance(amount.value, str)
+    ):
+        return None
+    nums = re.findall(r"-?\d+", amount.value)
+    if len(nums) != len(fields):
+        return None
+    base = node.args[0]
+    for field, num in zip(fields, nums, strict=True):
+        base = FunctionCall(
+            name=node.name,
+            args=(
+                base,
+                Literal(value=int(num), dtype="integer"),
+                RawSQL(sql=field, reason="compound interval field"),
+            ),
+        )
+    return _emit_expression(base, dialect)
+
+
+def _degrade_date_unit(fn: str, unit_sql: str, dialect: str) -> str:
+    """A warned NULL carrier for a date unit with no faithful target form.
+
+    Naming the unit keeps the degrade reviewable; the carrier auto-warns via the
+    no-silent-loss scan, so an unmapped unit never ships as invalid SQL.
+    """
+    return (
+        f"NULL /* UNIQUE: {fn} unit '{unit_sql}' has no {dialect} equivalent — "
+        "the value was not computed (docs/03-unsupported.md) */"
+    )
+
+
 def _emit_date_add(node: FunctionCall, dialect: str) -> str | None:
     """Emit DATE_ADD/DATE_SUB/DATEADD with the target's own idiom.
 
@@ -81,6 +148,9 @@ def _emit_date_add(node: FunctionCall, dialect: str) -> str | None:
     """
     if len(node.args) != 3:
         return None
+    compound = _emit_compound_interval_add(node, dialect)
+    if compound is not None:
+        return compound
     unit = _date_unit_name(node.args[2])
     if unit is None:
         return None
@@ -1840,22 +1910,28 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if emitted is not None:
             return emitted
         if len(node.args) == 3:
-            # Unknown part: keep the SOURCE-visible T-SQL spelling for
-            # manual review (the canonical 3-arg DATE_ADD form is invalid
-            # on every engine — audit S1-4).
+            # Unknown unit: the 3-arg DATEADD spelling is valid only on T-SQL
+            # (for a real datepart) — keep it there for round-trips; degrade
+            # every other target with a warning instead of shipping invalid SQL.
             unit_sql = _emit_expression(node.args[2], dialect).strip("'\"")
-            n_sql = _emit_expression(node.args[1], dialect)
-            ts_sql = _emit_expression(node.args[0], dialect)
-            return f"DATEADD({unit_sql}, {n_sql}, {ts_sql})"
+            if dialect in ("tsql",):
+                n_sql = _emit_expression(node.args[1], dialect)
+                ts_sql = _emit_expression(node.args[0], dialect)
+                return f"DATEADD({unit_sql}, {n_sql}, {ts_sql})"
+            return _degrade_date_unit("DATEADD", unit_sql, dialect)
     if fn_name in ("DATEDIFF", "TIMESTAMPDIFF"):
         emitted = _emit_date_diff(node, dialect)
         if emitted is not None:
             return emitted
         if len(node.args) == 3:
-            unit_sql = _emit_expression(node.args[0], dialect).strip("'\"")
-            a_sql = _emit_expression(node.args[1], dialect)
-            b_sql = _emit_expression(node.args[2], dialect)
-            return f"DATEDIFF({unit_sql}, {a_sql}, {b_sql})"
+            # Canonical IR order is (end, start, unit); T-SQL spells
+            # DATEDIFF(unit, start, end).
+            unit_sql = _emit_expression(node.args[2], dialect).strip("'\"")
+            if dialect in ("tsql",):
+                start_sql = _emit_expression(node.args[1], dialect)
+                end_sql = _emit_expression(node.args[0], dialect)
+                return f"DATEDIFF({unit_sql}, {start_sql}, {end_sql})"
+            return _degrade_date_unit("DATEDIFF", unit_sql, dialect)
 
     # String aggregation: IR canonical form is GROUP_CONCAT(expr[, sep]).
     # Each engine spells it differently, and MySQL's comma form
