@@ -472,6 +472,27 @@ CASES.update(
                 "degrade": True,
             },
         },
+        # consistency: SET IDENTITY_INSERT ON/OFF bracket degrades coherently —
+        # both directives become documented carriers (never the mangled
+        # 'SET IDENTITY_INSERT = t AS OFF'), and the explicit-value INSERT
+        # transpiles (the targets accept explicit identity values).
+        "reda-ts-identity-insert": {
+            "postgresql": {
+                "present": ["INSERT INTO t (id, v)", "VALUES (5, 10)"],
+                "absent": ["IDENTITY_INSERT", "AS OFF"],
+                "degrade": True,
+            },
+            "oracle": {
+                "present": ["INSERT INTO t (id, v)", "VALUES (5, 10)"],
+                "absent": ["IDENTITY_INSERT", "AS OFF"],
+                "degrade": True,
+            },
+            "mysql": {
+                "present": ["INSERT INTO t (id, v)", "VALUES (5, 10)"],
+                "absent": ["IDENTITY_INSERT", "AS OFF"],
+                "degrade": True,
+            },
+        },
         "reda-ts-pivot": {
             "oracle": {
                 "present": ["PIVOT (SUM(v) FOR dept IN ('A' AS A, 'B' AS B))"],

@@ -605,6 +605,34 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
     # search_path, …): sqlglot transpiles it directly. Client directives
     # (SQL*Plus SET, T-SQL session options) never reach here — the batch
     # classifier routes them to the SET_OPTION path.
+    # T-SQL ``SET IDENTITY_INSERT <table> ON|OFF`` is a session directive that
+    # permits an explicit value in an identity column. It has no cross-engine
+    # equivalent (the targets accept an explicit value into a SERIAL / BY
+    # DEFAULT identity / AUTO_INCREMENT column directly), and sqlglot parses the
+    # two forms incoherently — ON as an opaque Command ("Unhandled"), OFF as an
+    # invalid ``SET IDENTITY_INSERT = t AS OFF``. Drop the whole bracket with a
+    # documented carrier (auto-warned) rather than emit the mangled/Unhandled
+    # statement.
+    if (
+        source_dialect == "tsql"
+        and isinstance(expr, (exp.Command, exp.Set))
+        and re.search(r"(?i)\bIDENTITY_INSERT\b", expr.sql(dialect="tsql"))
+    ):
+        _ii = re.search(
+            r"(?i)IDENTITY_INSERT\s+(?:=\s*)?(?P<tbl>[\[\]\w.\"]+).*?\b(?P<st>ON|OFF)\b",
+            expr.sql(dialect="tsql"),
+        )
+        _ii_tbl = _ii.group("tbl") if _ii else ""
+        _ii_st = _ii.group("st").upper() if _ii else ""
+        return CommentStatement(
+            text=(
+                f"-- UNIQUE: SET IDENTITY_INSERT {_ii_tbl} {_ii_st} is a T-SQL "
+                "session directive with no cross-engine equivalent; dropped (the "
+                "target accepts an explicit value into an identity/serial/"
+                "auto_increment column) (docs/03-unsupported.md)"
+            ),
+            style="line",
+        )
     if isinstance(expr, exp.Set):
         return PassthroughSQL(
             sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
