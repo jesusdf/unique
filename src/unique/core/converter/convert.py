@@ -1068,6 +1068,10 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     # exp.And / exp.Or (and other connectors) are *also* exp.Func in sqlglot's
     # class hierarchy, so the Binary check must come before the Func check or a
     # top-level "a AND b" would be emitted as the function call "AND(a, b)".
+    if isinstance(expr, exp.Add):
+        rebased = _rebase_to_days(expr)
+        if rebased is not None:
+            return rebased
     if isinstance(expr, exp.Binary):
         return _convert_binary(expr)
     # IN with a subquery or a value list. Modeling it (rather than the RawSQL
@@ -3066,6 +3070,36 @@ def _convert_in(expr: exp.In) -> ASTNode | None:
             ),
         )
     return None
+
+
+def _rebase_to_days(expr: exp.Add) -> ASTNode | None:
+    """Rebase sqlglot's ``TO_DAYS(x)`` expansion off the invalid year-0000 epoch.
+
+    MySQL ``TO_DAYS(x)`` lowers to ``DATEDIFF(x, DATE '0000-01-01', DAY) + 1``,
+    but year 0000 is rejected by every other engine (and pre-1582 dates put
+    Oracle on the Julian calendar, off by 2 days). Re-express it against a
+    post-Gregorian-reform epoch that all engines compute identically:
+    ``DATEDIFF(x, DATE '1970-01-01', DAY) + 719528`` (``TO_DAYS('1970-01-01')``
+    = 719528). Returns None when ``expr`` is not the TO_DAYS shape."""
+    if not isinstance(expr.this, exp.DateDiff):
+        return None
+    base = expr.this.expression
+    base_lit = base.this if isinstance(base, exp.TsOrDsToDate) else base
+    off = expr.expression
+    if not (
+        isinstance(base_lit, exp.Literal)
+        and str(base_lit.this) == "0000-01-01"
+        and isinstance(off, exp.Literal)
+        and str(off.this) == "1"
+    ):
+        return None
+    rebased = expr.copy()
+    new_base = rebased.this.expression
+    new_base_lit = new_base.this if isinstance(new_base, exp.TsOrDsToDate) else new_base
+    new_base_lit.set("this", "1970-01-01")
+    rebased.expression.set("this", "719528")
+    # The copy no longer matches the 0000 shape, so this does not recurse.
+    return convert_expression(rebased)
 
 
 def _convert_binary(expr: exp.Binary) -> ASTNode:
