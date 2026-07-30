@@ -2197,6 +2197,26 @@ def _convert_delete(expr: exp.Delete) -> ASTNode:
     if where_expr:
         where = convert_expression(where_expr.this)
 
+    # MySQL ``DELETE … [ORDER BY …] LIMIT n``: the cap deletes only n rows (the
+    # first n by ORDER BY). Both args were unread — the ORDER BY + LIMIT fell on
+    # the floor and the DELETE hit EVERY matching row (data loss). Read them
+    # (guardrail 7) and carry the cap; the ORDER BY is only observable with a cap.
+    order_items: tuple[OrderByItem, ...] = ()
+    order_arg = expr.args.get("order")
+    if isinstance(order_arg, exp.Order):
+        order_items = tuple(
+            (
+                _convert_ordered(o)
+                if isinstance(o, exp.Ordered)
+                else OrderByItem(expression=convert_expression(o))
+            )
+            for o in order_arg.expressions
+        )
+    tail_limit = top_limit
+    limit_arg = expr.args.get("limit")
+    if isinstance(limit_arg, exp.Limit) and limit_arg.expression is not None:
+        tail_limit = LimitClause(limit=convert_expression(limit_arg.expression))
+
     # Multi-table DELETE with a JOIN (T-SQL/MySQL ``DELETE t FROM t JOIN s ON …``).
     joins = target.args.get("joins") if isinstance(target, exp.Expression) else None
     if joins:
@@ -2229,7 +2249,11 @@ def _convert_delete(expr: exp.Delete) -> ASTNode:
                 using.append(_convert_table_ref(jt))
 
     return DeleteStatement(
-        table=table, where=where, using=tuple(using), limit=top_limit
+        table=table,
+        where=where,
+        using=tuple(using),
+        limit=tail_limit,
+        order_by=order_items,
     )
 
 

@@ -5649,3 +5649,40 @@ class TestWindowFrameExclude:
                 "EXCLUDE" in w.message and target in w.message for w in r.warnings
             ), r.warnings
             assert_statements_parse(body, target, context="exclude")
+
+
+class TestDeleteOrderByLimitCap:
+    """red2-my-delete-orderby-limit-drop (PRIORITY 1, data loss): MySQL
+    ``DELETE … ORDER BY id LIMIT 5`` deletes only the first 5 by id, but the
+    ORDER BY + LIMIT were dropped and the DELETE hit ALL matching rows. Each
+    target renders the ordered cap via a keyed subquery."""
+
+    def test_ordered_cap_rendered_per_target(self) -> None:
+        src = _case("challenge_mysql.sql", "red2-my-delete-orderby-limit-drop")
+        expect = {
+            "mysql": "ORDER BY id",  # native
+            "postgresql": "ctid IN",
+            "tsql": "WITH uq_del",
+            "oracle": "rowid IN",
+        }
+        for target, idiom in expect.items():
+            out = _exec_lines(_tx(src, "mysql", target))
+            assert idiom in out, (target, out)
+            # the cap must survive on every target (no bare unbounded DELETE)
+            assert "5" in out, out
+            assert_statements_parse(out, target, context="delete-cap")
+
+    def test_no_unread_args_warning(self) -> None:
+        # The ORDER BY + LIMIT must be read (guardrail 7): no tripwire on them.
+        src = _case("challenge_mysql.sql", "red2-my-delete-orderby-limit-drop")
+        for target in ("postgresql", "tsql", "oracle", "mysql"):
+            r = Transpiler().transpile(src, "mysql", target)
+            assert not any(
+                "unread sqlglot arg" in w.message and "Delete" in w.message
+                for w in r.warnings
+            ), (target, r.warnings)
+
+    def test_unordered_cap_still_arbitrary(self) -> None:
+        # A plain LIMIT (no ORDER BY) keeps the unordered cap idioms.
+        out = _tx("DELETE FROM t WHERE v < 0 LIMIT 3", "mysql", "tsql")
+        assert "DELETE TOP (3)" in out, out

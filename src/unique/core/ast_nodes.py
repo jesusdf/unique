@@ -645,6 +645,12 @@ class DeleteStatement(ASTNode):
     #: render it as T-SQL ``TOP (n)`` / MySQL ``LIMIT n`` / Oracle ``ROWNUM`` /
     #: PG ``ctid`` subquery.
     limit: LimitClause | None = None
+    #: MySQL ``DELETE … ORDER BY … LIMIT n`` — the cap picks the *first n by this
+    #: order* (a deterministic, DIFFERENT set than an unordered cap). Dropping it
+    #: deleted ALL matching rows (data loss). Emitters render the ordered cap via
+    #: a keyed subquery per target (MySQL native, T-SQL CTE+TOP, PG ctid, Oracle
+    #: rowid). Meaningless without ``limit`` (a full delete's order is unobservable).
+    order_by: tuple[OrderByItem, ...] = ()
 
 
 @dataclass(frozen=True)
