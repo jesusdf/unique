@@ -2002,3 +2002,27 @@ class TestUnsupportedCursorConstructsAreValidCarriers:
         # T-SQL itself allows FETCH without INTO — it must stay valid, no carrier.
         out = _transpile(self._CURSOR_ATTR, "tsql", "tsql")
         assert "FETCH without INTO" not in out, out
+
+
+class TestLeadingCommentRelocation:
+    """Comments written BEFORE a routine header survive by being relocated
+    into the routine's declaration section — outside the body they risk
+    being dropped by Oracle script tooling (SQL*Plus ``/`` splitting)."""
+
+    _SQL = (
+        "-- Calculates monthly totals for reporting.\n"
+        "CREATE PROCEDURE get_totals AS\n"
+        "BEGIN\n"
+        "    SELECT 1;\n"
+        "END\n"
+    )
+
+    def test_tsql_leading_comment_lands_inside_oracle_body(self) -> None:
+        out = Transpiler().transpile(self._SQL, source="tsql", target="oracle").sql
+        assert "Calculates monthly totals" in out
+        body = out[out.index("PROCEDURE") :]
+        assert "Calculates monthly totals" in body  # inside, not dropped
+
+    def test_relocation_holds_for_postgresql_target(self) -> None:
+        out = Transpiler().transpile(self._SQL, source="tsql", target="postgresql").sql
+        assert "Calculates monthly totals" in out
