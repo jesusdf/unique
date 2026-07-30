@@ -516,6 +516,41 @@ def _example_cell(example_case: str) -> str:
     return f"[`{example_case}`](../../tests/fixtures/challenge/)"
 
 
+def _rationale_recipe(code: str) -> str:
+    """A compact cookbook recipe for one code with a B31 rationale: heading
+    (code + construct, anchored), then Problem/Solution (pointer)/Discussion
+    populated from the registry's ``construct``/``divergence``/``reason``
+    fields, then See Also pointing at the worked example — the same
+    Problem/Solution/Discussion/See Also shape as the hand-curated
+    ``docs/rationale/`` pages (see that directory's README for the template),
+    scaled down to what the registry actually carries (no code example)."""
+    diag = DIAGNOSTICS[code]
+    rat = RATIONALES[code]
+    anchor = f'<a id="{code.lower()}"></a>'
+    return (
+        f"### {anchor}`{code}` — {rat.construct}\n\n"
+        f"**Category:** `{diag.category}` · **Message:** {diag.message}\n\n"
+        f"**Problem.** {rat.construct}\n\n"
+        f"**Solution (pointer).** {rat.divergence}\n\n"
+        f"**Discussion.** {rat.reason}\n\n"
+        f"**See Also.** {_example_cell(rat.example_case)}\n\n"
+    )
+
+
+def _pending_table(codes: list[str]) -> str:
+    headers = ["Code", "Category", "Message template", "Rationale"]
+    rows = [
+        (
+            f'<a id="{code.lower()}"></a>`{code}`',
+            DIAGNOSTICS[code].category,
+            DIAGNOSTICS[code].message,
+            _RATIONALE_PENDING,
+        )
+        for code in codes
+    ]
+    return _table(headers, rows)
+
+
 def render_warnings_page() -> str:
     parts = [
         _preamble(
@@ -524,55 +559,34 @@ def render_warnings_page() -> str:
             "the rationale side-table (`src/unique/core/rationales.py`)",
         )
     ]
-    n_with = sum(1 for c in DIAGNOSTICS if c in RATIONALES)
+    codes = sorted(DIAGNOSTICS, key=_code_sort_key)
+    with_rationale = [c for c in codes if c in RATIONALES]
+    without_rationale = [c for c in codes if c not in RATIONALES]
     parts.append(
-        "One row per stable diagnostic code the transpiler can emit. `code` is "
-        "the grep/suppress token (`-- UNIQUE-1234: …`); `message` is the "
-        "human-readable template rendered live at the emission site. The "
-        "`construct` / `reason` / `example` / `divergence` columns are the "
-        f"B31 rationale — populated for {n_with} of {len(DIAGNOSTICS)} codes; "
-        f"the rest render `{_RATIONALE_PENDING}` until a rationale is added "
-        "(the coverage ratchet in `tests/unit/core/test_diagnostics.py` drives "
-        "that count down). Anchor each row as "
-        "`warnings.md#unique-1234`.\n\n"
+        "One entry per stable diagnostic code the transpiler can emit. `code` "
+        "is the grep/suppress token (`-- UNIQUE-1234: …`); every code is "
+        "anchored as `warnings.md#unique-1234`. A code with a B31 rationale "
+        f"({len(with_rationale)} of {len(codes)}) renders as a recipe: "
+        "**Problem** (the triggering construct), **Solution (pointer)** (what "
+        "Unique does about it — a pointer, not a worked example: the "
+        "registry carries no SQL sample), **Discussion** (the engine-level "
+        "reason no direct mapping exists) and **See Also** (the corpus case "
+        "or test that proves it). The remaining codes render in a compact "
+        f"table marked `{_RATIONALE_PENDING}` until a rationale is added "
+        "(the coverage ratchet in `tests/unit/core/test_diagnostics.py` "
+        "drives that count down).\n\n"
     )
-    headers = [
-        "Code",
-        "Category",
-        "Message template",
-        "Construct",
-        "Reason",
-        "Example",
-        "Divergence",
-    ]
-    rows: list[tuple[str, ...]] = []
-    for code in sorted(DIAGNOSTICS, key=_code_sort_key):
-        diag = DIAGNOSTICS[code]
-        anchor = f'<a id="{code.lower()}"></a>`{code}`'
-        rat = RATIONALES.get(code)
-        if rat is None:
-            construct = _RATIONALE_PENDING
-            reason = example = divergence = "—"
-        else:
-            construct = rat.construct
-            reason = rat.reason
-            example = _example_cell(rat.example_case)
-            divergence = rat.divergence
-        rows.append(
-            (
-                anchor,
-                diag.category,
-                diag.message,
-                construct,
-                reason,
-                example,
-                divergence,
-            )
-        )
-    parts.append(_table(headers, rows))
+    parts.append("## Diagnostics with a rationale\n\n")
+    if with_rationale:
+        parts.extend(_rationale_recipe(code) for code in with_rationale)
+    else:
+        parts.append("_(none yet)_\n\n")
+    parts.append("## Diagnostics without a rationale yet\n\n")
+    parts.append(_pending_table(without_rationale))
     parts.append(
-        f"\n{len(DIAGNOSTICS)} codes across "
-        f"{len({d.category for d in DIAGNOSTICS.values()})} categories.\n"
+        f"\n{len(codes)} codes across "
+        f"{len({d.category for d in DIAGNOSTICS.values()})} categories "
+        f"({len(with_rationale)} with a rationale).\n"
     )
     return "".join(parts)
 

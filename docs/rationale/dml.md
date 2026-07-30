@@ -9,27 +9,11 @@ sourcing rules.
 
 ### `PIVOT` (T-SQL / Oracle) → PostgreSQL / MySQL
 
-**Source semantics.** `PIVOT (agg(arg) FOR col IN (v1, v2))` rotates rows
+**Problem.** `PIVOT (agg(arg) FOR col IN (v1, v2))` rotates rows
 into columns for a small, explicit set of pivot values, aggregating `arg` per
 value.
-**Why there is no direct mapping.** PostgreSQL and MySQL have no `PIVOT`
-operator at all. Oracle keeps `PIVOT` natively but needs an explicit
-`'v' AS v` alias in the `IN`-list so its output columns are named like
-T-SQL's default `[v]` bracket naming.
-**What Unique emits.** T-SQL keeps its native `PIVOT`; Oracle re-spells the
-`IN`-list with explicit aliases (`PIVOT (SUM(v) FOR dept IN ('A' AS A, 'B' AS
-B))`). PostgreSQL/MySQL get a conditional-aggregation derived table —
-`SUM(CASE WHEN dept = 'A' THEN v END) AS A` per pivot value, grouped by every
-source column that is neither the pivot column nor the aggregate argument.
-When the source's projected columns are not visible (a bare table or
-`SELECT *`), the grouping columns cannot be determined and the relation
-degrades to a warned carrier instead (`emit_relations.py::_emit_pivot_relation`).
-**Divergence & warning.** Faithful when the source projection is visible.
-`[limit]` (warned carrier) otherwise. The original conversion silently
-**dropped the whole `PIVOT` operator** with no warning — a defect this
-lowering replaced.
-**References.** `reda-ts-pivot` · `docs/03-unsupported.md` §2 (T-SQL
-PIVOT/UNPIVOT row).
+
+**Solution.**
 
 ```sql
 -- corpus case reda-ts-pivot
@@ -44,29 +28,35 @@ SELECT * FROM (SELECT dept, v FROM t) src PIVOT (SUM(v) FOR dept IN ([A],[B])) p
 -- returned the 3 raw rows instead.
 ```
 
+T-SQL keeps its native `PIVOT`; Oracle re-spells the
+`IN`-list with explicit aliases (`PIVOT (SUM(v) FOR dept IN ('A' AS A, 'B' AS
+B))`). PostgreSQL/MySQL get a conditional-aggregation derived table —
+`SUM(CASE WHEN dept = 'A' THEN v END) AS A` per pivot value, grouped by every
+source column that is neither the pivot column nor the aggregate argument.
+When the source's projected columns are not visible (a bare table or
+`SELECT *`), the grouping columns cannot be determined and the relation
+degrades to a warned carrier instead (`emit_relations.py::_emit_pivot_relation`).
+
+**Discussion.** PostgreSQL and MySQL have no `PIVOT`
+operator at all. Oracle keeps `PIVOT` natively but needs an explicit
+`'v' AS v` alias in the `IN`-list so its output columns are named like
+T-SQL's default `[v]` bracket naming.
+
+> **Note** faithful when the source projection is visible.
+> `[limit]` (warned carrier) otherwise. The original conversion silently
+> **dropped the whole `PIVOT` operator** with no warning — a defect this
+> lowering replaced.
+
+**See Also.** `reda-ts-pivot` · `docs/03-unsupported.md` §2 (T-SQL
+PIVOT/UNPIVOT row).
+
 ### `UNPIVOT` (T-SQL / Oracle) → all targets
 
-**Source semantics.** `UNPIVOT (val FOR col IN (a, b))` turns columns `a`,
+**Problem.** `UNPIVOT (val FOR col IN (a, b))` turns columns `a`,
 `b` into row pairs `(col, val)` — `col` carrying the *name* of the source
 column, `val` its value.
-**Why there is no direct mapping.** Unique renders `UNPIVOT` as a `UNION
-ALL` (one arm per unpivoted column, `NULL`s excluded to match `UNPIVOT`'s
-default) on **every** target, never the native `UNPIVOT` operator — even on
-Oracle and T-SQL, which have one. The reason is the *name-column value*:
-native `UNPIVOT` re-derives it from the `IN`-list identifier, and Oracle
-folds an unquoted identifier to upper case, so Oracle's native `UNPIVOT`
-yields `'A'` where T-SQL's yields `'a'` for the same source. The `UNION ALL`
-rewrite instead emits an explicit string literal cased exactly as the
-*source* engine would produce it, so the value matches across engines
-(`emit_relations.py::_emit_unpivot_relation` docstring).
-**What Unique emits.** `SELECT <carried cols>, '<name>' AS col, <col> AS val
-FROM <source> WHERE <col> IS NOT NULL` unioned per unpivoted column. When the
-source's carried columns are not visible (no projection to name), it
-degrades to a warned carrier instead.
-**Divergence & warning.** Faithful — values verified equal on
-Oracle/PostgreSQL/MySQL. `[limit]` (warned carrier) when the source
-projection is invisible.
-**References.** `ts-unpivot`, `ora-unpivot`.
+
+**Solution.**
 
 ```sql
 -- corpus case ora-unpivot (Oracle folds unquoted 'a'/'b' to 'A'/'B')
@@ -79,25 +69,37 @@ SELECT id,col,val FROM (SELECT 1 id,10 a,20 b FROM DUAL) UNPIVOT (val FOR col IN
 -- not the lower-case 'a'/'b' a T-SQL source would produce for the same shape)
 ```
 
+`SELECT <carried cols>, '<name>' AS col, <col> AS val
+FROM <source> WHERE <col> IS NOT NULL` unioned per unpivoted column. When the
+source's carried columns are not visible (no projection to name), it
+degrades to a warned carrier instead.
+
+**Discussion.** Unique renders `UNPIVOT` as a `UNION
+ALL` (one arm per unpivoted column, `NULL`s excluded to match `UNPIVOT`'s
+default) on **every** target, never the native `UNPIVOT` operator — even on
+Oracle and T-SQL, which have one. The reason is the *name-column value*:
+native `UNPIVOT` re-derives it from the `IN`-list identifier, and Oracle
+folds an unquoted identifier to upper case, so Oracle's native `UNPIVOT`
+yields `'A'` where T-SQL's yields `'a'` for the same source. The `UNION ALL`
+rewrite instead emits an explicit string literal cased exactly as the
+*source* engine would produce it, so the value matches across engines
+(`emit_relations.py::_emit_unpivot_relation` docstring).
+
+> **Note** faithful — values verified equal on
+> Oracle/PostgreSQL/MySQL. `[limit]` (warned carrier) when the source
+> projection is invisible.
+
+**See Also.** `ts-unpivot`, `ora-unpivot`.
+
 ## `MERGE` / upsert lowering
 
 ### `WHEN NOT MATCHED BY SOURCE` (T-SQL) → PostgreSQL / Oracle
 
-**Source semantics.** T-SQL's `MERGE` can act on target rows that have **no**
+**Problem.** T-SQL's `MERGE` can act on target rows that have **no**
 matching source row at all (`WHEN NOT MATCHED BY SOURCE THEN UPDATE/DELETE`)
 — an anti-join over the `ON` predicate.
-**Why there is no direct mapping.** `WHEN NOT MATCHED BY SOURCE` exists
-nowhere else (PostgreSQL only gained it in 17, and Unique's PG target does
-not assume 17; Oracle's `MERGE` has no such clause at all).
-**What Unique emits.** Each `WHEN NOT MATCHED BY SOURCE` clause becomes a
-**follow-up statement** — `UPDATE`/`DELETE … WHERE NOT EXISTS (SELECT 1 FROM
-<using> WHERE <on>) [AND (<condition>)]` — run after the `MERGE`. Because the
-follow-up's anti-join addresses exactly the rows the `MERGE` itself cannot
-touch, the two-statement split is value-equivalent to a single native
-statement (`emit.py::_merge_extended_clauses` docstring).
-**Divergence & warning.** Faithful — live-verified identical final rows on
-T-SQL/Oracle/PostgreSQL.
-**References.** `ts-merge-full`.
+
+**Solution.**
 
 ```sql
 -- corpus case ts-merge-full
@@ -108,44 +110,55 @@ MERGE tgt USING src ON tgt.id = src.id
   WHEN NOT MATCHED BY SOURCE THEN DELETE;
 ```
 
+Each `WHEN NOT MATCHED BY SOURCE` clause becomes a
+**follow-up statement** — `UPDATE`/`DELETE … WHERE NOT EXISTS (SELECT 1 FROM
+<using> WHERE <on>) [AND (<condition>)]` — run after the `MERGE`. Because the
+follow-up's anti-join addresses exactly the rows the `MERGE` itself cannot
+touch, the two-statement split is value-equivalent to a single native
+statement (`emit.py::_merge_extended_clauses` docstring).
+
+**Discussion.** `WHEN NOT MATCHED BY SOURCE` exists
+nowhere else (PostgreSQL only gained it in 17, and Unique's PG target does
+not assume 17; Oracle's `MERGE` has no such clause at all).
+
+> **Note** faithful — live-verified identical final rows on
+> T-SQL/Oracle/PostgreSQL.
+
+**See Also.** `ts-merge-full`.
+
 ### Conditional `MATCHED` UPDATE+DELETE pair (T-SQL) → Oracle fold
 
-**Source semantics.** A T-SQL `MERGE` may carry two conditional `WHEN
+**Problem.** A T-SQL `MERGE` may carry two conditional `WHEN
 MATCHED` clauses in sequence — first-match-wins — one `UPDATE`, one `DELETE`.
-**Why there is no direct mapping.** Oracle's `MERGE` grammar allows only a
-**single** `WHEN MATCHED` clause; conditional forms are spelled as an
-`UPDATE … WHERE` plus a trailing `DELETE WHERE` tail on the same clause, not
-two separate `WHEN` branches — and critically, Oracle's `DELETE WHERE`
-evaluates against the **post-update** row, while T-SQL evaluates the
-original (pre-update) row.
-**What Unique emits.** The pair folds into one Oracle `UPDATE` (whose `SET`
+
+**Solution.** The pair folds into one Oracle `UPDATE` (whose `SET`
 keeps the old value via `CASE` where the update should not apply) plus a
 spliced `DELETE WHERE` tail — but **only** when the fold is value-safe: the
 `DELETE` condition must reference no target column the `UPDATE` assigns. When
 it does (the post-update semantics would delete rows T-SQL keeps), the whole
 `MERGE` degrades to a carrier + warning instead of shipping silently-wrong
 output.
-**Divergence & warning.** Faithful in the safe shape (live-verified
-identical rows). Full warned carrier in the unsafe shape.
-**References.** `docs/03-unsupported.md` §3.6 (MERGE clause composition,
+
+**Discussion.** Oracle's `MERGE` grammar allows only a
+**single** `WHEN MATCHED` clause; conditional forms are spelled as an
+`UPDATE … WHERE` plus a trailing `DELETE WHERE` tail on the same clause, not
+two separate `WHEN` branches — and critically, Oracle's `DELETE WHERE`
+evaluates against the **post-update** row, while T-SQL evaluates the
+original (pre-update) row.
+
+> **Note** faithful in the safe shape (live-verified
+> identical rows). Full warned carrier in the unsafe shape.
+
+**See Also.** `docs/03-unsupported.md` §3.6 (MERGE clause composition,
 audit 2026-07-24).
 
 ### A leading CTE feeding `MERGE` (T-SQL) → Oracle / MySQL
 
-**Source semantics.** `WITH src AS (…) MERGE INTO t USING src ON … WHEN
+**Problem.** `WITH src AS (…) MERGE INTO t USING src ON … WHEN
 MATCHED THEN UPDATE … WHEN NOT MATCHED THEN INSERT …` — the `MERGE`'s
 `USING` source is itself a named CTE.
-**Why there is no direct mapping.** Oracle forbids a leading `WITH` before
-`MERGE` (`ORA-00928`). MySQL has no `MERGE` at all — Unique's MySQL upsert
-lowering (`INSERT … SELECT … ON DUPLICATE KEY UPDATE`) referenced the CTE
-name (`src`) in its `SELECT … FROM src`, but on its own dropped the `WITH src
-AS (…)` that defines it, leaving `src` undefined (MySQL error 1146).
-**What Unique emits.** The CTE body is **inlined** at its use site instead
-of kept as a separate `WITH`: Oracle's `MERGE INTO t USING (<cte body>) src
-…`, MySQL's `INSERT INTO t (…) SELECT … FROM (<cte body>) AS src`.
-**Divergence & warning.** Faithful — both targets now produce a valid,
-value-equivalent statement instead of an undefined-relation error.
-**References.** `reda-ts-cte-merge`.
+
+**Solution.**
 
 ```sql
 -- corpus case reda-ts-cte-merge
@@ -159,24 +172,29 @@ MERGE INTO t USING src ON t.id = src.id
 --          ON DUPLICATE KEY UPDATE ...
 ```
 
+The CTE body is **inlined** at its use site instead
+of kept as a separate `WITH`: Oracle's `MERGE INTO t USING (<cte body>) src
+…`, MySQL's `INSERT INTO t (…) SELECT … FROM (<cte body>) AS src`.
+
+**Discussion.** Oracle forbids a leading `WITH` before
+`MERGE` (`ORA-00928`). MySQL has no `MERGE` at all — Unique's MySQL upsert
+lowering (`INSERT … SELECT … ON DUPLICATE KEY UPDATE`) referenced the CTE
+name (`src`) in its `SELECT … FROM src`, but on its own dropped the `WITH src
+AS (…)` that defines it, leaving `src` undefined (MySQL error 1146).
+
+> **Note** faithful — both targets now produce a valid,
+> value-equivalent statement instead of an undefined-relation error.
+
+**See Also.** `reda-ts-cte-merge`.
+
 ## Multi-table `DELETE`
 
 ### Multi-table `DELETE … JOIN` (MySQL) → PostgreSQL / T-SQL / Oracle
 
-**Source semantics.** `DELETE t1 FROM t1 JOIN t2 ON … WHERE t2.flag = 1`
+**Problem.** `DELETE t1 FROM t1 JOIN t2 ON … WHERE t2.flag = 1`
 deletes rows from `t1` filtered by a join against `t2`.
-**Why there is no direct mapping.** Each of the three targets spells a
-join-filtered delete differently: PostgreSQL has no `DELETE … JOIN`, only
-`DELETE … USING`; T-SQL spells it `DELETE t1 FROM t1, t2 WHERE …` (a
-comma-join, not an `INNER JOIN`); Oracle's `DELETE` has no multi-table form
-at all.
-**What Unique emits.** PostgreSQL: `DELETE FROM t1 USING t2 WHERE …`. T-SQL:
-`DELETE t1 FROM t1, t2 WHERE …` (comma-joined, per `_emit_delete`). Oracle:
-`DELETE FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE …)` — exact when the
-`WHERE` clause **is** the join condition (the target's own columns stay
-visible inside the correlated subquery).
-**Divergence & warning.** Faithful on all three.
-**References.** `my-multitable-delete-join`, `reda-ts-delete-join`.
+
+**Solution.**
 
 ```sql
 -- corpus case my-multitable-delete-join
@@ -187,23 +205,29 @@ DELETE t1 FROM redb_d1 t1 JOIN redb_d2 t2 ON t1.id = t2.id WHERE t2.flag = 1
 --             WHERE EXISTS (SELECT 1 FROM redb_d2 t2 WHERE t1.id = t2.id AND t2.flag = 1)
 ```
 
+PostgreSQL: `DELETE FROM t1 USING t2 WHERE …`. T-SQL:
+`DELETE t1 FROM t1, t2 WHERE …` (comma-joined, per `_emit_delete`). Oracle:
+`DELETE FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE …)` — exact when the
+`WHERE` clause **is** the join condition (the target's own columns stay
+visible inside the correlated subquery).
+
+**Discussion.** Each of the three targets spells a
+join-filtered delete differently: PostgreSQL has no `DELETE … JOIN`, only
+`DELETE … USING`; T-SQL spells it `DELETE t1 FROM t1, t2 WHERE …` (a
+comma-join, not an `INNER JOIN`); Oracle's `DELETE` has no multi-table form
+at all.
+
+> **Note** faithful on all three.
+
+**See Also.** `my-multitable-delete-join`, `reda-ts-delete-join`.
+
 ### `DELETE TOP (n)` row caps (T-SQL) → MySQL / Oracle / PostgreSQL
 
-**Source semantics.** `DELETE TOP (n) FROM t WHERE …` caps the delete to `n`
+**Problem.** `DELETE TOP (n) FROM t WHERE …` caps the delete to `n`
 **arbitrary** matching rows (T-SQL gives no ordering guarantee for `TOP`
 without an `ORDER BY`, which `DELETE` cannot carry).
-**Why there is no direct mapping.** None of the other three engines has a
-`TOP`-style row cap on `DELETE` in the same syntactic position; each needs a
-different mechanism to bound the row count.
-**What Unique emits.** Per-target row-cap forms (`emit_relations.py::_DELETE_CAP`):
-MySQL trails `LIMIT n`; Oracle folds `ROWNUM <= n` into the `WHERE`;
-PostgreSQL selects `n` candidate rows by `ctid` in a subquery
-(`WHERE ctid IN (SELECT ctid FROM t WHERE … LIMIT n)`, since PostgreSQL's
-`DELETE` has no `LIMIT`). All four cap the delete to `n` arbitrary matching
-rows — faithful to `TOP`'s own unordered semantics.
-**Divergence & warning.** Faithful. The earlier defect **silently dropped**
-`TOP (n)` altogether, deleting every matching row instead of capping at `n`.
-**References.** `reda-ts-delete-top`.
+
+**Solution.**
 
 ```sql
 -- corpus case reda-ts-delete-top
@@ -213,21 +237,31 @@ DELETE TOP (2) FROM t WHERE a > 0
 -- PostgreSQL: DELETE FROM t WHERE ctid IN (SELECT ctid FROM t WHERE a > 0 LIMIT 2)
 ```
 
+Per-target row-cap forms (`emit_relations.py::_DELETE_CAP`):
+MySQL trails `LIMIT n`; Oracle folds `ROWNUM <= n` into the `WHERE`;
+PostgreSQL selects `n` candidate rows by `ctid` in a subquery
+(`WHERE ctid IN (SELECT ctid FROM t WHERE … LIMIT n)`, since PostgreSQL's
+`DELETE` has no `LIMIT`). All four cap the delete to `n` arbitrary matching
+rows — faithful to `TOP`'s own unordered semantics.
+
+**Discussion.** None of the other three engines has a
+`TOP`-style row cap on `DELETE` in the same syntactic position; each needs a
+different mechanism to bound the row count.
+
+> **Note** faithful. The earlier defect **silently dropped**
+> `TOP (n)` altogether, deleting every matching row instead of capping at `n`.
+
+**See Also.** `reda-ts-delete-top`.
+
 ## Row-value comparisons
 
 ### Row-value inequality (PostgreSQL / Oracle / MySQL) → T-SQL
 
-**Source semantics.** `(a, b) > (1, 5)` is a lexicographic row-value
+**Problem.** `(a, b) > (1, 5)` is a lexicographic row-value
 comparison — common for keyset pagination — true when `a > 1`, or `a = 1 AND
 b > 5`.
-**Why there is no direct mapping.** T-SQL has no row-value comparison syntax
-at all; the tuple literal is rejected outright (error 4145, "non-boolean
-type … where a condition is expected"). PostgreSQL, Oracle and MySQL all
-accept it natively.
-**What Unique emits.** T-SQL gets the comparison expanded lexicographically:
-`a > 1 OR (a = 1 AND (b > 5))`.
-**Divergence & warning.** Faithful — PG native result `(3,4)`.
-**References.** `pg-row-value-comparison`.
+
+**Solution.**
 
 ```sql
 -- corpus case pg-row-value-comparison
@@ -235,38 +269,41 @@ SELECT * FROM t WHERE (a, b) > (1, 5)
 -- T-SQL: WHERE a > 1 OR (a = 1 AND (b > 5))
 ```
 
+T-SQL gets the comparison expanded lexicographically:
+`a > 1 OR (a = 1 AND (b > 5))`.
+
+**Discussion.** T-SQL has no row-value comparison syntax
+at all; the tuple literal is rejected outright (error 4145, "non-boolean
+type … where a condition is expected"). PostgreSQL, Oracle and MySQL all
+accept it natively.
+
+> **Note** faithful — PG native result `(3,4)`.
+
+**See Also.** `pg-row-value-comparison`.
+
 ### Row-value `IN` (Oracle) → T-SQL
 
-**Source semantics.** `(a, b) IN ((1, 2), (3, 4))` is a row-constructor `IN`
+**Problem.** `(a, b) IN ((1, 2), (3, 4))` is a row-constructor `IN`
 list, valid on Oracle/PostgreSQL/MySQL.
-**Why there is no direct mapping.** T-SQL has no row-constructor `IN` either
-(the same error 4145 as the inequality case above).
-**What Unique emits.** Expanded to an `OR`-of-`AND`-pairs form:
+
+**Solution.** Expanded to an `OR`-of-`AND`-pairs form:
 `(a = 1 AND b = 2) OR (a = 3 AND b = 4)`.
-**Divergence & warning.** Faithful.
-**References.** `reda-ora-rowvalue-in` (neighbour of `pg-row-value-comparison`).
+
+**Discussion.** T-SQL has no row-constructor `IN` either
+(the same error 4145 as the inequality case above).
+
+> **Note** faithful.
+
+**See Also.** `reda-ora-rowvalue-in` (neighbour of `pg-row-value-comparison`).
 
 ## `OUTPUT` / `RETURNING`
 
 ### `INSERT`/`UPDATE … OUTPUT` (T-SQL) → PostgreSQL `RETURNING` / Oracle carrier
 
-**Source semantics.** T-SQL's `OUTPUT INSERTED.col, DELETED.col` returns a
+**Problem.** T-SQL's `OUTPUT INSERTED.col, DELETED.col` returns a
 result set of the affected rows' before/after values alongside the DML.
-**Why there is no direct mapping.** PostgreSQL's `RETURNING` is a direct,
-faithful equivalent (`INSERTED`→the new row, `DELETED`→the old row — a
-`DELETE` only ever exposes `DELETED`). Oracle's `RETURNING` clause, though
-named the same, is **PL/SQL-only**: it must target `INTO` bind variables and
-cannot stand alone in a plain SQL statement (`ORA-63809` otherwise), so a
-standalone `OUTPUT` has no Oracle equivalent at all.
-**What Unique emits.** PostgreSQL: `RETURNING` with the `INSERTED`/`DELETED`
-qualifier stripped from each item (`_prefix_tsql_output_items` performs the
-reverse: it re-adds the qualifier when going the other direction). Oracle:
-the `INSERT`/`UPDATE`/`DELETE` itself still runs; the `OUTPUT` result set is
-documented in a carrier + warning rather than attempted.
-**Divergence & warning.** Faithful on PostgreSQL. `[limit]` on Oracle — the
-DML effect is preserved, the returned result set is not.
-**References.** `ts-insert-output`, `ts-update-output` ·
-`docs/03-unsupported.md` §3.7 (the MySQL side of the same gap).
+
+**Solution.**
 
 ```sql
 -- corpus case ts-insert-output
@@ -276,20 +313,32 @@ INSERT INTO t (n) OUTPUT INSERTED.id, INSERTED.n VALUES (10), (20)
 -- result set — ORA-63809 forbids a standalone one)
 ```
 
+PostgreSQL: `RETURNING` with the `INSERTED`/`DELETED`
+qualifier stripped from each item (`_prefix_tsql_output_items` performs the
+reverse: it re-adds the qualifier when going the other direction). Oracle:
+the `INSERT`/`UPDATE`/`DELETE` itself still runs; the `OUTPUT` result set is
+documented in a carrier + warning rather than attempted.
+
+**Discussion.** PostgreSQL's `RETURNING` is a direct,
+faithful equivalent (`INSERTED`→the new row, `DELETED`→the old row — a
+`DELETE` only ever exposes `DELETED`). Oracle's `RETURNING` clause, though
+named the same, is **PL/SQL-only**: it must target `INTO` bind variables and
+cannot stand alone in a plain SQL statement (`ORA-63809` otherwise), so a
+standalone `OUTPUT` has no Oracle equivalent at all.
+
+> **Note** faithful on PostgreSQL. `[limit]` on Oracle — the
+> DML effect is preserved, the returned result set is not.
+
+**See Also.** `ts-insert-output`, `ts-update-output` ·
+`docs/03-unsupported.md` §3.7 (the MySQL side of the same gap) ·
+[`UNIQUE-1212`](../reference/warnings.md#unique-1212).
+
 ### `OUTPUT … INTO` redirect (T-SQL) → PostgreSQL
 
-**Source semantics.** `OUTPUT INSERTED.a INTO log(a)` redirects the output
+**Problem.** `OUTPUT INSERTED.a INTO log(a)` redirects the output
 rows into a second table instead of returning them to the caller.
-**Why there is no direct mapping.** PostgreSQL's `RETURNING` only ever
-returns a result set to the caller; it has no `INTO <table>` redirect form.
-**What Unique emits.** The plain `OUTPUT INSERTED.a` (no `INTO`) form maps
-cleanly to `RETURNING a` (the `INSERTED.` qualifier is stripped, as above).
-The `INTO log(a)` redirect itself has no PostgreSQL equivalent and is
-dropped with a warning, rather than leaking the invalid `RETURNING
-INSERTED.a` (PostgreSQL rejects `INSERTED` as an unqualified relation).
-**Divergence & warning.** `[limit]` — the redirect into `log` is lost; the
-base `INSERT` and its plain-`RETURNING` value are faithful.
-**References.** `reda-ts-output-into`.
+
+**Solution.**
 
 ```sql
 -- corpus case reda-ts-output-into
@@ -298,23 +347,30 @@ INSERT INTO t (a) OUTPUT INSERTED.a INTO log(a) VALUES (1)
 -- (the INTO log(a) redirect is dropped with a warning, not silently)
 ```
 
+The plain `OUTPUT INSERTED.a` (no `INTO`) form maps
+cleanly to `RETURNING a` (the `INSERTED.` qualifier is stripped, as above).
+The `INTO log(a)` redirect itself has no PostgreSQL equivalent and is
+dropped with a warning, rather than leaking the invalid `RETURNING
+INSERTED.a` (PostgreSQL rejects `INSERTED` as an unqualified relation).
+
+**Discussion.** PostgreSQL's `RETURNING` only ever
+returns a result set to the caller; it has no `INTO <table>` redirect form.
+
+> **Warning** `[limit]` — the redirect into `log` is lost; the
+> base `INSERT` and its plain-`RETURNING` value are faithful.
+
+**See Also.** `reda-ts-output-into` ·
+[`UNIQUE-1137`](../reference/warnings.md#unique-1137) ·
+[`UNIQUE-1139`](../reference/warnings.md#unique-1139).
+
 ## Set-operation `ORDER BY`
 
 ### Trailing `ORDER BY` on `UNION`/`EXCEPT`/`INTERSECT` (T-SQL) → PostgreSQL / Oracle / MySQL
 
-**Source semantics.** `SELECT … EXCEPT SELECT … ORDER BY a` orders the
+**Problem.** `SELECT … EXCEPT SELECT … ORDER BY a` orders the
 **combined** result of the whole set operation.
-**Why there is no direct mapping.** This is not a cross-engine gap — every
-target supports `ORDER BY` on a set-operation result — so there is no
-engine-level reason to drop it; the entry is here because the earlier
-conversion **silently dropped** the `ORDER BY` on every target (a real
-defect, not an approved limit).
-**What Unique emits.** The `ORDER BY` is preserved on the whole set
-operation: PostgreSQL/MySQL keep `EXCEPT`/`UNION` as-is; Oracle's `EXCEPT`
-spells `MINUS`.
-**Divergence & warning.** Faithful — the earlier silent drop made an ordered
-result unordered with no warning.
-**References.** `reda-ts-setop-orderby`.
+
+**Solution.**
 
 ```sql
 -- corpus case reda-ts-setop-orderby (schematic: SELECT ... EXCEPT SELECT ... ORDER BY a)
@@ -322,3 +378,18 @@ result unordered with no warning.
 -- Oracle:     ... MINUS  ... ORDER BY a ASC NULLS FIRST
 -- MySQL:      ... ORDER BY a ASC
 ```
+
+The `ORDER BY` is preserved on the whole set
+operation: PostgreSQL/MySQL keep `EXCEPT`/`UNION` as-is; Oracle's `EXCEPT`
+spells `MINUS`.
+
+**Discussion.** This is not a cross-engine gap — every
+target supports `ORDER BY` on a set-operation result — so there is no
+engine-level reason to drop it; the entry is here because the earlier
+conversion **silently dropped** the `ORDER BY` on every target (a real
+defect, not an approved limit).
+
+> **Note** faithful — the earlier silent drop made an ordered
+> result unordered with no warning.
+
+**See Also.** `reda-ts-setop-orderby`.

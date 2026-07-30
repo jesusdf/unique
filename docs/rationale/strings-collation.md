@@ -6,32 +6,13 @@ built and its entry format.
 
 ### CONCAT / `||` NULL-propagation per engine
 
-**Source semantics.** MySQL's `CONCAT(a, b, …)` **propagates** `NULL`: any
+**Problem.** MySQL's `CONCAT(a, b, …)` **propagates** `NULL`: any
 `NULL` argument makes the whole result `NULL`. PostgreSQL `||`, T-SQL `+`
 (string context) and MySQL/PostgreSQL/T-SQL's own `CONCAT()` function all
 propagate the same way. Oracle's `||` operator is the odd one out: it treats
 `NULL` as an **empty string**, so `'a' || NULL || 'b'` = `'ab'`, not `NULL`.
 
-**Why there is no direct mapping.** A straight operator/function copy
-reverses the result on whichever side treats `NULL` differently. Going
-**Oracle → other engines**, a bare `NULL` operand must be dropped so the
-other engines' propagating `||`/`CONCAT` produces Oracle's `'ab'`, not the
-propagating engines' own `NULL`. Going **MySQL → other engines**, a `NULL`
-operand must instead be preserved (or synthesised) so the target's
-non-propagating engines (Oracle) or operators still yield `NULL`. Two
-sub-cases compound this: a **non-literal** `NULL` (`CAST(NULL AS
-VARCHAR2(10))`, or a `NULL`-valued **column** known only at runtime) is not
-visible to a compile-time literal check, so an early fix that only stripped
-*literal* `NULL` left both holes open (`reda-ora-concat-null-cast`,
-`my-concat-null-col` — both filed as class `func`/`lying-warning`: the only
-signal was an unrelated internal "unread sqlglot arg" tripwire, not a message
-describing the semantic loss).
-
-**What Unique emits.** A literal `NULL` operand of an Oracle-source `||` is
-constant-folded away at transpile time. A **non-literal** possibly-`NULL`
-operand (a `CAST(NULL AS …)`, or a column recognised as nullable) is guarded
-with a `CASE WHEN <op> IS NULL … THEN NULL ELSE <concat> END` so the
-propagation direction matches the source engine, whichever way it runs:
+**Solution.**
 
 ```sql
 -- reda-ora-concat-null-cast, oracle → postgresql
@@ -49,19 +30,40 @@ END AS c
 FROM (SELECT 1 AS a, CAST(NULL AS TEXT) AS b) t;
 ```
 
+A literal `NULL` operand of an Oracle-source `||` is
+constant-folded away at transpile time. A **non-literal** possibly-`NULL`
+operand (a `CAST(NULL AS …)`, or a column recognised as nullable) is guarded
+with a `CASE WHEN <op> IS NULL … THEN NULL ELSE <concat> END` so the
+propagation direction matches the source engine, whichever way it runs.
+
 The reverse (Oracle as target of a propagating source) needs no CASE guard
 when the operand is a bare literal `NULL`: `ora-concat-null` folds `'a' + 'b'`
 (T-SQL) / `CONCAT('a', 'b')` (MySQL) / `'a' || 'b'` (PostgreSQL) — dropping
 the literal reproduces Oracle's own empty-string treatment without needing a
 runtime guard, since a compile-time-known `NULL` is gone either way.
 
-**Divergence & warning.** `faithful` in both directions — live-verified: T-SQL
-`'a' + 'b'` / PostgreSQL `'a' || 'b'` / MySQL `CONCAT('a', 'b')` all give
-`'ab'` matching Oracle's own `'ab'`; the guarded CASE gives MySQL's `NULL` on
-every target. No warning (the value is reproduced exactly, not merely
-approximated).
+**Discussion.** A straight operator/function copy
+reverses the result on whichever side treats `NULL` differently. Going
+**Oracle → other engines**, a bare `NULL` operand must be dropped so the
+other engines' propagating `||`/`CONCAT` produces Oracle's `'ab'`, not the
+propagating engines' own `NULL`. Going **MySQL → other engines**, a `NULL`
+operand must instead be preserved (or synthesised) so the target's
+non-propagating engines (Oracle) or operators still yield `NULL`. Two
+sub-cases compound this: a **non-literal** `NULL` (`CAST(NULL AS
+VARCHAR2(10))`, or a `NULL`-valued **column** known only at runtime) is not
+visible to a compile-time literal check, so an early fix that only stripped
+*literal* `NULL` left both holes open (`reda-ora-concat-null-cast`,
+`my-concat-null-col` — both filed as class `func`/`lying-warning`: the only
+signal was an unrelated internal "unread sqlglot arg" tripwire, not a message
+describing the semantic loss).
 
-**References.** Corpus `ora-concat-null`, `reda-ora-concat-null-cast`,
+> **Note** faithful in both directions — live-verified: T-SQL
+> `'a' + 'b'` / PostgreSQL `'a' || 'b'` / MySQL `CONCAT('a', 'b')` all give
+> `'ab'` matching Oracle's own `'ab'`; the guarded CASE gives MySQL's `NULL` on
+> every target. No warning (the value is reproduced exactly, not merely
+> approximated).
+
+**See Also.** Corpus `ora-concat-null`, `reda-ora-concat-null-cast`,
 `my-concat-null`, `my-concat-null-col`, `ts-concat-null`, `pg-concat-null` ·
 `emit_expr.py:1869-1897` (`_emit_binary`, CONCAT dialect overrides, docstring).
 
@@ -69,26 +71,11 @@ approximated).
 
 ### Oracle `'' ≡ NULL`
 
-**Source semantics.** Every other engine stores and compares an empty string
+**Problem.** Every other engine stores and compares an empty string
 `''` as a distinct, zero-length value: `'' IS NULL` is false, `COALESCE('',
 'x')` is `''`.
 
-**Why there is no direct mapping.** Oracle has no on-disk representation for
-an empty string separate from `NULL` — assigning `''` to a `VARCHAR2` column
-stores `NULL`. `'' IS NULL` is **true** only on Oracle; `NVL('', 'x')` returns
-`'x'` (Oracle's `NVL` sees `''` as absent), where `COALESCE('', 'x')` on
-every other engine returns `''` unchanged. There is no statement-level
-rewrite that can make a non-Oracle target reproduce Oracle's collapse (or
-vice versa) without changing the column's actual storage semantics — a
-documented, approved limit rather than a bug (`docs/03-unsupported.md` §2,
-"Empty string as a distinct value → Oracle").
-
-**What Unique emits.** The literal expressions pass through; where an
-Oracle-source result genuinely cannot be reproduced (an empty-string *result*
-becomes Oracle `NULL`), the divergence is warned rather than silently shipped.
-Function *inputs* are recovered where the maths allows it — `ASCII('')` → `0`,
-`LOCATE('', …)` → `1` via `COALESCE` — because those specific results are
-recoverable without representing `''` itself.
+**Solution.**
 
 ```sql
 -- ora-empty-is-null, oracle → mysql/postgresql/tsql
@@ -101,31 +88,39 @@ SELECT NVL('', 'x') AS r FROM DUAL;
 -- precisely because only Oracle treats '' as absent.
 ```
 
-**Divergence & warning.** **Documented limit, warned.** Not `faithful` — no
-workaround exists in either direction; every occurrence carries a `UNIQUE:`
-note + warning rather than a silent value change. User-approved 2026-07-19.
+The literal expressions pass through; where an
+Oracle-source result genuinely cannot be reproduced (an empty-string *result*
+becomes Oracle `NULL`), the divergence is warned rather than silently shipped.
+Function *inputs* are recovered where the maths allows it — `ASCII('')` → `0`,
+`LOCATE('', …)` → `1` via `COALESCE` — because those specific results are
+recoverable without representing `''` itself.
 
-**References.** Corpus `ora-empty-is-null`, `ora-empty-null`,
+**Discussion.** Oracle has no on-disk representation for
+an empty string separate from `NULL` — assigning `''` to a `VARCHAR2` column
+stores `NULL`. `'' IS NULL` is **true** only on Oracle; `NVL('', 'x')` returns
+`'x'` (Oracle's `NVL` sees `''` as absent), where `COALESCE('', 'x')` on
+every other engine returns `''` unchanged. There is no statement-level
+rewrite that can make a non-Oracle target reproduce Oracle's collapse (or
+vice versa) without changing the column's actual storage semantics — a
+documented, approved limit rather than a bug (`docs/03-unsupported.md` §2,
+"Empty string as a distinct value → Oracle").
+
+> **Warning** **Documented limit, warned.** Not `faithful` — no
+> workaround exists in either direction; every occurrence carries a `UNIQUE:`
+> note + warning rather than a silent value change. User-approved 2026-07-19.
+
+**See Also.** Corpus `ora-empty-is-null`, `ora-empty-null`,
 `pg-empty-is-null` · `docs/03-unsupported.md` §2, "Empty string as a distinct
-value → Oracle".
+value → Oracle" · [`UNIQUE-1207`](../reference/warnings.md#unique-1207).
 
 ---
 
 ### LIKE … ESCAPE mapping
 
-**Source semantics.** `LIKE pattern ESCAPE 'c'` is SQL-standard: `c` escapes
+**Problem.** `LIKE pattern ESCAPE 'c'` is SQL-standard: `c` escapes
 a following `%`/`_` so it matches literally.
 
-**Why there is no direct mapping — there isn't one, and the old behaviour lied
-about it.** `ESCAPE` is supported **identically** by PostgreSQL, Oracle and
-MySQL — a pure syntax passthrough. The transpiler used to treat the `ESCAPE`
-clause as an "unmapped operator; no `<engine>` mapping" and comment out the
-**entire** statement with a warning that misdescribed reality (a mapping
-exists; nothing needed translating) — losing a valid, portable construct
-entirely (`reda-ts-like-escape`, class `lying-warning`).
-
-**What Unique emits.** `LIKE … ESCAPE '…'` now passes through unchanged on
-every target:
+**Solution.**
 
 ```sql
 -- reda-ts-like-escape, tsql → postgresql / oracle / mysql
@@ -133,6 +128,9 @@ SELECT a FROM t WHERE b LIKE '%x!%y%' ESCAPE '!';
 -- => identical on all three targets
 SELECT a FROM t WHERE b LIKE '%x!%y%' ESCAPE '!';
 ```
+
+`LIKE … ESCAPE '…'` now passes through unchanged on
+every target.
 
 Separately, PostgreSQL and MySQL treat a bare backslash as their **default**
 `LIKE` escape character (with no `ESCAPE` clause at all); Oracle and T-SQL
@@ -143,30 +141,30 @@ backslash-containing `LIKE` pattern crosses from a PostgreSQL/MySQL source to
 Oracle/T-SQL, to preserve the source's implicit escaping
 (`emit_expr.py:1858-1864`).
 
-**Divergence & warning.** `faithful` — live-verified true on all four
-engines. No warning (previously the whole statement was dropped; now
-nothing is).
+**Discussion.** *Why there is no direct mapping — there isn't one, and the
+old behaviour lied about it.* `ESCAPE` is supported **identically** by
+PostgreSQL, Oracle and MySQL — a pure syntax passthrough. The transpiler used
+to treat the `ESCAPE` clause as an "unmapped operator; no `<engine>` mapping"
+and comment out the **entire** statement with a warning that misdescribed
+reality (a mapping exists; nothing needed translating) — losing a valid,
+portable construct entirely (`reda-ts-like-escape`, class `lying-warning`).
 
-**References.** Corpus `reda-ts-like-escape` ·
+> **Note** faithful — live-verified true on all four
+> engines. No warning (previously the whole statement was dropped; now
+> nothing is).
+
+**See Also.** Corpus `reda-ts-like-escape` ·
 `emit_expr.py:1858-1864` (backslash default-escape compensation, docstring).
 
 ---
 
 ### T-SQL LIKE character classes (`'[A-C]%'`) — open, observed divergence
 
-**Source semantics.** T-SQL's `LIKE` supports bracketed **character
+**Problem.** T-SQL's `LIKE` supports bracketed **character
 classes**: `'[A-C]%'` matches any string starting with `A`, `B` or `C`.
 `'Bob' LIKE '[A-C]%'` is true (`1`) on T-SQL.
 
-**Current state — honestly, not fixed.** This is a **known, unresolved**
-finding (`tests/fixtures/challenge/FINDINGS.md`, "Observations" section,
-2026-07-30 batch), left **unscored** in the campaign because a warning *is*
-emitted — but the warning is wrong. PostgreSQL, MySQL and Oracle treat `[` and
-`]` as **literal characters** in a `LIKE` pattern (there is no bracket
-character-class syntax in standard `LIKE`), so the pattern is passed through
-verbatim and silently changes meaning: `'Bob' LIKE '[A-C]%'` is `0` (false)
-on all three, because the string would have to *start* with the literal
-character `[`. Verified directly against the running transpiler:
+**Solution.**
 
 ```sql
 -- tsql → postgresql / mysql / oracle (not a corpus case; reproduces the
@@ -182,24 +180,35 @@ SELECT CASE
 END AS r;
 ```
 
-The warning that fires is the generic **collation** divergence note (case
-sensitivity, trailing spaces) — it is real infrastructure, but it is
-attached here for the wrong reason: the actual cause is that the T-SQL
-bracket character class is untranslated syntax, not a collation difference,
-and the warning text never says so.
+*Current state — honestly, not fixed.* This is a **known, unresolved**
+finding (`tests/fixtures/challenge/FINDINGS.md`, "Observations" section,
+2026-07-30 batch), left **unscored** in the campaign because a warning *is*
+emitted — but the warning is wrong. PostgreSQL, MySQL and Oracle treat `[` and
+`]` as **literal characters** in a `LIKE` pattern (there is no bracket
+character-class syntax in standard `LIKE`), so the pattern is passed through
+verbatim and silently changes meaning: `'Bob' LIKE '[A-C]%'` is `0` (false)
+on all three, because the string would have to *start* with the literal
+character `[`. The example above was verified directly against the running
+transpiler.
 
-**What would fix it (not yet done).** Either translate the bracket class to
+**Discussion.** The warning that fires is the generic **collation**
+divergence note (case sensitivity, trailing spaces) — it is real
+infrastructure, but it is attached here for the wrong reason: the actual
+cause is that the T-SQL bracket character class is untranslated syntax, not a
+collation difference, and the warning text never says so.
+
+*What would fix it (not yet done).* Either translate the bracket class to
 each target's equivalent (PostgreSQL/Oracle: rewrite to a `SIMILAR
 TO`/`REGEXP_LIKE` form or a per-character `OR` chain; MySQL: `REGEXP`), or at
 minimum emit a warning that names the real cause instead of the collation
 boilerplate.
 
-**Divergence & warning.** **Silent-in-effect** (a warning fires, but names
-the wrong mechanism) — this page documents current behaviour, not the
-approved-limit status the other collation entries below have. Not `faithful`,
-not (yet) a correctly-documented limit.
+> **Warning** **Silent-in-effect** (a warning fires, but names
+> the wrong mechanism) — this page documents current behaviour, not the
+> approved-limit status the other collation entries below have. Not `faithful`,
+> not (yet) a correctly-documented limit.
 
-**References.** `tests/fixtures/challenge/FINDINGS.md`, "Observations (not
+**See Also.** `tests/fixtures/challenge/FINDINGS.md`, "Observations (not
 scored — dedup/borderline, for BLUE/PURPLE)" section, 2026-07-30 batch entry
 "T-SQL LIKE `'[A-C]%'` character class".
 
@@ -207,20 +216,10 @@ scored — dedup/borderline, for BLUE/PURPLE)" section, 2026-07-30 batch entry
 
 ### Negative/zero REPEAT/REPLICATE clamps
 
-**Source semantics.** PostgreSQL `repeat(s, n)` and MySQL `REPEAT(s, n)` with
+**Problem.** PostgreSQL `repeat(s, n)` and MySQL `REPEAT(s, n)` with
 `n <= 0` return an empty string `''`.
 
-**Why there is no direct mapping.** T-SQL's `REPLICATE(s, n)` and the
-`RPAD(s, LENGTH(s)*n, s)` emulation used for Oracle both return `NULL` for a
-negative count, not `''` — a different value class entirely, and on Oracle,
-compounded by Oracle's own `'' ≡ NULL` (above), so an Oracle target *cannot*
-represent PostgreSQL/MySQL's `''` result distinctly from `NULL` regardless of
-the clamp (`pg-repeat-negative`, class `func`).
-
-**What Unique emits.** T-SQL clamps the count to `0` before calling
-`REPLICATE` (`REPLICATE` of `0` is `''`, matching PostgreSQL); Oracle keeps
-its own `RPAD` emulation and warns, since the Oracle-side result is `NULL`
-either way (the `'' ≡ NULL` limit, not a clamp bug):
+**Solution.**
 
 ```sql
 -- pg-repeat-negative, postgresql → tsql
@@ -232,35 +231,37 @@ SELECT '' /* UNIQUE: Oracle stores an empty string as NULL (docs/03-unsupported.
 FROM DUAL;
 ```
 
-**Divergence & warning.** `faithful` on T-SQL (clamped to `''`, matching
-PostgreSQL/MySQL). **Warned limit** on Oracle — not a clamp defect, the same
-`'' ≡ NULL` limit documented above.
+T-SQL clamps the count to `0` before calling
+`REPLICATE` (`REPLICATE` of `0` is `''`, matching PostgreSQL); Oracle keeps
+its own `RPAD` emulation and warns, since the Oracle-side result is `NULL`
+either way (the `'' ≡ NULL` limit, not a clamp bug).
 
-**References.** Corpus `pg-repeat-negative` ·
-`docs/03-unsupported.md` §2, "Empty string as a distinct value → Oracle".
+**Discussion.** T-SQL's `REPLICATE(s, n)` and the
+`RPAD(s, LENGTH(s)*n, s)` emulation used for Oracle both return `NULL` for a
+negative count, not `''` — a different value class entirely, and on Oracle,
+compounded by Oracle's own `'' ≡ NULL` (above), so an Oracle target *cannot*
+represent PostgreSQL/MySQL's `''` result distinctly from `NULL` regardless of
+the clamp (`pg-repeat-negative`, class `func`).
+
+> **Note** faithful on T-SQL (clamped to `''`, matching
+> PostgreSQL/MySQL). **Warned limit** on Oracle — not a clamp defect, the same
+> `'' ≡ NULL` limit documented above.
+
+**See Also.** Corpus `pg-repeat-negative` ·
+`docs/03-unsupported.md` §2, "Empty string as a distinct value → Oracle" ·
+[`UNIQUE-1082`](../reference/warnings.md#unique-1082).
 
 ---
 
 ### SUBSTRING negative/zero start semantics per engine
 
-**Source semantics.** T-SQL and PostgreSQL `SUBSTRING(s, start, len)` treat a
+**Problem.** T-SQL and PostgreSQL `SUBSTRING(s, start, len)` treat a
 `start < 1` as counting *backwards from the length*: out-of-range leading
 positions still consume `len`, they just don't emit characters for them.
 `SUBSTRING('hello', 0, 3)` = `'he'` (positions 0, 1, 2 requested; position 0
 doesn't exist, so only 1–2 are returned — 2 characters, not 3).
 
-**Why there is no direct mapping.** MySQL's `SUBSTRING(s, 0, n)` treats
-position `0` as simply invalid and returns `''` (empty). Oracle's `SUBSTR(s,
-0, n)` instead **clamps** `0` up to `1` and returns `n` characters from
-there — `SUBSTR('hello', 0, 3)` = `'hel'`. Three engines, three different
-results for the same call shape, and the original code passed the call
-through unchanged with no warning (`reda-ts-substring-zero-start`, class
-`func`; live: tsql=`'he'`, pg=`'he'`, mysql=`''`, oracle=`'hel'`).
-
-**What Unique emits.** A `start <= 0` argument is rebased to T-SQL/PostgreSQL
-semantics for MySQL and Oracle: `start` becomes `1` and `len` is reduced by
-`1 - start` (the count of out-of-range leading positions that no longer need
-representing):
+**Solution.**
 
 ```sql
 -- reda-ts-substring-zero-start, tsql → mysql / oracle
@@ -273,6 +274,11 @@ SELECT SUBSTRING('abcdef', 0, 3) AS r;
 -- =>
 SELECT SUBSTR('abcdef', 1, 2) AS r;
 ```
+
+A `start <= 0` argument is rebased to T-SQL/PostgreSQL
+semantics for MySQL and Oracle: `start` becomes `1` and `len` is reduced by
+`1 - start` (the count of out-of-range leading positions that no longer need
+representing).
 
 The 2-argument form (`SUBSTRING(s, start)`, no length) gets the equivalent
 treatment: a `start <= 0` on PostgreSQL (which runs from the beginning) is
@@ -290,12 +296,20 @@ SELECT SUBSTR('abc', 1) FROM DUAL;
 SELECT SUBSTR('abc', 1);
 ```
 
-**Divergence & warning.** `faithful` — live-verified `'he'` (tsql) / `'he'`
-(pg source) reproduced as `'he'` on MySQL/Oracle post-rebase (was `''` /
-`'hel'` before the fix); `('abc','abc','bc')` verified on all three for the
-2-arg form. No warning.
+**Discussion.** MySQL's `SUBSTRING(s, 0, n)` treats
+position `0` as simply invalid and returns `''` (empty). Oracle's `SUBSTR(s,
+0, n)` instead **clamps** `0` up to `1` and returns `n` characters from
+there — `SUBSTR('hello', 0, 3)` = `'hel'`. Three engines, three different
+results for the same call shape, and the original code passed the call
+through unchanged with no warning (`reda-ts-substring-zero-start`, class
+`func`; live: tsql=`'he'`, pg=`'he'`, mysql=`''`, oracle=`'hel'`).
 
-**References.** Corpus `reda-ts-substring-zero-start`, `pg-substr-zero`,
+> **Note** faithful — live-verified `'he'` (tsql) / `'he'`
+> (pg source) reproduced as `'he'` on MySQL/Oracle post-rebase (was `''` /
+> `'hel'` before the fix); `('abc','abc','bc')` verified on all three for the
+> 2-arg form. No warning.
+
+**See Also.** Corpus `reda-ts-substring-zero-start`, `pg-substr-zero`,
 `pg-fsubstr` · `tests/integration/test_challenge.py::TestPgSubstringZeroStart`
 (pinned).
 
@@ -303,10 +317,30 @@ SELECT SUBSTR('abc', 1);
 
 ### DATALENGTH byte-vs-char lengths (UTF-16 caveat)
 
-**Source semantics.** T-SQL `DATALENGTH(x)` returns the storage **byte**
+**Problem.** T-SQL `DATALENGTH(x)` returns the storage **byte**
 length of `x`, not its character count.
 
-**Why there is no direct mapping.** PostgreSQL/MySQL's `OCTET_LENGTH` and
+**Solution.**
+
+```sql
+-- reda-ts-datalength-nchar, tsql → postgresql / mysql / oracle
+SELECT DATALENGTH(N'abc') AS r;
+-- => all three targets
+SELECT 6 AS r;
+```
+
+For a **national literal** operand, the byte count is
+computed exactly at transpile time by UTF-16-LE-encoding the literal's Python
+string value (correctly handling supplementary-plane characters via UTF-16
+surrogate pairs) and folding the whole call to that constant — sidestepping
+the byte-vs-char question entirely for a compile-time-known value.
+
+A non-national (`VARCHAR`/`VARBINARY`) argument still routes to
+`OCTET_LENGTH`/`LENGTHB`, and a `VARBINARY(MAX)` cast wrapper is unwrapped
+first (the byte length of a string is unaffected by a same-length binary
+reinterpretation).
+
+**Discussion.** PostgreSQL/MySQL's `OCTET_LENGTH` and
 Oracle's `LENGTHB` are the byte-length equivalents and match `DATALENGTH`
 exactly for an ordinary (single-byte-per-char-class) `VARCHAR`/`VARBINARY`
 argument (`ts-binary-length`). But T-SQL's `NVARCHAR`/`N'…'` national strings
@@ -316,32 +350,14 @@ prefix was originally dropped during translation, silently halving the byte
 count with no warning (`reda-ts-datalength-nchar`, class `func`; live:
 tsql=`6`, pg=`3`).
 
-**What Unique emits.** For a **national literal** operand, the byte count is
-computed exactly at transpile time by UTF-16-LE-encoding the literal's Python
-string value (correctly handling supplementary-plane characters via UTF-16
-surrogate pairs) and folding the whole call to that constant — sidestepping
-the byte-vs-char question entirely for a compile-time-known value:
+> **Note** faithful for a national **literal** (exact UTF-16
+> byte count folded at compile time). A national **column** whose value is only
+> known at runtime is not literal-foldable and still routes through
+> `OCTET_LENGTH` of the UTF-8 rendering — the same byte-vs-char divergence as
+> the general `LENGTH` limit (`docs/03-unsupported.md` §2), inherited rather
+> than specifically warned for `DATALENGTH` of a column.
 
-```sql
--- reda-ts-datalength-nchar, tsql → postgresql / mysql / oracle
-SELECT DATALENGTH(N'abc') AS r;
--- => all three targets
-SELECT 6 AS r;
-```
-
-A non-national (`VARCHAR`/`VARBINARY`) argument still routes to
-`OCTET_LENGTH`/`LENGTHB`, and a `VARBINARY(MAX)` cast wrapper is unwrapped
-first (the byte length of a string is unaffected by a same-length binary
-reinterpretation).
-
-**Divergence & warning.** `faithful` for a national **literal** (exact UTF-16
-byte count folded at compile time). A national **column** whose value is only
-known at runtime is not literal-foldable and still routes through
-`OCTET_LENGTH` of the UTF-8 rendering — the same byte-vs-char divergence as
-the general `LENGTH` limit (`docs/03-unsupported.md` §2), inherited rather
-than specifically warned for `DATALENGTH` of a column.
-
-**References.** Corpus `ts-binary-length`, `reda-ts-datalength-nchar` ·
+**See Also.** Corpus `ts-binary-length`, `reda-ts-datalength-nchar` ·
 `emit_functions.py:3094-3115` (docstring) ·
 `docs/03-unsupported.md` §2, "`LENGTH` bytes-vs-chars".
 
@@ -349,22 +365,10 @@ than specifically warned for `DATALENGTH` of a column.
 
 ### SOUNDEX as the canonical unmapped-builtin gate example
 
-**Source semantics.** Oracle and T-SQL's `SOUNDEX(s)` is a native phonetic
+**Problem.** Oracle and T-SQL's `SOUNDEX(s)` is a native phonetic
 built-in.
 
-**Why there is no direct mapping.** PostgreSQL has no `SOUNDEX` in its base
-catalog (it lives only in the optional `fuzzystrmatch` extension, which
-Unique cannot assume is installed on the target database) — a genuine,
-source-engine-built-in-but-target-has-no-form gap, not an implementation
-oversight. This is the reference example the built-in catalog gate
-(`docs/03-unsupported.md` §2.1) is written around: a call that is a built-in
-of the *source* engine (so it is clearly meant to run, not a user object)
-but absent from the *target*'s catalog degrades the **whole statement**
-rather than shipping a call the target engine would reject outright.
-
-**What Unique emits.** The statement is preserved as a `UNIQUE:` carrier
-comment naming the unmapped function, with a `validity_gate` warning — never
-the bare, invalid `SOUNDEX(...)` call shipped to a target that lacks it:
+**Solution.**
 
 ```sql
 -- ora-soundex, oracle → postgresql
@@ -375,36 +379,68 @@ SELECT SOUNDEX('Smith') AS r FROM DUAL;
 -- SELECT SOUNDEX('Smith') AS r FROM DUAL
 ```
 
+The statement is preserved as a `UNIQUE:` carrier
+comment naming the unmapped function, with a `validity_gate` warning — never
+the bare, invalid `SOUNDEX(...)` call shipped to a target that lacks it.
+
 `SOUNDEX` → T-SQL and `SOUNDEX` → Oracle (as a source-native call reaching a
 target that *does* have it) pass through unchanged — only the PostgreSQL leg
 degrades. `my-soundex-format` confirms `FORMAT(x, d)` translates cleanly
 alongside a `SOUNDEX` call in the same statement — the degrade is scoped to
 `SOUNDEX` specifically, not the whole function-name-resolution path.
 
-**Divergence & warning.** **Documented limit, warned** — a carrier + the
-`docs/03-unsupported.md` §2.1 catalog entry (`unsupported` finding), never a
-silently-invalid `SOUNDEX(...)` call on PostgreSQL. Deliberately **not**
-special-cased with a hand-built `SOUNDEX` emulation — it is kept as the
-worked example of the general unmapped-built-in gate mechanism, which is
-meant to catch the long tail of similar gaps (`GENERATE_SERIES`→Oracle,
-`LISTAGG`→MySQL, `INITCAP`→T-SQL/MySQL, …) rather than being patched one
-function at a time.
+**Discussion.** PostgreSQL has no `SOUNDEX` in its base
+catalog (it lives only in the optional `fuzzystrmatch` extension, which
+Unique cannot assume is installed on the target database) — a genuine,
+source-engine-built-in-but-target-has-no-form gap, not an implementation
+oversight. This is the reference example the built-in catalog gate
+(`docs/03-unsupported.md` §2.1) is written around: a call that is a built-in
+of the *source* engine (so it is clearly meant to run, not a user object)
+but absent from the *target*'s catalog degrades the **whole statement**
+rather than shipping a call the target engine would reject outright.
 
-**References.** Corpus `ora-soundex`, `ora-soundex3`, `my-soundex-format` ·
+> **Warning** **Documented limit, warned** — a carrier + the
+> `docs/03-unsupported.md` §2.1 catalog entry (`unsupported` finding), never a
+> silently-invalid `SOUNDEX(...)` call on PostgreSQL. Deliberately **not**
+> special-cased with a hand-built `SOUNDEX` emulation — it is kept as the
+> worked example of the general unmapped-built-in gate mechanism, which is
+> meant to catch the long tail of similar gaps (`GENERATE_SERIES`→Oracle,
+> `LISTAGG`→MySQL, `INITCAP`→T-SQL/MySQL, …) rather than being patched one
+> function at a time.
+
+**See Also.** Corpus `ora-soundex`, `ora-soundex3`, `my-soundex-format` ·
 `docs/03-unsupported.md` §2.1, "Unmapped built-in scalar functions" ·
 `src/unique/core/output_gate.py::_untranslated_source_builtin`,
-`gate_reason`.
+`gate_reason` · [`UNIQUE-1151`](../reference/warnings.md#unique-1151).
 
 ---
 
 ### Collation and ordering divergences — documented limits
 
-**Source semantics.** String equality, `ORDER BY`, `DISTINCT`, `GROUP BY` and
+**Problem.** String equality, `ORDER BY`, `DISTINCT`, `GROUP BY` and
 `LIKE` all compare under the source engine's **default collation** — case
 sensitivity, accent sensitivity, and trailing-space handling are properties
 of that collation, not of the SQL text.
 
-**Why there is no direct mapping.** Collation is a **per-column** (or
+**Solution.**
+
+```sql
+-- pg-order-nulls-default, postgresql → mysql
+SELECT x FROM (VALUES (3),(1),(NULL)) v(x) ORDER BY x;
+-- =>
+SELECT x
+FROM (SELECT 3 AS x UNION ALL SELECT 1 UNION ALL SELECT NULL) v
+ORDER BY CASE WHEN x IS NULL THEN 1 ELSE 0 END, x ASC;
+```
+
+A related but **fixable** case is `NULL`-ordering default: PostgreSQL and
+Oracle sort `NULL` **high** (last, ascending) by default; MySQL and T-SQL
+sort it **low** and have no `NULLS FIRST/LAST` keyword to ask for the other
+order explicitly. This *is* statement-compensable — the source order can be
+reconstructed with a leading priority key — so it is not a limit but a
+`faithful` rewrite.
+
+**Discussion.** Collation is a **per-column** (or
 connection-default) property that a statement like `SELECT 'a ' = 'a'` does
 not carry any trace of — there is nothing in the transpiled text to compile
 against. T-SQL's default collation is case-insensitive and (per SQL Server's
@@ -422,22 +458,6 @@ SELECT IIF('a ' = 'a', 1, 0) AS r;
 -- T-SQL: 1 (true, CI + space-insensitive default).  Others: 0 (false).
 ```
 
-A related but **fixable** case is `NULL`-ordering default: PostgreSQL and
-Oracle sort `NULL` **high** (last, ascending) by default; MySQL and T-SQL
-sort it **low** and have no `NULLS FIRST/LAST` keyword to ask for the other
-order explicitly. This *is* statement-compensable — the source order can be
-reconstructed with a leading priority key — so it is not a limit but a
-`faithful` rewrite:
-
-```sql
--- pg-order-nulls-default, postgresql → mysql
-SELECT x FROM (VALUES (3),(1),(NULL)) v(x) ORDER BY x;
--- =>
-SELECT x
-FROM (SELECT 3 AS x UNION ALL SELECT 1 UNION ALL SELECT NULL) v
-ORDER BY CASE WHEN x IS NULL THEN 1 ELSE 0 END, x ASC;
-```
-
 MySQL's/T-SQL's default **case-insensitive** collation additionally changes
 what `DISTINCT`/`GROUP BY`/`ORDER BY` themselves consider equal — `'a'` and
 `'A'` collapse into one row under `DISTINCT` on MySQL/T-SQL but stay two rows
@@ -448,14 +468,15 @@ would not be in the select list, and it does not change what `DISTINCT`
 itself deduplicates) — documented separately as its own limit
 (`docs/03-unsupported.md` §3.14).
 
-**Divergence & warning.** `NULL`-ordering: `faithful` (live-verified
-reconstruction). Case/accent/trailing-space **comparison** results and
-case-insensitive **deduplication** row counts: **documented limits, warned**
-— no workaround exists without column-level collation visibility Unique does
-not have.
+> **Warning** `NULL`-ordering: `faithful` (live-verified
+> reconstruction). Case/accent/trailing-space **comparison** results and
+> case-insensitive **deduplication** row counts: **documented limits, warned**
+> — no workaround exists without column-level collation visibility Unique does
+> not have.
 
-**References.** Corpus `ts-trailing-eq`, `ts-trailing-space-cmp`,
+**See Also.** Corpus `ts-trailing-eq`, `ts-trailing-space-cmp`,
 `pg-order-nulls-default`, `my-distinct-case`, `my-group-case` ·
 `docs/03-unsupported.md` §2, "String collation in `=`/`ORDER BY`/`DISTINCT`/
 `LIKE`" · §3.14, "Case-Insensitive Collation Under DISTINCT / ORDER BY" ·
-`tests/integration/test_challenge.py::TestNullOrderingEmulation` (pinned).
+`tests/integration/test_challenge.py::TestNullOrderingEmulation` (pinned) ·
+[`UNIQUE-1015`](../reference/warnings.md#unique-1015).
