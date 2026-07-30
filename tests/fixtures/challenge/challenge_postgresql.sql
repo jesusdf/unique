@@ -854,3 +854,6 @@ SELECT a, b FROM (VALUES (1,2),(3,4)) v(a,b) WHERE (a, b) > (1, 5)
 
 -- CASE[open][class=invalid]: pg-bool-to-int-cast — the idiomatic PG cast of a boolean predicate to int, (a > 1)::int, is emitted verbatim as CAST(a > 1 AS INT) on T-SQL and Oracle, which have no boolean value type and reject a predicate as a CAST operand (T-SQL error 156; Oracle ORA-02000). No warning. PG=(1). Shares the root cause with pg-boolagg-filter (boolean value not wrapped to 1/0) but via a direct cast, not an aggregate.
 SELECT (a > 1)::int AS r FROM (VALUES (2)) v(a)
+
+-- CASE[open][class=invalid]: pg-group-by-ordinal — positional GROUP BY (GROUP BY 1, meaning the first select item) is emitted verbatim to T-SQL and Oracle, neither of which supports positional GROUP BY: T-SQL rejects the integer (error 164 'GROUP BY expression must contain at least one column that is not an outer reference') and Oracle raises ORA-03162 (group_by_position_enabled is FALSE). No warning. PG/MySQL support it. PG=[(1,2),(2,1)].
+SELECT a, COUNT(*) AS c FROM (VALUES (1),(1),(2)) v(a) GROUP BY 1
