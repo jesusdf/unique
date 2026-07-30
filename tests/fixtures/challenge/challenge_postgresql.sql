@@ -869,3 +869,6 @@ SELECT id, v FROM redb_ser ORDER BY id;
 
 -- CASE[open][class=func]: pg-date-trunc-week — date_trunc('week', d) starts the week on MONDAY in PostgreSQL (ISO). T-SQL DATETRUNC(week, d) starts on SUNDAY, so it returns a DIFFERENT date (PG 2020-06-15 vs T-SQL 2020-06-14) with no warning. Oracle is worse: it emits TRUNC(d, 'WEEK'), but 'WEEK' is not a valid Oracle format model (ORA-01898) — the Monday-based form is TRUNC(d, 'IW') (which returns 2020-06-15, matching PG). Both defects silent.
 SELECT date_trunc('week', DATE '2020-06-17') AS d
+
+-- CASE[open][class=func]: pg-date-minus-integer — date + integer correctly maps to DATEADD/DATE_ADD, but date - integer is emitted VERBATIM (CAST(... AS DATE) - 7): MySQL coerces the date to the number 20200301 and subtracts, returning garbage 20200294 (not 2020-02-23); T-SQL rejects it (error 206, 'date is incompatible with int'). No warning. PG=2020-02-23. Asymmetric: the '+' path is handled, the '-' path is not.
+SELECT DATE '2020-03-01' - 7 AS d
