@@ -793,6 +793,26 @@ CASES.update(
                 "mysql": Expect(("UNION ALL",), ("VALUES (1)",)),
             },
         ),
+        # func: DISTINCT ON (a) keeps one row per a (first by ORDER BY); a plain
+        # SELECT DISTINCT would keep every (a,b) pair. Rewrite to ROW_NUMBER()
+        # OVER (PARTITION BY a ORDER BY …) = 1 in a derived table. All = 2 rows.
+        "pg-distinct-on": Case(
+            "pg-distinct-on ",
+            {
+                "tsql": Expect(
+                    ("ROW_NUMBER() OVER (PARTITION BY a ORDER BY", "uq_rn = 1"),
+                    ("DISTINCT",),
+                ),
+                "mysql": Expect(
+                    ("ROW_NUMBER() OVER (PARTITION BY a ORDER BY", "uq_rn = 1"),
+                    ("DISTINCT",),
+                ),
+                "oracle": Expect(
+                    ("ROW_NUMBER() OVER (PARTITION BY a ORDER BY", "uq_rn = 1"),
+                    ("DISTINCT",),
+                ),
+            },
+        ),
     }
 )
 

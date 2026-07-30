@@ -1265,6 +1265,66 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     )
 
 
+def _rewrite_distinct_on(
+    *,
+    distinct_on: tuple[ASTNode, ...],
+    columns: tuple[ASTNode, ...],
+    from_clause: object,
+    joins: tuple[JoinClause, ...],
+    where: ASTNode | None,
+    order_by: tuple[OrderByItem, ...],
+    limit: object,
+    ctes: tuple[CTEDefinition, ...],
+) -> SelectStatement | None:
+    """Rewrite PostgreSQL ``SELECT DISTINCT ON (keys) … ORDER BY …`` into the
+    portable ``ROW_NUMBER() OVER (PARTITION BY keys ORDER BY …) = 1`` form so
+    the one-row-per-group semantics survive on engines with no DISTINCT ON
+    (T-SQL/MySQL/Oracle). ``SELECT DISTINCT`` alone would keep every distinct
+    tuple. Returns None when a projected column cannot be referenced from the
+    wrapping query (so the caller keeps the current behaviour)."""
+
+    def _outer_ref(col: ASTNode) -> ASTNode | None:
+        if isinstance(col, Star):
+            return Star()
+        if isinstance(col, Alias):
+            return ColumnRef(name=col.name, quoted=col.quoted)
+        if isinstance(col, ColumnRef):
+            return ColumnRef(name=col.name, quoted=col.quoted)
+        return None
+
+    outer_columns = tuple(_outer_ref(c) for c in columns)
+    if any(c is None for c in outer_columns):
+        return None
+    # ROW_NUMBER needs a deterministic order; the DISTINCT ON's own ORDER BY
+    # picks the surviving row (fall back to the keys when none was given).
+    window_order = order_by or tuple(OrderByItem(expression=k) for k in distinct_on)
+    rn = Alias(
+        expression=WindowFunction(
+            function=FunctionCall(name="ROW_NUMBER"),
+            window=WindowSpec(partition_by=distinct_on, order_by=window_order),
+        ),
+        name="uq_rn",
+    )
+    inner = SelectStatement(
+        columns=(*columns, rn),
+        from_clause=from_clause,  # type: ignore[arg-type]
+        joins=joins,
+        where=where,
+    )
+    return SelectStatement(
+        columns=cast("tuple[ASTNode, ...]", outer_columns),
+        from_clause=SubqueryExpression(query=inner, alias="uq_distinct_on"),
+        where=BinaryOp(
+            operator=BinaryOperator.EQ,
+            left=ColumnRef(name="uq_rn"),
+            right=Literal(value=1, dtype="integer"),
+        ),
+        order_by=order_by,
+        limit=limit,  # type: ignore[arg-type]
+        ctes=ctes,
+    )
+
+
 def _convert_select(expr: exp.Expression) -> SelectStatement:
     """Convert a sqlglot Select expression to a SelectStatement IR node."""
     # Handle Union by extracting the left Select
@@ -1441,8 +1501,15 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
             with_ties=with_ties,
         )
 
-    # DISTINCT
-    distinct = expr.args.get("distinct") is not None
+    # DISTINCT / DISTINCT ON
+    distinct_node = expr.args.get("distinct")
+    distinct = distinct_node is not None
+    distinct_on: tuple[ASTNode, ...] = ()
+    if distinct_node is not None and distinct_node.args.get("on") is not None:
+        _on = distinct_node.args["on"]
+        _on_exprs = _on.expressions if isinstance(_on, exp.Tuple) else [_on]
+        distinct_on = tuple(convert_expression(e) for e in _on_exprs)
+        distinct = False  # DISTINCT ON is not a plain SELECT DISTINCT
 
     # CTEs
     ctes: tuple[CTEDefinition, ...] = ()
@@ -1462,6 +1529,25 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
             _srf_alias = _only.name if isinstance(_only, Alias) else "generate_series"
             from_clause = TableRef(name=_srf_alias, function=_srf, alias=_srf_alias)
             columns = (ColumnRef(name=_srf_alias),)
+
+    if (
+        distinct_on
+        and not group_by
+        and not group_by_composite
+        and not grouping_sets_sql
+    ):
+        rewritten = _rewrite_distinct_on(
+            distinct_on=distinct_on,
+            columns=columns,
+            from_clause=from_clause,
+            joins=joins,
+            where=where,
+            order_by=order_by,
+            limit=limit,
+            ctes=ctes,
+        )
+        if rewritten is not None:
+            return rewritten
 
     return SelectStatement(
         columns=columns,
