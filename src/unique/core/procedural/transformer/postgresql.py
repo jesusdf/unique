@@ -10,17 +10,27 @@ import dataclasses
 import re
 
 from unique.core.ast_nodes import (
+    AnonymousBlock,
     ASTNode,
     CommentStatement,
+    CreateFunctionStatement,
+    CreateProcedureStatement,
+    CreateTriggerStatement,
     DataType,
     DeclareStatement,
     EmbeddedDML,
+    ExceptionBlock,
+    ExitStatement,
+    ForeachStatement,
     ForLoopStatement,
+    GetDiagnosticsStatement,
+    LoopStatement,
     RawSQL,
     StatementList,
     TransactionAction,
     TransactionStatement,
     TryCatchBlock,
+    WhileStatement,
 )
 from unique.core.procedural.transformer.base import (
     ProceduralTransformer,
@@ -44,6 +54,144 @@ class PostgresTransformer(ProceduralTransformer):
                 "@@TRANCOUNT", "the routine manages its transaction"
             ),
         }
+
+    # -- Implicit-cursor SQL%ROWCOUNT in expression position (B37) -----------
+    #
+    # PostgreSQL reads the last statement's row count only through the
+    # ``GET DIAGNOSTICS x = ROW_COUNT`` *statement* — it has no inline form,
+    # so ``emit.py`` degrades an inline ``SQL%ROWCOUNT`` to this carrier. Where
+    # the reference is single-evaluated (an assignment, an ``IF`` condition, a
+    # call argument, a ``RETURN``) we hoist a ``GET DIAGNOSTICS`` capturing the
+    # row count into a declared local immediately before the referencing
+    # statement, then substitute the local. Oracle's ``SQL%ROWCOUNT`` names the
+    # last executed DML; in straight-line code that DML is the previous
+    # statement, so a capture placed right before the use (``GET DIAGNOSTICS``
+    # does not itself alter ROW_COUNT) reads exactly the value the source would.
+    # A re-evaluated loop/exit condition cannot be captured once — it degrades
+    # honestly, keeping the existing UNIQUE-1033 carrier.
+    #: The reference to substitute: either emit.py's degrade carrier (the
+    #: usual case, e.g. an IF condition) or the raw source spelling that some
+    #: positions ship untouched (a CALL argument's text). The carrier
+    #: alternative is listed first so it consumes the whole ``0 /* … */`` span —
+    #: the source spelling nested inside the comment is never matched on its own.
+    _ROWCOUNT_CARRIER_RE = re.compile(
+        r"0\s*/\*\s*UNIQUE-1033:[^*]*\*/|\bSQL\s*%\s*ROWCOUNT\b", re.IGNORECASE
+    )
+    _ROWCOUNT_TMP = "uq_rowcount"
+    #: Fields whose value is a nested statement body (recursed into so a
+    #: reference inside an IF/loop/EXCEPTION body hoists at its own level).
+    _ROWCOUNT_BODY_FIELDS = (
+        "body",
+        "then_body",
+        "else_body",
+        "try_body",
+        "catch_body",
+        "statements",
+    )
+
+    def _transform_procedure(self, node: CreateProcedureStatement) -> ASTNode:
+        return self._hoist_implicit_rowcount(super()._transform_procedure(node))
+
+    def _transform_function(self, node: CreateFunctionStatement) -> ASTNode:
+        return self._hoist_implicit_rowcount(super()._transform_function(node))
+
+    def _transform_trigger(self, node: CreateTriggerStatement) -> ASTNode:
+        return self._hoist_implicit_rowcount(super()._transform_trigger(node))
+
+    def _transform_anonymous_block(self, node: AnonymousBlock) -> ASTNode:
+        return self._hoist_implicit_rowcount(super()._transform_anonymous_block(node))
+
+    def _hoist_implicit_rowcount(self, node: ASTNode) -> ASTNode:
+        """Hoist a ``GET DIAGNOSTICS`` capture ahead of every single-evaluated
+        ``SQL%ROWCOUNT`` reference in *node*'s body and declare the local once.
+        A no-op when the body carries no such carrier."""
+        field = "body" if hasattr(node, "body") else "statements"
+        body = getattr(node, field, None)
+        if not isinstance(body, tuple):
+            return node
+        self._rowcount_hoisted = False
+        new_body = self._inject_rowcount(body)
+        if not self._rowcount_hoisted:
+            return node
+        decl = DeclareStatement(
+            name=self._ROWCOUNT_TMP, data_type=DataType(name="bigint")
+        )
+        return dataclasses.replace(node, **{field: (decl, *new_body)})  # type: ignore[arg-type]
+
+    def _inject_rowcount(self, stmts: tuple[ASTNode, ...]) -> tuple[ASTNode, ...]:
+        out: list[ASTNode] = []
+        for stmt in stmts:
+            stmt = self._recurse_rowcount_bodies(stmt)
+            if isinstance(
+                stmt,
+                (
+                    WhileStatement,
+                    LoopStatement,
+                    ForLoopStatement,
+                    ForeachStatement,
+                    ExitStatement,
+                ),
+            ):
+                # A loop/exit condition is re-evaluated (or loop-scoped); a
+                # single capture cannot stand in for it — degrade honestly.
+                # The body was already handled by _recurse_rowcount_bodies.
+                out.append(stmt)
+                continue
+            new_stmt, found = self._substitute_rowcount_expr(stmt)
+            if found:
+                out.append(
+                    GetDiagnosticsStatement(items=((self._ROWCOUNT_TMP, "ROW_COUNT"),))
+                )
+                self._rowcount_hoisted = True
+            out.append(new_stmt)
+        return tuple(out)
+
+    def _recurse_rowcount_bodies(self, stmt: ASTNode) -> ASTNode:
+        """Recurse the hoist into *stmt*'s nested statement bodies so a
+        reference inside a control-flow block captures at its own level."""
+        changes: dict[str, object] = {}
+        for name in self._ROWCOUNT_BODY_FIELDS:
+            val = getattr(stmt, name, None)
+            if (
+                isinstance(val, tuple)
+                and val
+                and all(isinstance(x, ASTNode) for x in val)
+            ):
+                new = self._inject_rowcount(val)
+                if new != val:
+                    changes[name] = new
+        if isinstance(stmt, ExceptionBlock):
+            new_handlers = tuple(
+                dataclasses.replace(h, body=self._inject_rowcount(h.body))
+                for h in stmt.handlers
+            )
+            if new_handlers != stmt.handlers:
+                changes["handlers"] = new_handlers
+        if changes:
+            return dataclasses.replace(stmt, **changes)  # type: ignore[arg-type]
+        return stmt
+
+    def _substitute_rowcount_expr(self, stmt: ASTNode) -> tuple[ASTNode, bool]:
+        """Replace the UNIQUE-1033 carrier with the captured local in *stmt*'s
+        own expression parts (scalar sub-nodes and ``sql``/``args`` text) —
+        never in nested bodies, which ``_recurse_rowcount_bodies`` owns."""
+        found = False
+        changes: dict[str, object] = {}
+        for f in dataclasses.fields(stmt):
+            val = getattr(stmt, f.name)
+            if isinstance(val, str) and f.name in ("sql", "args"):
+                new = self._ROWCOUNT_CARRIER_RE.sub(self._ROWCOUNT_TMP, val)
+                if new != val:
+                    changes[f.name] = new
+                    found = True
+            elif isinstance(val, ASTNode):
+                new_node, sub_found = self._substitute_rowcount_expr(val)
+                if sub_found:
+                    changes[f.name] = new_node
+                    found = True
+        if changes:
+            return dataclasses.replace(stmt, **changes), True  # type: ignore[arg-type]
+        return stmt, found
 
     def _transform_try_catch(self, node: TryCatchBlock) -> ASTNode:
         """plpgsql lowers TRY/CATCH to ``BEGIN … EXCEPTION``, which runs the
