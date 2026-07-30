@@ -1074,6 +1074,38 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 "Original:\n" + _comment_block(node.sql)
             )
 
+    # T-SQL ``OUTPUT … INTO <table>`` (sqlglot models it as a Returning with an
+    # ``into`` arg): the INTO redirect breaks the plain OUTPUT→RETURNING
+    # rewrite, leaking the INSERTED./DELETED. qualifier (RETURNING INSERTED.a —
+    # PG 'missing FROM-clause entry for "inserted"') and dropping the redirect
+    # silently. PostgreSQL has no INTO-redirect in a plain INSERT (it needs a
+    # data-modifying CTE), so strip the qualifier + the INTO and keep the
+    # RETURNING result, documenting the dropped redirect.
+    if node.kind == "RETURNING" and dialect == "postgresql":
+        try:
+            _into_parsed = sqlglot.parse(node.sql, read=read)
+        except Exception:  # noqa: BLE001
+            _into_parsed = []
+        _had_into = False
+        for _e in _into_parsed:
+            if _e is None:
+                continue
+            for _ret in _e.find_all(exp.Returning):
+                if _ret.args.get("into") is not None:
+                    _had_into = True
+                    _ret.set("into", None)
+                    for _col in _ret.find_all(exp.Column):
+                        if _col.table and _col.table.upper() in ("INSERTED", "DELETED"):
+                            _col.set("table", None)
+        if _had_into:
+            _body = ";\n".join(_e.sql(dialect=write) for _e in _into_parsed if _e)
+            return (
+                f"{_body}\n-- UNIQUE: T-SQL OUTPUT … INTO <table> redirect has no "
+                "PostgreSQL equivalent in a plain INSERT (it needs a "
+                "data-modifying CTE); the INTO target is dropped and the "
+                "RETURNING result is kept (docs/03-unsupported.md)"
+            )
+
     # Oracle's RETURNING…INTO exists only inside PL/SQL with target
     # variables; top-level SQL keeps the DML effect, the clause strips
     # with a documented note (same contract as the MySQL branch below).

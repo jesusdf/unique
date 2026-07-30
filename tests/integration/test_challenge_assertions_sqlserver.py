@@ -462,6 +462,16 @@ CASES.update(
             "oracle": {"present": ["UPDATE t", "SET b = 1"], "degrade": True},
             "mysql": {"present": ["UPDATE t", "SET b = 1"], "degrade": True},
         },
+        # invalid: OUTPUT ... INTO leaked the INSERTED. qualifier and dropped the
+        # INTO silently. Strip the qualifier (RETURNING a) and warn on the
+        # dropped INTO redirect (PG has none in a plain INSERT).
+        "reda-ts-output-into": {
+            "postgresql": {
+                "present": ["INSERT INTO t (a) VALUES (1) RETURNING a"],
+                "absent": ["RETURNING INSERTED", "INTO log"],
+                "degrade": True,
+            },
+        },
         "reda-ts-pivot": {
             "oracle": {
                 "present": ["PIVOT (SUM(v) FOR dept IN ('A' AS A, 'B' AS B))"],
