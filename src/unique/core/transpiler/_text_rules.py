@@ -325,7 +325,10 @@ _QI_ON_RE = re.compile(r"(?im)^\s*SET\s+QUOTED_IDENTIFIER\s+ON\b")
 # No-silent-loss invariant (audit 2026-07-02): a "UNIQUE:" carrier comment in
 # the output marks a lossy conversion, and every such carrier must be mirrored
 # in TranspileResult.warnings so API/CLI consumers get a programmatic signal.
-_CARRIER_RE = re.compile(r"UNIQUE:\s*(?P<frag>[^\n]*)")
+# Capture the carrier message up to the block-comment terminator ``*/`` (or the
+# line end for ``--`` carriers) — an inline ``/* UNIQUE: … */`` mid-statement is
+# followed by more SQL on the same line, which must NOT leak into the warning.
+_CARRIER_RE = re.compile(r"UNIQUE:\s*(?P<frag>.*?)(?:\*/|$)", re.M)
 
 
 def _carrier_fragments(sql: str) -> list[str]:

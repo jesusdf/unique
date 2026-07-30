@@ -1187,6 +1187,24 @@ def _emit_interval_chain(
 
 def _emit_binary(node: BinaryOp, dialect: str) -> str:
     """Emit a binary operation."""
+    # A T-SQL hex/binary literal (0x0A) used in ARITHMETIC is its integer value
+    # (0x0A + 5 = 15); emitting it as a binary value (PG ``'\\x0A'::bytea`` /
+    # Oracle HEXTORAW) makes the arithmetic invalid (PG 'bytea + integer',
+    # ORA-00932). Fold each hex-literal operand to its integer value so the
+    # numeric-context semantics survive. (A hex literal OUTSIDE arithmetic keeps
+    # its binary emission — the fold is gated to the arithmetic operators.)
+    if node.operator in _CONCAT_ARITH_OPS and any(
+        isinstance(s, Literal) and s.dtype == "hex" for s in (node.left, node.right)
+    ):
+
+        def _fold_hex(side: ASTNode) -> ASTNode:
+            if isinstance(side, Literal) and side.dtype == "hex":
+                return Literal(value=int(str(side.value), 16), dtype="integer")
+            return side
+
+        node = dataclasses.replace(
+            node, left=_fold_hex(node.left), right=_fold_hex(node.right)
+        )
     # MySQL arithmetic coerces a string operand by parsing its LEADING numeric
     # prefix ('0x10' + 0 = 0 — the parse stops at 'x'); PG would read '0x10' as
     # hex (16) and Oracle/T-SQL error. Fold a literal string operand of a

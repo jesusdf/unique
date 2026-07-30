@@ -421,6 +421,39 @@ CASES.update(
                 "degrade": True,
             },
         },
+        # invalid: DATEPART(WEEKDAY) mapped to EXTRACT(DAYOFWEEK) which no engine
+        # has; per-target weekday (default DATEFIRST Sunday=1) + a warned caveat.
+        "reda-ts-datepart-weekday": {
+            "postgresql": {
+                "present": ["EXTRACT(DOW FROM CAST('2020-06-15' AS DATE)) + 1"],
+                "absent": ["DAYOFWEEK"],
+                "degrade": True,
+            },
+            "mysql": {
+                "present": ["DAYOFWEEK(CAST('2020-06-15' AS DATE))"],
+                "absent": ["DAYOFWEEK FROM", "EXTRACT"],
+                "degrade": True,
+            },
+            "oracle": {
+                "present": ["MOD(MOD(TRUNC(DATE '2020-06-15') - DATE '1970-01-04'"],
+                "absent": ["DAYOFWEEK"],
+                "degrade": True,
+            },
+        },
+        # invalid: 3-arg CONVERT with a numeric target ignores the style — it is
+        # a plain CAST, not a date parse.
+        "reda-ts-convert-numeric-style": {
+            "postgresql": {"present": ["CAST('26' AS INT)"], "absent": ["TO_TIMESTAMP"]},
+            "mysql": {"present": ["CAST('26' AS SIGNED)"], "absent": ["STR_TO_DATE"]},
+            "oracle": {"present": ["CAST('26' AS INT)"], "absent": ["TO_TIMESTAMP"]},
+        },
+        # invalid: a hex/binary literal in arithmetic folds to its integer value
+        # (a binary emission makes bytea/HEXTORAW arithmetic invalid).
+        "reda-ts-hex-literal-arith": {
+            "postgresql": {"present": ["10 + 5"], "absent": ["bytea"]},
+            "oracle": {"present": ["10 + 5"], "absent": ["HEXTORAW"]},
+            "mysql": {"present": ["10 + 5"], "absent": ["x'0A'"]},
+        },
         "reda-ts-pivot": {
             "oracle": {
                 "present": ["PIVOT (SUM(v) FOR dept IN ('A' AS A, 'B' AS B))"],

@@ -1806,6 +1806,26 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
                 # 1900-01-07 was a Sunday; DATEFIRST-independent (T-SQL % carries
                 # the sign, so the +7/%7 wrap keeps pre-1900 dates 0..6).
                 return f"(DATEDIFF(DAY, '19000107', {value}) % 7 + 7) % 7"
+        if part == "DAYOFWEEK":
+            # T-SQL DATEPART(WEEKDAY, d) (sqlglot maps it to EXTRACT(DAYOFWEEK));
+            # no engine has a DAYOFWEEK extract unit. The value is 1..7 keyed on
+            # @@DATEFIRST — under the default (us_english, Sunday=1) it is
+            # DOW(Sunday=0..6) + 1. MySQL DAYOFWEEK already numbers Sunday=1..7.
+            # @@DATEFIRST is a session setting the transpiler cannot see, so the
+            # conversion is warned as assuming the default.
+            _wd_note = (
+                " /* UNIQUE: DATEPART(WEEKDAY) is @@DATEFIRST-dependent; converted "
+                "assuming the session default (Sunday=1) */"
+            )
+            if dialect == "mysql":
+                return f"DAYOFWEEK({value}){_wd_note}"
+            if dialect == "oracle":
+                return (
+                    f"(MOD(MOD(TRUNC({value}) - DATE '1970-01-04', 7) + 7, 7) + 1)"
+                    f"{_wd_note}"
+                )
+            if dialect == "postgresql":
+                return f"(EXTRACT(DOW FROM {value}) + 1){_wd_note}"
         if part == "WEEK":
             # PG's WEEK is ISO 8601. Oracle's EXTRACT rejects it; MySQL's native
             # EXTRACT(WEEK) follows default_week_format (mode 0, off by one) and

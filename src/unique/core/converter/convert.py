@@ -764,11 +764,20 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
             if _c.args.get("style") is None:
                 continue
             _ct = _c.this if isinstance(_c.this, exp.DataType) else _c.expression
-            if (
-                isinstance(_ct, exp.DataType)
-                and _ct.this in (exp.DataType.Type.VARBINARY, exp.DataType.Type.BINARY)
-                and str(_c.args["style"].name).strip("'") == "0"
-            ):
+            if not isinstance(_ct, exp.DataType):
+                continue
+            _style_val = str(_c.args["style"].name).strip("'")
+            # A BINARY/VARBINARY conversion with style 0 is the default byte
+            # reinterpretation, and a NUMERIC target ignores the style entirely
+            # (the T-SQL style code only shapes date/time and the numeric->string
+            # direction — CONVERT(INT, '26', 0) is just a cast). Drop the
+            # redundant style so it models as a plain CAST instead of being
+            # mis-read as a date parse (TO_TIMESTAMP) or dragged into passthrough.
+            _is_binary = _ct.this in (
+                exp.DataType.Type.VARBINARY,
+                exp.DataType.Type.BINARY,
+            )
+            if (_is_binary and _style_val == "0") or _ct.this in exp.DataType.NUMERIC_TYPES:
                 _c.set("style", None)
     if isinstance(expr, exp.Select) and any(
         not _styled_convert_is_modeled(c)
