@@ -132,6 +132,8 @@ _CURATED_STOPWORDS: tuple[str, ...] = (
     "serveroutput",
     "sys_refcursor",
     "time_zone",
+    "tooltip",
+    "traceability",
     "trancount",
     "utl_raw",
     "xmltype",
