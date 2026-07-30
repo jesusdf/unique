@@ -13,6 +13,8 @@ referential-integrity / validation rule survives on every target.
 
 from __future__ import annotations
 
+import re
+
 import sqlglot
 
 from unique.core.transpiler import Transpiler
@@ -91,15 +93,21 @@ def test_column_comment_preserved() -> None:
 
 def test_oracle_fk_on_update_stripped() -> None:
     # Oracle has no ON UPDATE referential action; keep the FK + ON DELETE, drop
-    # ON UPDATE (rather than ship invalid DDL). Documented limitation.
-    out = _t(
+    # ON UPDATE (rather than ship invalid DDL) — but NOT silently: a carrier +
+    # warning surface the loss (docs/03-unsupported.md).
+    result = Transpiler().transpile(
         "CREATE TABLE t (a INT, b INT, CONSTRAINT fk FOREIGN KEY (b) "
         "REFERENCES p(id) ON DELETE CASCADE ON UPDATE CASCADE)",
         "postgresql",
         "oracle",
     )
-    assert "ON UPDATE" not in out.upper(), out
-    assert "ON DELETE CASCADE" in out.upper(), out
+    out = result.sql
+    # The executable DDL (carrier comment stripped) must not carry ON UPDATE.
+    exec_sql = re.sub(r"/\*.*?\*/", "", out, flags=re.S)
+    assert "ON UPDATE" not in exec_sql.upper(), out
+    assert "ON DELETE CASCADE" in exec_sql.upper(), out
+    assert "UNIQUE:" in out, out  # carrier present
+    assert result.warnings, out  # loss surfaced (no silent drop)
     assert _parses(out, "oracle"), out
 
 

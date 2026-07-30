@@ -41,6 +41,7 @@ from unique.core.ast_nodes import (
     ExcludedColumn,
     ExpressionList,
     FunctionCall,
+    GroupingElement,
     InsertStatement,
     JoinClause,
     JoinType,
@@ -50,7 +51,9 @@ from unique.core.ast_nodes import (
     OrderByItem,
     OrderDirection,
     PassthroughSQL,
+    PivotRelation,
     RawSQL,
+    RowValue,
     SelectStatement,
     SetOperationType,
     Star,
@@ -1236,6 +1239,15 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
             args=tuple(convert_expression(a) for a in expr.this.expressions),
         )
 
+    # A parenthesized row-value ``(e1, e2, …)`` (in a row comparison or a
+    # row-IN). Modeled so the emitter can expand it to the lexicographic /
+    # OR-of-AND-pairs form on T-SQL (which has no row-value construct) while
+    # every other engine keeps the native spelling.
+    if isinstance(expr, exp.Tuple):
+        return RowValue(
+            elements=tuple(convert_expression(e) for e in expr.expressions)
+        )
+
     # Fallback: emit as raw SQL, rendered in the SOURCE dialect. The
     # default (generic) renderer silently changes spellings — sqlglot
     # stores PG subscripts 0-based, so ``arr[2]`` shipped as ``arr[1]``
@@ -1257,7 +1269,9 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
     # FROM — use the direct arg, not find(), which recurses into a subquery in
     # the WHERE (e.g. NOT EXISTS (SELECT … FROM t)) and would pull that table
     # into this SELECT's FROM. sqlglot keys it "from_" (older versions "from").
-    from_clause: TableRef | SubqueryExpression | UnpivotRelation | None = None
+    from_clause: (
+        TableRef | SubqueryExpression | UnpivotRelation | PivotRelation | None
+    ) = None
     hoisted_joins: tuple[JoinClause, ...] = ()
     from_expr = expr.args.get("from_") or expr.args.get("from")
     if from_expr and from_expr.this:
@@ -1298,13 +1312,72 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
     group_by_expr = expr.args.get("group")
     group_modifier: str | None = None
     grouping_sets_sql: str | None = None
+    group_by_composite: tuple[GroupingElement, ...] = ()
     group_source: list[exp.Expression] = []
     if group_by_expr is not None:
-        rollup = group_by_expr.args.get("rollup")
-        cube = group_by_expr.args.get("cube")
-        gsets = group_by_expr.args.get("grouping_sets")
-        mod_nodes = rollup or cube
-        if mod_nodes:
+        rollup = group_by_expr.args.get("rollup") or []
+        cube = group_by_expr.args.get("cube") or []
+        gsets = group_by_expr.args.get("grouping_sets") or []
+        plain = list(group_by_expr.expressions)
+        # A CUBE/ROLLUP wrapper is only its own grouping element when it CARRIES
+        # columns; an EMPTY ``ROLLUP()`` wrapper with the columns in
+        # ``expressions`` is MySQL's ``cols WITH ROLLUP`` single-modifier form.
+        ne_cube = [c for c in cube if c.expressions]
+        ne_rollup = [r for r in rollup if r.expressions]
+        # A composite GROUP BY — more than one grouping element (``CUBE(a, b),
+        # ROLLUP(c)``, ``a, ROLLUP(b)``, …). sqlglot splits the elements across
+        # the ``expressions``/``cube``/``rollup``/``grouping_sets`` args; keeping
+        # only one (the previous behaviour) silently dropped the rest. Preserve
+        # every element in ``group_by_composite`` (the result set is
+        # order-independent across grouping elements).
+        _pieces = (1 if plain else 0) + len(ne_cube) + len(ne_rollup) + len(gsets)
+        if _pieces > 1:
+            elements: list[GroupingElement] = []
+            if plain:
+                elements.append(
+                    GroupingElement(
+                        kind="",
+                        columns=tuple(convert_expression(g) for g in plain),
+                    )
+                )
+            for c in ne_cube:
+                elements.append(
+                    GroupingElement(
+                        kind="CUBE",
+                        columns=tuple(convert_expression(x) for x in c.expressions),
+                    )
+                )
+            for r in ne_rollup:
+                elements.append(
+                    GroupingElement(
+                        kind="ROLLUP",
+                        columns=tuple(convert_expression(x) for x in r.expressions),
+                    )
+                )
+            for gs in gsets:
+                elements.append(GroupingElement(kind="GROUPING SETS", sets_sql=gs.sql()))
+            group_by_composite = tuple(elements)
+            # Distinct base columns for the MySQL degrade / clause-presence checks.
+            seen_c: dict[str, exp.Expression] = {}
+            _flat = (
+                list(plain)
+                + [x for c in ne_cube for x in c.expressions]
+                + [x for r in ne_rollup for x in r.expressions]
+            )
+            for node_g in _flat:
+                cols = (
+                    [node_g]
+                    if isinstance(node_g, exp.Column)
+                    else node_g.find_all(exp.Column)
+                )
+                for col in cols:
+                    seen_c.setdefault(col.sql(), col)
+            for gs in gsets:
+                for col in gs.find_all(exp.Column):
+                    seen_c.setdefault(col.sql(), col)
+            group_source = list(seen_c.values())
+        elif rollup or cube:
+            mod_nodes = rollup or cube
             group_modifier = "ROLLUP" if rollup else "CUBE"
             inner = [c for r in mod_nodes for c in r.expressions]
             group_source = inner or list(group_by_expr.expressions)
@@ -1389,6 +1462,7 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
         group_by=group_by,
         group_modifier=group_modifier,
         grouping_sets_sql=grouping_sets_sql,
+        group_by_composite=group_by_composite,
         having=having,
         order_by=order_by,
         limit=limit,
@@ -1485,6 +1559,18 @@ def _convert_union(expr: exp.SetOperation) -> SelectStatement:
     # trailing position on the last arm is read as whole-union by every
     # engine.
     order_expr = expr.args.get("order")
+    if (
+        order_expr is None
+        and isinstance(expr.expression, exp.Select)
+        and expr.expression.args.get("order") is not None
+        and expr.expression.args.get("limit") is None
+    ):
+        # sqlglot's T-SQL/MySQL readers attach a whole-set-op trailing ORDER BY
+        # to the LAST arm's SELECT node (only PG puts it on the SetOperation).
+        # Those engines forbid a per-arm ORDER BY without TOP/LIMIT, so a bare
+        # trailing sort on the last arm IS the whole-union order — promote it
+        # here (``_convert_arm`` would otherwise drop it as ineffective).
+        order_expr = expr.expression.args.get("order")
     if order_expr:
         selects[-1] = dataclasses.replace(
             selects[-1],
@@ -1759,23 +1845,105 @@ def _convert_update(expr: exp.Update) -> ASTNode:
     )
 
 
+def _delete_top_count(tb: exp.Expression) -> int | None:
+    """Return n if *tb* is the pseudo-table sqlglot builds for ``DELETE TOP(n)``.
+
+    sqlglot's T-SQL reader mis-parses ``DELETE TOP (n) FROM t`` by dropping the
+    cap into ``tables`` as a fake table ``TOP`` whose alias column holds ``n``.
+    (``TOP (n) PERCENT`` does not parse in sqlglot, so only the plain row cap
+    reaches here.)
+    """
+    if (
+        isinstance(tb, exp.Table)
+        and isinstance(tb.this, exp.Identifier)
+        and tb.this.name.upper() == "TOP"
+    ):
+        alias = tb.args.get("alias")
+        cols = alias.args.get("columns") if alias else None
+        if cols:
+            try:
+                return int(cols[0].name)
+            except (ValueError, AttributeError):
+                return None
+    return None
+
+
 def _convert_delete(expr: exp.Delete) -> ASTNode:
     """Convert a sqlglot Delete to DeleteStatement."""
+    # ``DELETE TOP (n)``: sqlglot lands the row cap in ``tables`` (see
+    # ``_delete_top_count``). Pull it out; the rest of ``tables`` is the
+    # multi-table delete's target-alias list.
+    tables_arg = list(expr.args.get("tables") or [])
+    top_limit: LimitClause | None = None
+    real_tables: list[exp.Expression] = []
+    for tb in tables_arg:
+        n = _delete_top_count(tb)
+        if n is not None:
+            top_limit = LimitClause(limit=Literal(value=n, dtype="integer"))
+        else:
+            real_tables.append(tb)
+
     # Oracle's FROM-less ``DELETE t WHERE …`` parses with the table in
     # ``tables`` and ``this=False`` — reading ``this`` blindly emitted the
     # literal ``DELETE FROM False`` (silent corruption; audit sweep).
     target = expr.this
     if not isinstance(target, exp.Expression):
-        tables = expr.args.get("tables") or []
-        if not tables:
+        if not real_tables:
             raise ValueError("DELETE without a target table")
-        target = tables[0]
-    table = _convert_table_ref(target)
+        target = real_tables[0]
 
     where = None
     where_expr = expr.args.get("where")
     if where_expr:
         where = convert_expression(where_expr.this)
+
+    # Multi-table DELETE with a JOIN (T-SQL ``DELETE t FROM t JOIN s ON …`` /
+    # MySQL ``DELETE t1 FROM t1 JOIN t2 ON …``). sqlglot keeps the FROM table +
+    # its joins in ``this`` and the delete-target alias in ``tables``. Unread,
+    # the JOIN vanished, leaving the WHERE referencing an undefined table
+    # (invalid on every target). Model the joined tables via ``using`` with the
+    # ON conditions folded into WHERE — the ``using`` emitter then renders the
+    # correct DELETE…FROM…JOIN / USING / EXISTS form per target.
+    joins = target.args.get("joins") if isinstance(target, exp.Expression) else None
+    if joins:
+        base_alias = (target.alias or target.name).lower()
+        target_alias = base_alias
+        if real_tables:
+            _t0 = real_tables[0]
+            target_alias = (_t0.alias or _t0.name).lower()
+        if target_alias != base_alias:
+            # The delete target is one of the JOINED tables, not the FROM head —
+            # rarer and not safely expressible via this rewrite. Degrade whole.
+            return RawSQL(
+                sql=_source_sql(expr),
+                reason="DELETE join whose target is a joined table "
+                "preserved as a comment",
+            )
+        join_tables: list[TableRef] = []
+        for j in joins:
+            jt = j.this
+            if not isinstance(jt, exp.Table):
+                return RawSQL(
+                    sql=_source_sql(expr),
+                    reason="Unhandled expression type: DELETE join non-table",
+                )
+            join_tables.append(_convert_table_ref(jt))
+            on_expr = j.args.get("on")
+            if on_expr is not None:
+                on_cond = convert_expression(on_expr)
+                where = (
+                    BinaryOp(operator=BinaryOperator.AND, left=on_cond, right=where)
+                    if where is not None
+                    else on_cond
+                )
+        return DeleteStatement(
+            table=_convert_table_ref(target),
+            where=where,
+            using=tuple(join_tables),
+            limit=top_limit,
+        )
+
+    table = _convert_table_ref(target)
 
     # PG's DELETE … USING sources: sqlglot nests the comma list as the
     # first table's joins. Unread, the whole clause was silently
@@ -1801,7 +1969,9 @@ def _convert_delete(expr: exp.Delete) -> ASTNode:
                     )
                 using.append(_convert_table_ref(jt))
 
-    return DeleteStatement(table=table, where=where, using=tuple(using))
+    return DeleteStatement(
+        table=table, where=where, using=tuple(using), limit=top_limit
+    )
 
 
 def _normalize_ddl_kind(kind: str) -> str:
@@ -2475,16 +2645,36 @@ def _convert_table_ref(expr: exp.Expression) -> TableRef:
 def _maybe_wrap_unpivot(
     src_expr: exp.Expression,
     converted: TableRef | SubqueryExpression,
-) -> TableRef | SubqueryExpression | UnpivotRelation:
-    """Wrap the converted FROM source in an ``UnpivotRelation`` when the source
-    carries an ``UNPIVOT`` clause, so the emitter can re-spell it natively
-    (T-SQL/Oracle) or as a ``UNION ALL`` rewrite (MySQL/PG). PIVOT (not UNPIVOT)
-    is left for the gate — it is a distinct feature with no rewrite yet."""
+) -> TableRef | SubqueryExpression | UnpivotRelation | PivotRelation:
+    """Wrap the converted FROM source in an ``UnpivotRelation``/``PivotRelation``
+    when the source carries an ``UNPIVOT``/``PIVOT`` clause, so the emitter can
+    re-spell it natively (T-SQL/Oracle) or rewrite it (MySQL/PG)."""
     pivots = src_expr.args.get("pivots")
     if not pivots:
         return converted
     piv = pivots[0]
     if not piv.args.get("unpivot"):
+        # A PIVOT (not UNPIVOT). Model the common single-aggregate / IN-list form
+        # so it is never silently dropped (T-SQL/Oracle native, PG/MySQL
+        # conditional-aggregation rewrite or a warned degrade).
+        aggs = piv.args.get("expressions") or []
+        fields = piv.args.get("fields") or []
+        if len(aggs) == 1 and fields and isinstance(fields[0], exp.In):
+            agg = aggs[0]
+            in_expr = fields[0]
+            pivot_col = in_expr.this.name if in_expr.this else ""
+            values = [c.name for c in in_expr.expressions if c.name]
+            agg_arg_expr = agg.this if isinstance(agg, exp.Expression) else None
+            if pivot_col and values and agg_arg_expr is not None:
+                alias_arg = piv.args.get("alias")
+                return PivotRelation(
+                    source=converted,
+                    agg_func=type(agg).__name__.upper(),
+                    agg_arg=convert_expression(agg_arg_expr),
+                    pivot_col=pivot_col,
+                    values=tuple(values),
+                    alias=(alias_arg.name if alias_arg is not None else None) or None,
+                )
         return converted
     value_exprs = piv.args.get("expressions") or []
     value_col = value_exprs[0].name if value_exprs else ""

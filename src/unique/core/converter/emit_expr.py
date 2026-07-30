@@ -30,6 +30,7 @@ from unique.core.ast_nodes import (
     Literal,
     PassthroughSQL,
     RawSQL,
+    RowValue,
     SelectStatement,
     Star,
     SubqueryExpression,
@@ -781,6 +782,13 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         inner = ", ".join(_emit_expression(item, dialect) for item in node.items)
         return f"({inner})"
 
+    if isinstance(node, RowValue):
+        # Default (native) spelling ``(e1, e2, …)``. The T-SQL expansion of a
+        # row-value COMPARISON / row-IN is handled where the operator is emitted
+        # (``_emit_binary``); a bare row value only appears there.
+        inner = ", ".join(_emit_expression(e, dialect) for e in node.elements)
+        return f"({inner})"
+
     if isinstance(node, WindowFunction):
         return _emit_window(node, dialect)
 
@@ -1053,8 +1061,82 @@ def _date_literal_sql(node: ASTNode, dialect: str) -> str | None:
     return None
 
 
+_ROW_CMP_OPS: dict[BinaryOperator, tuple[str, str]] = {
+    # operator -> (strict leading comparator, final comparator)
+    BinaryOperator.GT: (">", ">"),
+    BinaryOperator.GTE: (">", ">="),
+    BinaryOperator.LT: ("<", "<"),
+    BinaryOperator.LTE: ("<", "<="),
+}
+
+
+def _expand_row_lexicographic(
+    left: list[str], right: list[str], strict: str, final: str
+) -> str:
+    """Lexicographic expansion of a row inequality ``(l…) OP (r…)`` for T-SQL.
+
+    ``(a, b) > (1, 5)`` -> ``a > 1 OR (a = 1 AND b > 5)`` (and the >=/</<=
+    variants use the matching final comparator on the last element).
+    """
+    if len(left) == 1:
+        return f"{left[0]} {final} {right[0]}"
+    tail = _expand_row_lexicographic(left[1:], right[1:], strict, final)
+    return (
+        f"{left[0]} {strict} {right[0]} OR "
+        f"({left[0]} = {right[0]} AND ({tail}))"
+    )
+
+
+def _try_emit_row_comparison(node: BinaryOp, dialect: str) -> str | None:
+    """T-SQL row-value comparison / row-IN expansion, else None.
+
+    T-SQL has no row-value construct: ``(a, b) > (1, 5)`` and
+    ``(a, b) IN ((1, 2), (3, 4))`` are rejected (error 4145). Expand them to
+    the equivalent scalar-boolean form. Every other engine keeps the native
+    row value (handled by the normal emit path).
+    """
+    if dialect != "tsql" or not isinstance(node.left, RowValue):
+        return None
+    left = [_emit_expression(e, dialect) for e in node.left.elements]
+
+    # Row-IN: ``(a, b) IN ((1, 2), (3, 4))`` -> OR of AND-pairs.
+    if node.operator in (BinaryOperator.IN, BinaryOperator.NOT_IN) and isinstance(
+        node.right, ExpressionList
+    ):
+        pairs = []
+        for item in node.right.items:
+            if not isinstance(item, RowValue) or len(item.elements) != len(left):
+                return None  # ragged/non-row list — leave to the default path
+            rights = [_emit_expression(e, dialect) for e in item.elements]
+            pairs.append(
+                "(" + " AND ".join(f"{l} = {r}" for l, r in zip(left, rights)) + ")"
+            )
+        joined = " OR ".join(pairs)
+        if node.operator == BinaryOperator.NOT_IN:
+            return f"NOT ({joined})"
+        return f"({joined})"
+
+    if not isinstance(node.right, RowValue) or len(node.right.elements) != len(left):
+        return None
+    right = [_emit_expression(e, dialect) for e in node.right.elements]
+
+    # Wrap the whole expansion so it composes correctly when the row comparison
+    # is nested under a looser-binding operator (``… AND (a,b) > (1,5)``).
+    if node.operator == BinaryOperator.EQ:
+        return "(" + " AND ".join(f"{l} = {r}" for l, r in zip(left, right)) + ")"
+    if node.operator == BinaryOperator.NEQ:
+        return "(" + " OR ".join(f"{l} <> {r}" for l, r in zip(left, right)) + ")"
+    cmp = _ROW_CMP_OPS.get(node.operator)
+    if cmp is not None:
+        return "(" + _expand_row_lexicographic(left, right, cmp[0], cmp[1]) + ")"
+    return None
+
+
 def _emit_binary(node: BinaryOp, dialect: str) -> str:
     """Emit a binary operation."""
+    _row = _try_emit_row_comparison(node, dialect)
+    if _row is not None:
+        return _row
     # MySQL arithmetic coerces a string operand by parsing its LEADING numeric
     # prefix ('0x10' + 0 = 0 — the parse stops at 'x'); PG would read '0x10' as
     # hex (16) and Oracle/T-SQL error. Fold a literal string operand of a

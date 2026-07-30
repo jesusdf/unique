@@ -1338,16 +1338,21 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
         # T-SQL reader itself rejects them once the CLUSTERED keyword is gone.
         if re.match(r"(?i)\s*(CONSTRAINT|PRIMARY\s+KEY|UNIQUE)\b", fragment_sql):
             fragment_sql = re.sub(r"(?i)\s+(?:ASC|DESC)\b", "", fragment_sql)
+    dropped_on_update = False
     if dialect == "oracle":
         # Oracle has NO ``ON UPDATE`` referential action at all (only ON DELETE
         # CASCADE/SET NULL); keeping it ships invalid DDL. Strip it — a
-        # documented engine limitation (docs/03-unsupported.md).
-        fragment_sql = re.sub(
+        # documented engine limitation (docs/03-unsupported.md) — and carry the
+        # loss so the no-silent-loss scan warns (mirrors the NULLS-FIRST-index
+        # drop: silent stripping of an unmappable clause is a defect).
+        _stripped = re.sub(
             r"(?i)\s+ON\s+UPDATE\s+(?:CASCADE|SET\s+NULL|SET\s+DEFAULT|"
             r"RESTRICT|NO\s+ACTION)",
             "",
             fragment_sql,
         )
+        dropped_on_update = _stripped != fragment_sql
+        fragment_sql = _stripped
         # Nor a FK ``MATCH FULL|PARTIAL|SIMPLE`` clause (PG only, ORA-03075);
         # Oracle FKs are always simple-match. Strip it (documented limitation).
         fragment_sql = re.sub(
@@ -1417,6 +1422,13 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
             # it from the reference target too.
             if dialect in ("oracle", "mysql", "postgresql"):
                 fragment = _strip_dbo_from_references(fragment)
+            if dropped_on_update:
+                # Carrier so the loss surfaces as a warning; Oracle tolerates an
+                # inline block comment inside the column/constraint list.
+                fragment += (
+                    " /* UNIQUE: FK ON UPDATE referential action dropped — "
+                    "Oracle has no ON UPDATE FK action (docs/03-unsupported.md) */"
+                )
             return fragment
     except Exception as e:  # noqa: BLE001
         logger.warning("constraint transpile error: %s", e)
