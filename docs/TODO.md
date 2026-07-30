@@ -85,7 +85,30 @@ projections); only the T-SQL leg remains.*
 - **Fits with:** the hand-curated `docs/rationale/` pages (2026-07-30) link to
   these matrices instead of duplicating tables.
 
-### B31 — structured rationale metadata on degrade sites (P3, feature brief; approved 2026-07-30)
+### B32 — warning/error code registry: `UNIQUE-NNNN` (P2, feature brief; approved 2026-07-30)
+
+*Prerequisite for B31 (the rationale registry keys on these codes) and
+consumed by T8 (the generated catalog is per-code). Same pattern as the
+engines we transpile (ORA-00942, SQLSTATE) and modern compilers (rustc E0308).*
+
+- **Deliverable:** every emitted warning/error/carrier carries a stable code
+  (`UNIQUE-1234`). A single registry module (code → {category, message
+  template}) with a CI collision check; `TranspileWarning.code` alongside
+  `.message`; carriers become `-- UNIQUE-1234: …` / `/* UNIQUE-1234: … */`.
+- **Numbering:** flat sequential (no thematic ranges — they rot); category is
+  registry metadata.
+- **Sentinel compatibility:** the harness/invariant regexes
+  (`tests/helpers/invariants.py:44`, `_carrier_fragments@_core.py:432` and
+  siblings) widen to `UNIQUE(-\d{4})?:` so pre-code outputs still match.
+- **Three waves:** (1) registry + codes at all emission sites + sentinel
+  regexes; (2) migrate test assertions from prose-matching to code-matching
+  (kills the comment-prose trap; the `[limit]` contract asserts the *specific*
+  code); (3) completeness gate — no warning ships uncoded (a ratcheting
+  count of uncoded sites, unread-args style), plus CLI `--ignore UNIQUE-NNNN`.
+- **Locks in:** docs anchors per code (`docs/reference/warnings.md#unique-1234`),
+  stable grep for users, suppression/telemetry by code.
+
+### B31 — structured rationale metadata on degrade sites (P3, feature brief; approved 2026-07-30; depends on B32)
 
 *Docs "phase 2" (maintainer-approved): make the narrative layer generable.*
 
@@ -99,8 +122,8 @@ projections); only the T-SQL leg remains.*
   rationale sections mechanically, and a coverage check reports degrade sites
   with no registered rationale (ratcheting down, never up).
 - **Design constraint:** the registry must not fatten the emitters — a
-  side-table keyed by warning/carrier id, not per-site inline blobs; respects
-  all four architecture ratchets.
+  side-table keyed by the **B32 `UNIQUE-NNNN` code** (its primary key), not
+  per-site inline blobs; respects all four architecture ratchets.
 - **Locks in:** every `docs/rationale/` claim about a degrade becomes
   traceable to a registry entry; new degrades cannot ship without a rationale.
 
