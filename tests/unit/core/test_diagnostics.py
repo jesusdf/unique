@@ -88,6 +88,19 @@ def test_is_registered():
     assert not diagnostics.is_registered("UNIQUE-9999")
 
 
+def test_neutralize_dollar_quotes_defangs_delimiters():
+    fn = diagnostics.neutralize_dollar_quotes
+    # An empty-tag body wrapper is broken so it can no longer open/close.
+    assert fn("DO $$ BEGIN END $$;") == "DO $ $ BEGIN END $ $;"
+    # A named tag is broken too, keeping the tag text.
+    assert fn("AS $body$ x $body$") == "AS $body $ x $body $"
+    # Neither result contains a scannable delimiter any more.
+    for out in (fn("DO $$ x $$"), fn("$t$ y $t$")):
+        assert not re.search(r"\$[A-Za-z0-9_]*\$", out)
+    # A lone ``$`` / a bare PG parameter is not a delimiter and is untouched.
+    assert fn("WHERE a = $1 AND b = $2") == "WHERE a = $1 AND b = $2"
+
+
 # ---------------------------------------------------------------------------
 # Rationale side-table coverage (B31).
 #

@@ -109,6 +109,37 @@ def test_fixture_transpiles_without_crashing(
         assert pattern.search(result.sql) is None
 
 
+@pytest.mark.parametrize(
+    "filename,source",
+    [(f, d) for f, d in _FIXTURES if d != "postgresql"],
+)
+def test_pg_pivot_carrier_comments_are_dollar_quote_self_contained(
+    transpiler: Transpiler, filename: str, source: str
+) -> None:
+    """A ``--`` carrier line must never carry a generated ``$$`` delimiter.
+
+    A degraded routine is commented out line by line; when its generated
+    PostgreSQL body contained a ``DO $$``/``AS $$`` dollar-quote wrapper, the
+    ``$$`` leaked into the ``--`` comment. A statement scanner that tracks
+    dollar-quotes then opens/closes a body on a *comment* line and desyncs the
+    split. The carrier must be self-contained: no ``--`` line may hold the
+    ``$$`` delimiter the emitter wraps its own PL/pgSQL output in. (Named
+    ``$tag$`` tokens that appear inside a *source-preservation* carrier are the
+    user's original literal content, preserved byte-exact for hand-porting, and
+    are out of scope here.)
+    """
+    text = (FIXTURE_DIR / filename).read_text(encoding="utf-8")
+    out = transpiler.transpile(text, source, "postgresql").sql
+    offenders = [
+        line
+        for line in out.splitlines()
+        if line.lstrip().startswith("--") and "$$" in line
+    ]
+    assert (
+        not offenders
+    ), f"$$ dollar-quote delimiter left in comment lines: {offenders[:5]}"
+
+
 # Constructs that must never appear as *executable* MySQL in the committed
 # fixture (they may still appear inside a /* UNIQUE: ... */ comment, which is
 # how a preserved original type is documented).

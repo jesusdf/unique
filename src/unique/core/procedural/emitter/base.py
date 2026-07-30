@@ -66,8 +66,24 @@ from unique.core.ast_nodes import (
     WaitForStatement,
     WhileStatement,
 )
+from unique.core.diagnostics import neutralize_dollar_quotes
 
 logger = logging.getLogger(__name__)
+
+
+def _comment_out(body: str) -> str:
+    """Comment out every line of a generated *body* for a carrier.
+
+    Dollar-quote delimiters are neutralized (see
+    :func:`neutralize_dollar_quotes`) so the resulting ``--`` block is
+    self-contained — a ``DO $$``/``AS $$`` wrapper in the body cannot leak a
+    live delimiter into a comment line and desync a dollar-quote-tracking scanner.
+    """
+    body = neutralize_dollar_quotes(body)
+    return "\n".join(
+        f"-- {line}" if line.strip() else "--" for line in body.split("\n")
+    )
+
 
 #: A SQL-only operator that Oracle rejects in a *procedural* expression — a scalar
 #: subquery (PLS-00405) or CAST (PLS-00103). An assignment/declaration whose value
@@ -943,10 +959,7 @@ class ProceduralEmitter:
             "commented out below for review:\n"
         )
         body = self._emit_function_impl(node)
-        commented = "\n".join(
-            f"-- {line}" if line.strip() else "--" for line in body.split("\n")
-        )
-        return note + commented
+        return note + _comment_out(body)
 
     def _tvf_unsupported_note(self) -> str:
         """Per-engine explanation of why a table-valued function can't be
@@ -961,10 +974,7 @@ class ProceduralEmitter:
             f"review:\n"
         )
         body = self._emit_function_impl(node)
-        commented = "\n".join(
-            f"-- {line}" if line.strip() else "--" for line in body.split("\n")
-        )
-        return note + commented
+        return note + _comment_out(body)
 
     def _emit_function_impl(self, node: CreateFunctionStatement) -> str:
         name = self._qualified_name(node.schema, node.name)
@@ -1054,10 +1064,7 @@ class ProceduralEmitter:
             f"in a set-based way {self.dialect_name} cannot express; the "
             "translation is preserved commented out for a manual rewrite:\n"
         )
-        commented = "\n".join(
-            f"-- {line}" if line.strip() else "--" for line in text.split("\n")
-        )
-        return note + commented
+        return note + _comment_out(text)
 
     def _emit_compound_trigger_unsupported(self, node: CreateTriggerStatement) -> str:
         """Document an Oracle COMPOUND TRIGGER, which has no mechanical
@@ -1435,12 +1442,9 @@ class ProceduralEmitter:
             AnonymousBlock(statements=node.statements, degraded=False)
         )
         body = inner if inner.strip() else "BEGIN\nEND;"
-        commented = "\n".join(
-            f"-- {line}" if line.strip() else "--" for line in body.split("\n")
-        )
         return (
             "-- UNIQUE-1160: anonymous PL/SQL block has no top-level "
-            f"{self.dialect_name} equivalent; preserved below:\n{commented}"
+            f"{self.dialect_name} equivalent; preserved below:\n{_comment_out(body)}"
         )
 
     def _emit_indented_stmts(
