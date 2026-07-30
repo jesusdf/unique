@@ -186,6 +186,9 @@
   .detail.err b { color: var(--primary); }
   .detail code { color: var(--secondary); }
   .detail .k { color: var(--on-surface); font-weight: 700; margin-right: 6px; }
+  /* F3: a linked UNIQUE-NNNN diagnostic code, opening its docs entry in a new tab. */
+  .detail .code-link { color: var(--secondary); font-weight: 700; text-decoration: none; }
+  .detail .code-link:hover { text-decoration: underline; }
 
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.5);
     border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -2px; }
@@ -2312,6 +2315,24 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// F3: every emitted UNIQUE-NNNN diagnostic code links to its docs entry
+// (anchors are lowercase, e.g. #unique-1218 — verified against GitHub's
+// rendered markdown, which resolves the bare fragment to its
+// "user-content-"-prefixed anchor id).
+const WARNINGS_DOC_BASE = "https://github.com/jesusdf/unique/blob/main/docs/reference/warnings.md";
+const CODE_RE = /UNIQUE-\d{4}/g;
+function codeLink(code) {
+  return `<a href="${WARNINGS_DOC_BASE}#${code.toLowerCase()}" target="_blank" rel="noopener" class="code-link">${code}</a>`;
+}
+// Render a warning/message as HTML: link the structured `code` where given
+// (transpile warnings); otherwise fall back to regex-detecting a bare
+// UNIQUE-NNNN code inside the escaped message text (unsupported entries carry
+// no structured code) — presentation only, never fed back into the pipeline.
+function warningHtml(message, code) {
+  const escaped = escapeHtml(message);
+  return code ? `${codeLink(code)} ${escaped}` : escaped.replace(CODE_RE, codeLink);
+}
+
 async function loadDialects() {
   try {
     const res = await fetch(API + "/api/v1/dialects");
@@ -2564,14 +2585,14 @@ function applyDb(container) {
 
 function showResult(warnings = [], unsupported = []) {
   const items = [
-    ...(warnings || []).map(w => ({ t: w.feature || "warning", m: w.message })),
-    ...(unsupported || []).map(u => ({ t: "unsupported", m: u })),
+    ...(warnings || []).map(w => ({ t: w.feature || "warning", m: w.message, code: w.code })),
+    ...(unsupported || []).map(u => ({ t: "unsupported", m: u, code: null })),
   ];
   clearStatus();
   const c = el("messages");
   if (!items.length) { c.appendChild(statusBar("ok", "OK", "Transpiled with no warnings.")); return; }
   c.appendChild(statusBar("warn", "OK", `Transpiled with ${items.length} warning${items.length > 1 ? "s" : ""}.`));
-  for (const it of items) c.appendChild(detailRow(`<span class="k">${escapeHtml(it.t)}</span>${escapeHtml(it.m)}`));
+  for (const it of items) c.appendChild(detailRow(`<span class="k">${escapeHtml(it.t)}</span>${warningHtml(it.m, it.code)}`));
 }
 
 // ---- Compare: structural similarity of the two editors ----
@@ -2613,7 +2634,7 @@ function showSimilarity(data) {
     c.appendChild(detailRow(`<span class="k">${DIM_LABELS[k] || k}</span>${data.dimensions[k]}%`));
   }
   c.appendChild(detailRow(`<span class="k">aligned pairs</span>${(data.statement_pairs || []).length} · unmatched A=${data.unmatched_a} B=${data.unmatched_b}`));
-  for (const w of (data.warnings || []).slice(0, 10)) c.appendChild(detailRow(`<span class="k">warning</span>${escapeHtml(w)}`, "err"));
+  for (const w of (data.warnings || []).slice(0, 10)) c.appendChild(detailRow(`<span class="k">warning</span>${warningHtml(w.message, w.code)}`, "err"));
 }
 
 (async function init() {
