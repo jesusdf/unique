@@ -241,7 +241,7 @@ SELECT INSTR('hello','l'), INSTR('hello','l',1,2), INSTR('hello','l',-1) FROM DU
 -- CASE[limit]: ora-instr-empty — fails on mysql, postgresql, tsql. Oracle INSTR(s,'') is NULL ('' is NULL); other engines return 0. No faithful workaround (docs/03-unsupported.md).
 SELECT INSTR('abc', '') AS r FROM DUAL
 
--- CASE[fixed]: ora-interval-out — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
+-- CASE[fixed]: ora-interval-out — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU  B36: PostgreSQL now maps NUMTODSINTERVAL/NUMTOYMINTERVAL to a native INTERVAL value; T-SQL/MySQL have no standalone interval value and keep the warned degrade.
 SELECT NUMTOYMINTERVAL(14,'MONTH'), NUMTODSINTERVAL(90000,'SECOND') FROM DUAL
 
 -- CASE[limit]: ora-interval-tochar — each engine renders an INTERVAL as text in its own default format (Oracle '+02 03:04:05.000000' vs PG '2 days 03:04:05'); TO_CHAR of an interval has no portable mask — annotated + warned (docs/03-unsupported.md §3.22). fails on postgresql
@@ -352,10 +352,10 @@ SELECT TO_CHAR(1234.5,'L9G999D99MI'),TO_CHAR(0.75,'999PR'),TO_CHAR(255,'0XX') FR
 -- CASE[limit]: ora-numfmt-thousands — fails on mysql. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).
 SELECT TO_CHAR(1234567.891, '9,999,999.99') AS r FROM DUAL
 
--- CASE[fixed]: ora-numtodsinterval — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
+-- CASE[fixed]: ora-numtodsinterval — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU  B36: PostgreSQL now maps NUMTODSINTERVAL/NUMTOYMINTERVAL to a native INTERVAL value; T-SQL/MySQL have no standalone interval value and keep the warned degrade.
 SELECT NUMTODSINTERVAL(90, 'MINUTE') AS r FROM DUAL
 
--- CASE[fixed]: ora-numtointerval — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
+-- CASE[fixed]: ora-numtointerval — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU  B36: PostgreSQL now maps NUMTODSINTERVAL/NUMTOYMINTERVAL to a native INTERVAL value; T-SQL/MySQL have no standalone interval value and keep the warned degrade.
 SELECT NUMTODSINTERVAL(1.5,'DAY'), NUMTOYMINTERVAL(18,'MONTH') FROM DUAL
 
 -- CASE[fixed]: ora-ora-hash — fails on mysql, postgresql, tsql. (195, b"'ORA_HASH' is not a recognized built-in function name.DB-Lib error message 20018, 

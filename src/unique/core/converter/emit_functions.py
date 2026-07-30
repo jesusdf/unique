@@ -864,7 +864,33 @@ def _emit_mapped_scalar(node: FunctionCall, fn_name: str, dialect: str) -> str |
         and SOURCE_DIALECT.get() in ("mysql",)
     ):
         return _emit_mysql_dayofweek(node, dialect)
+    if fn_name in ("NUMTODSINTERVAL", "NUMTOYMINTERVAL"):
+        return _emit_numtointerval(node, dialect)
     return None
+
+
+def _emit_numtointerval(node: FunctionCall, dialect: str) -> str | None:
+    """Oracle NUMTODSINTERVAL/NUMTOYMINTERVAL -> a PostgreSQL interval value:
+    ``n * INTERVAL '1 <unit>'`` (``INTERVAL '<n> <unit>'`` for a literal count),
+    the exact equivalent of Oracle's constructor. T-SQL/MySQL have no standalone
+    interval value, so those targets fall through to the honest degrade."""
+    units = {
+        "NUMTODSINTERVAL": ("DAY", "HOUR", "MINUTE", "SECOND"),
+        "NUMTOYMINTERVAL": ("YEAR", "MONTH"),
+    }.get(node.name.upper())
+    unit_arg = node.args[1] if len(node.args) == 2 else None
+    if dialect != "postgresql" or units is None or unit_arg is None:
+        return None
+    if not (isinstance(unit_arg, Literal) and isinstance(unit_arg.value, str)):
+        return None
+    unit = unit_arg.value.strip().upper()
+    if unit not in units:
+        return None
+    num_sql = _emit_expression(node.args[0], dialect)
+    compact = num_sql.replace(" ", "")
+    if compact.lstrip("+-").isdigit():
+        return f"INTERVAL '{compact} {unit}'"
+    return f"(({num_sql}) * INTERVAL '1 {unit}')"
 
 
 def _emit_regexp_like(node: FunctionCall, dialect: str) -> str | None:

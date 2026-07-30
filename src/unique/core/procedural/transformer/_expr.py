@@ -921,6 +921,7 @@ class ExpressionRewriter:
         sql = self._transform_nvl2(sql)
         sql = self._transform_oracle_date_funcs(sql)
         sql = self._transform_mysql_date_funcs(sql)
+        sql = self._transform_numtointerval(sql)
         return sql
 
     def _map_mysql_datefmt_to_oracle(self, fmt: str) -> str:
@@ -1007,6 +1008,45 @@ class ExpressionRewriter:
 
         sql = self._rewrite_calls(sql, "TO_CHAR", build_to_char)
         sql = self._rewrite_calls(sql, "TO_DATE", build_to_date)
+        return sql
+
+    #: The unit words each Oracle NUM..INTERVAL constructor accepts.
+    _NUMINTERVAL_UNITS = {
+        "NUMTODSINTERVAL": frozenset({"DAY", "HOUR", "MINUTE", "SECOND"}),
+        "NUMTOYMINTERVAL": frozenset({"YEAR", "MONTH"}),
+    }
+
+    def _transform_numtointerval(self, sql: str) -> str:
+        """Translate Oracle NUMTODSINTERVAL/NUMTOYMINTERVAL to a PostgreSQL
+        interval value.
+
+        ``NUMTODSINTERVAL(n, 'DAY'|'HOUR'|'MINUTE'|'SECOND')`` and
+        ``NUMTOYMINTERVAL(n, 'YEAR'|'MONTH')`` build a standalone INTERVAL value
+        on Oracle; PostgreSQL has no such constructor, but ``n * INTERVAL '1
+        <unit>'`` (or ``INTERVAL '<n> <unit>'`` for a literal count) is the exact
+        equivalent. T-SQL/MySQL have no standalone interval value, so they keep
+        the honest degrade. Mirrors ``emit_functions._emit_numtointerval`` (the
+        DML-pipeline path for the same construct in embedded DML)."""
+        if self._t._source != "oracle" or self._t._target != "postgresql":
+            return sql
+
+        def build(valid: frozenset[str]) -> Callable[[list[str]], str | None]:
+            def _b(args: list[str]) -> str | None:
+                if len(args) != 2:
+                    return None
+                num, unit_lit = args
+                unit = unit_lit.strip().strip("'").upper()
+                if unit not in valid:
+                    return None
+                compact = re.sub(r"\s+", "", num)
+                if re.fullmatch(r"[+-]?\d+", compact):
+                    return f"INTERVAL '{compact} {unit}'"
+                return f"(({num}) * INTERVAL '1 {unit}')"
+
+            return _b
+
+        for fn, units in self._NUMINTERVAL_UNITS.items():
+            sql = self._rewrite_calls(sql, fn, build(units))
         return sql
 
     def _transform_nvl2(self, sql: str) -> str:
