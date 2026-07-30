@@ -3142,6 +3142,14 @@ def _map_system_global(sql: str, dialect: str) -> str | None:
             f"0 /* UNIQUE: @@ERROR has no top-level {dialect} equivalent; "
             "use an exception handler */"
         )
+    if upper == "@@IDENTITY" and dialect != "tsql":
+        # The last identity inserted in the session — the same "last generated
+        # id" the SCOPE_IDENTITY() function maps to (PG LASTVAL() / MySQL
+        # LAST_INSERT_ID() / Oracle CURRVAL carrier). Shipped raw it was
+        # ``@@IDENTITY`` -> PG 'column "identity" does not exist' / ORA-00936.
+        from unique.core.mappings import LAST_IDENTITY_EXPR
+
+        return LAST_IDENTITY_EXPR[dialect]
     if upper == "@@VERSION" and dialect != "tsql":
         # PG/MySQL have a version function; the string it returns is engine
         # specific, so the value cannot match T-SQL's. Oracle's is in v$version

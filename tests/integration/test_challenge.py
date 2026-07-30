@@ -5488,3 +5488,26 @@ class TestBoolColumnIsPredicate:
     def test_mysql_keeps_native_boolean(self) -> None:
         out = _tx("SELECT a FROM t WHERE flag IS TRUE", "postgresql", "mysql")
         assert "IS TRUE" in out, out
+
+
+class TestAtAtIdentityGlobal:
+    """red2-ts-at-identity-passthrough: T-SQL ``@@IDENTITY`` was shipped raw
+    (PG 'column identity does not exist' / ORA-00936). Map it to the same
+    'last generated id' expression SCOPE_IDENTITY() uses, symmetrically."""
+
+    def test_at_identity_maps_like_scope_identity(self) -> None:
+        src = _case("challenge_sqlserver.sql", "red2-ts-at-identity-passthrough")
+        expect = {
+            "postgresql": "LASTVAL()",
+            "mysql": "LAST_INSERT_ID()",
+            "oracle": "CURRVAL",
+        }
+        for target, idiom in expect.items():
+            out = _exec_lines(_tx(src, "tsql", target))
+            assert idiom in out, (target, out)
+            assert "@@IDENTITY" not in out.upper(), out
+            assert_statements_parse(out, target, context="at-identity")
+
+    def test_tsql_target_keeps_at_identity(self) -> None:
+        out = _tx("SELECT @@IDENTITY AS id", "tsql", "tsql")
+        assert "@@IDENTITY" in out, out
