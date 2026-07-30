@@ -5443,3 +5443,17 @@ class TestRowcountDivergenceAnnotation:
         )
         r = Transpiler().transpile(src, "mysql", "mysql")
         assert "UNIQUE:" not in r.sql, r.sql
+
+
+class TestBitStringNumericFold:
+    """red2-my-bitstring-numeric-pg: a MySQL bit-string literal ``b'101'`` used
+    numerically is its integer value (5); shipping the bare bit literal to PG
+    is an invalid ``bit + integer``. Fold it to the integer like the hex path."""
+
+    def test_bitstring_folds_to_integer_on_every_target(self) -> None:
+        src = _case("challenge_mysql.sql", "red2-my-bitstring-numeric-pg")
+        for target in ("postgresql", "tsql", "oracle"):
+            out = _exec_lines(_tx(src, "mysql", target))
+            assert "5 + 0" in out, out
+            assert "b'101'" not in out.lower(), out
+            assert_statements_parse(out, target, context="bitstring")

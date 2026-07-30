@@ -1286,6 +1286,13 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     if isinstance(expr, exp.HexString):
         return Literal(value=str(expr.this), dtype="hex")
 
+    # MySQL/PG bit-string literal ``b'101'`` (== ``0b101``) evaluates to its
+    # integer value in a numeric context (MySQL ``b'101' + 0`` = 5). Emitting
+    # the bare bit literal shipped an invalid ``bit + integer`` to PG; fold it
+    # to the integer like the hex path so it is portable everywhere.
+    if isinstance(expr, exp.BitString):
+        return Literal(value=int(str(expr.this), 2), dtype="integer")
+
     # T-SQL N'...' national literals: modeled so each target spells them —
     # PostgreSQL has NO such literal (the RawSQL fallback shipped it raw)
     # and MySQL's canonical output drops the prefix.
