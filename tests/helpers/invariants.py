@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import re
 
+from unique.core.diagnostics import MARKER, is_registered
+
 # Keywords whose presence is structurally meaningful. We compare how many of
 # each survive translation rather than trying to parse the SQL.
 _STRUCTURAL_KEYWORDS = (
@@ -42,8 +44,9 @@ _STRUCTURAL_KEYWORDS = (
 )
 
 # Recognizes both the legacy uncoded ``UNIQUE:`` and the coded ``UNIQUE-1234:``
-# carrier form (B32) so pre-code and post-code outputs both match.
-_UNIQUE_COMMENT = re.compile(r"(?im)^\s*--\s*UNIQUE(?:-\d{4})?:")
+# carrier form (B32) so pre-code and post-code outputs both match; shares its
+# marker fragment with the diagnostics registry so both stay in sync.
+_UNIQUE_COMMENT = re.compile(rf"(?im)^\s*--\s*{MARKER}")
 _LINE_COMMENT = re.compile(r"--[^\n]*")
 _BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
 _WHITESPACE = re.compile(r"\s+")
@@ -116,8 +119,18 @@ def count_keyword(sql: str, keyword: str) -> int:
 
 
 def documented_drops(sql: str) -> int:
-    """Number of explicitly documented ``-- UNIQUE:`` drop/notice comments."""
-    return len(_UNIQUE_COMMENT.findall(sql))
+    """Number of explicitly documented ``-- UNIQUE:`` drop/notice comments.
+
+    A coded carrier (``UNIQUE-1234:``) only counts if 1234 is a REGISTERED
+    diagnostic (B32) -- a stray/malformed code must not excuse a dropped
+    keyword. The legacy uncoded ``UNIQUE:`` form (no digits) still counts.
+    """
+    count = 0
+    for m in _UNIQUE_COMMENT.finditer(sql):
+        code = m.group("code")
+        if code is None or is_registered(f"UNIQUE-{code}"):
+            count += 1
+    return count
 
 
 def strip_comments(sql: str) -> str:

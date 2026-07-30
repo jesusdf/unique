@@ -20,6 +20,7 @@ import re
 import pytest
 
 from tests.helpers.validity import assert_statements_parse
+from unique.core.diagnostics import CODE_RE, is_registered
 from unique.core.transpiler import Transpiler
 
 _CHALLENGE_DIR = pathlib.Path(__file__).resolve().parents[1] / "fixtures" / "challenge"
@@ -151,8 +152,11 @@ def test_limit_cases_warn_and_annotate_on_every_failing_target() -> None:
             result = Transpiler().transpile(block, source=source, target=target)
             if not result.warnings:
                 failures.append(f"{fname}[{i}] -> {target}: no warning for a limit")
-            if "UNIQUE-" not in result.sql:
-                failures.append(f"{fname}[{i}] -> {target}: no UNIQUE annotation")
+            codes = CODE_RE.findall(result.sql)
+            if not codes or not all(is_registered(c) for c in codes):
+                failures.append(
+                    f"{fname}[{i}] -> {target}: no registered UNIQUE-NNNN annotation"
+                )
             for marker in _UNRECOGNIZED_MARKERS:
                 if marker in result.sql:
                     failures.append(f"{fname}[{i}] -> {target}: {marker!r}")
