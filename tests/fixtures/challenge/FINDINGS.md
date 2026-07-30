@@ -128,3 +128,5 @@ Batch totals: func 25, invalid 20, silent-drop 12, lying-warning 10, composition
 
 <!-- RED batch round 2 END marker: run the commit-timestamp check; batch over when over==True. 16 scored findings / 76 pts / 6 classes. -->
 - Unverified tail note (NOT scored): T-SQL CROSS APPLY dbo.tvf(a.id) -> PG "CROSS JOIN LATERAL (SELECT) f" (empty select list, TVF call lost) with no warning on the PG leg (Oracle/MySQL warn) — needs a TVF definition to live-validate the source; flagged for BLUE.
+
+<!-- red2 batch: final timestamp checkpoint -->
