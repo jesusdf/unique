@@ -5511,3 +5511,20 @@ class TestAtAtIdentityGlobal:
     def test_tsql_target_keeps_at_identity(self) -> None:
         out = _tx("SELECT @@IDENTITY AS id", "tsql", "tsql")
         assert "@@IDENTITY" in out, out
+
+
+class TestTryCastMysqlNull:
+    """red2-ts-trycast-mysql-zero: TRY_CAST('abc' AS INT) is NULL on T-SQL but
+    MySQL's plain CAST AS SIGNED returned 0 (the fold missed MySQL's SIGNED
+    spelling of an INT target). A non-numeric literal must fold to NULL."""
+
+    def test_nonnumeric_literal_folds_to_null_on_mysql(self) -> None:
+        src = _case("challenge_sqlserver.sql", "red2-ts-trycast-mysql-zero")
+        out = _exec_lines(_tx(src, "tsql", "mysql"))
+        assert "NULL AS r" in out, out
+        assert "SIGNED" not in out.upper(), out
+        assert_statements_parse(out, "mysql", context="trycast")
+
+    def test_numeric_literal_still_casts(self) -> None:
+        out = _tx("SELECT TRY_CAST('123' AS INT) AS r", "tsql", "mysql")
+        assert "CAST('123' AS SIGNED)" in out, out

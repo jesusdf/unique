@@ -96,7 +96,6 @@ Batch totals: func 25, invalid 20, silent-drop 12, lying-warning 10, composition
 | red2-my-invisible-column-drop | silent-drop (4) | mysql→oracle (pg,tsql under-warn) | INVISIBLE column attribute dropped, no warning | Oracle supports INVISIBLE (live valid); MySQL SELECT * excludes b (returns (1) for (1,2)). Oracle target would return both | Preserve INVISIBLE on Oracle; warn on PG/tsql |
 | red2-ora-proc-savepoint-as | composition (5) | oracle→postgresql,mysql,tsql | SAVEPOINT inside proc -> "SAVEPOINT AS sp1" (spurious AS) | standalone SAVEPOINT sp1 is valid; inside a proc PG live "syntax error at or near AS". Only generic warning. Source compiles on Oracle | Procedural emitter: emit "SAVEPOINT sp1" (no AS); T-SQL SAVE/ROLLBACK TRANSACTION sp1 |
 | red2-pg-matview-oracle-falsewarn | lying-warning (2) | postgresql→oracle | MATERIALIZED VIEW downgraded to plain view, "not portable on oracle" | Oracle has native materialized views (live valid). Warning false; materialization lost. Source valid on PG | Emit CREATE MATERIALIZED VIEW on Oracle |
-| red2-ts-trycast-mysql-zero | func (5) | tsql→mysql | TRY_CAST('abc' AS INT) -> CAST('abc' AS SIGNED) | live tsql=NULL, mysql=0. TRY (null-on-failure) semantics lost. No warning (PG/Oracle correct) | Wrap MySQL cast to yield NULL on parse failure |
 
 ### Observations (round 2, not scored — warned/borderline/repeat, for BLUE/PURPLE)
 

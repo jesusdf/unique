@@ -709,6 +709,11 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
                     "FLOAT",
                     "DOUBLE",
                     "REAL",
+                    # MySQL renders an INT cast target as SIGNED / an unsigned
+                    # one as UNSIGNED — without these the literal fold missed
+                    # them and shipped a plain CAST (= 0, not NULL, on failure).
+                    "SIGNED",
+                    "UNSIGNED",
                 ):
                     try:
                         float(_lv)
