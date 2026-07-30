@@ -5695,6 +5695,63 @@ class TestDeleteOrderByLimitCap:
         assert "DELETE TOP (3)" in out, out
 
 
+class TestUpdateOrderByLimitCap:
+    """red3-my-update-orderby-limit-drop + red3-my-update-limit-no-orderby (func,
+    data loss): MySQL ``UPDATE … [ORDER BY id] LIMIT 5`` updates only the first 5
+    rows, but the ORDER BY + LIMIT were dropped so the UPDATE hit ALL matching
+    rows. The twin of the DELETE cap: each target renders the cap via a keyed
+    subquery. Live-verified (blue8 stack, 10 rows v=-id): MySQL ORIGINAL updates
+    5; PG/T-SQL/Oracle TRANSPILED each update exactly 5 (was 10)."""
+
+    def test_ordered_cap_rendered_per_target(self) -> None:
+        src = _case("challenge_mysql.sql", "red3-my-update-orderby-limit-drop")
+        expect = {
+            "mysql": "ORDER BY id",  # native ORDER BY + LIMIT
+            "postgresql": "ctid IN",
+            "tsql": "WITH uq_upd",
+            "oracle": "rowid IN",
+        }
+        for target, idiom in expect.items():
+            out = _exec_lines(_tx(src, "mysql", target))
+            assert idiom in out, (target, out)
+            # the cap must survive on every target (no bare unbounded UPDATE)
+            assert "5" in out, out
+            # the source ORDER BY must not have been dropped into a plain update
+            assert "ORDER BY id" in out, (target, out)
+            assert_statements_parse(out, target, context="update-cap")
+
+    def test_no_unread_args_warning(self) -> None:
+        # The ORDER BY + LIMIT must be read (guardrail 7): no tripwire on them.
+        src = _case("challenge_mysql.sql", "red3-my-update-orderby-limit-drop")
+        for target in ("postgresql", "tsql", "oracle", "mysql"):
+            r = Transpiler().transpile(src, "mysql", target)
+            assert not any(
+                "unread sqlglot arg" in w.message and "Update" in w.message
+                for w in r.warnings
+            ), (target, r.warnings)
+
+    def test_unordered_cap_bounds_every_target(self) -> None:
+        src = _case("challenge_mysql.sql", "red3-my-update-limit-no-orderby")
+        expect = {
+            "mysql": "LIMIT 5",  # native
+            "postgresql": "ctid IN",
+            "tsql": "WITH uq_upd",
+            "oracle": "ROWNUM <= 5",
+        }
+        for target, idiom in expect.items():
+            out = _exec_lines(_tx(src, "mysql", target))
+            assert idiom in out, (target, out)
+            assert "5" in out, out
+            assert_statements_parse(out, target, context="update-cap-noorder")
+
+    def test_unordered_has_no_spurious_order_by(self) -> None:
+        # A plain LIMIT (no ORDER BY) must not invent an ORDER BY on any target.
+        src = _case("challenge_mysql.sql", "red3-my-update-limit-no-orderby")
+        for target in ("postgresql", "tsql", "oracle", "mysql"):
+            out = _exec_lines(_tx(src, "mysql", target))
+            assert "ORDER BY" not in out.upper(), (target, out)
+
+
 class TestInvisibleColumn:
     """red2-my-invisible-column-drop: a MySQL INVISIBLE column (excluded from
     SELECT *) had its attribute silently dropped. Oracle supports INVISIBLE

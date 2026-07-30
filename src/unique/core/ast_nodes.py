@@ -635,6 +635,14 @@ class UpdateStatement(ASTNode):
     from_clause: TableRef | None = None
     joins: tuple[JoinClause, ...] = ()
     returning: tuple[ASTNode, ...] = ()
+    #: MySQL ``UPDATE … [ORDER BY …] LIMIT n`` row cap — the update touches only
+    #: the first n matching rows (by ``order_by`` when given, else arbitrary),
+    #: NOT every matching row. Dropping it updated ALL matching rows (a silent
+    #: data-integrity divergence, twin of the DELETE cap). Emitters render it via
+    #: a keyed subquery per target (MySQL native, T-SQL updatable TOP CTE, PG
+    #: ctid, Oracle rowid). ``order_by`` is only observable with ``limit``.
+    limit: LimitClause | None = None
+    order_by: tuple[OrderByItem, ...] = ()
 
 
 @dataclass(frozen=True)

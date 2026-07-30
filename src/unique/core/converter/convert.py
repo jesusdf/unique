@@ -2076,12 +2076,19 @@ def _convert_update(expr: exp.Update) -> ASTNode:
     if where_expr:
         where = convert_expression(where_expr.this)
 
+    # MySQL ``UPDATE … [ORDER BY …] LIMIT n`` caps the update to n rows; both
+    # args were unread, so the LIMIT (and its ORDER BY) fell on the floor and
+    # the UPDATE hit EVERY matching row (data loss, twin of the DELETE cap).
+    order_items, limit = _read_order_and_limit(expr)
+
     return UpdateStatement(
         table=table,
         assignments=tuple(assignments),
         where=where,
         from_clause=from_clause,
         joins=tuple(joins),
+        limit=limit,
+        order_by=order_items,
     )
 
 
@@ -2176,11 +2183,15 @@ def _split_delete_top(
     return top_limit, real_tables
 
 
-def _delete_order_and_limit(
-    expr: exp.Delete, top_limit: LimitClause | None
+def _read_order_and_limit(
+    expr: exp.Update | exp.Delete,
 ) -> tuple[tuple[OrderByItem, ...], LimitClause | None]:
-    """Read a DELETE's ``ORDER BY`` and ``LIMIT`` args (MySQL ordered cap),
-    falling back to any T-SQL ``TOP`` cap already split out."""
+    """Read a statement's MySQL ``[ORDER BY …] LIMIT n`` cap args (guardrail 7).
+
+    Shared by UPDATE and DELETE: both leave ``order``/``limit`` unread by
+    default, and dropping them makes the statement hit EVERY matching row
+    instead of the capped first n (data loss). The ORDER BY is only observable
+    together with the LIMIT (a full statement's order is unobservable)."""
     order_items: tuple[OrderByItem, ...] = ()
     order_arg = expr.args.get("order")
     if isinstance(order_arg, exp.Order):
@@ -2192,11 +2203,20 @@ def _delete_order_and_limit(
             )
             for o in order_arg.expressions
         )
-    tail_limit = top_limit
+    limit: LimitClause | None = None
     limit_arg = expr.args.get("limit")
     if isinstance(limit_arg, exp.Limit) and limit_arg.expression is not None:
-        tail_limit = LimitClause(limit=convert_expression(limit_arg.expression))
-    return order_items, tail_limit
+        limit = LimitClause(limit=convert_expression(limit_arg.expression))
+    return order_items, limit
+
+
+def _delete_order_and_limit(
+    expr: exp.Delete, top_limit: LimitClause | None
+) -> tuple[tuple[OrderByItem, ...], LimitClause | None]:
+    """Read a DELETE's ``ORDER BY`` and ``LIMIT`` args (MySQL ordered cap),
+    falling back to any T-SQL ``TOP`` cap already split out."""
+    order_items, limit = _read_order_and_limit(expr)
+    return order_items, (limit if limit is not None else top_limit)
 
 
 def _convert_delete(expr: exp.Delete) -> ASTNode:

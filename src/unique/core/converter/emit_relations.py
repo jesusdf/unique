@@ -21,6 +21,7 @@ from unique.core.ast_nodes import (
     SubqueryExpression,
     TableRef,
     UnpivotRelation,
+    UpdateStatement,
 )
 from unique.core.converter._base import *  # noqa: F401,F403
 from unique.core.converter._base import SOURCE_DIALECT
@@ -32,6 +33,9 @@ __all__ = [
     "_emit_pivot_relation",
     "_DELETE_CAP",
     "_emit_delete",
+    "_UPDATE_CAP",
+    "_emit_update",
+    "_emit_capped_update",
 ]
 
 #: Engines whose unquoted identifiers fold to UPPER case — their UNPIVOT
@@ -270,13 +274,121 @@ def _emit_delete(node: DeleteStatement, dialect: str) -> str:
     return result
 
 
+#: Row-capped UPDATE rendering per target — dict dispatch (twin of
+#: ``_DELETE_CAP``). ``t`` = target SQL, ``s`` = SET-assignment text, ``w`` =
+#: WHERE text (or None), ``n`` = cap, ``o`` = ORDER BY text (or None for an
+#: unordered cap). Only MySQL can order+limit an UPDATE directly; the others cap
+#: through a keyed subquery: T-SQL updates an updatable ``SELECT TOP (n) …`` CTE
+#: (sqlglot cannot parse the bare ``UPDATE TOP (n)`` spelling, so the CTE form is
+#: used for the unordered cap too); PG updates rows chosen by a ctid subquery;
+#: Oracle by a rowid subquery with ROWNUM applied AFTER the ordering.
+_UPDATE_CAP: dict[str, Callable[[str, str, str | None, int, str | None], str]] = {
+    "tsql": lambda t, s, w, n, o: (
+        f"WITH uq_upd AS (\nSELECT TOP ({n}) * FROM {t}"
+        + (f" WHERE {w}" if w else "")
+        + (f" ORDER BY {o}" if o else "")
+        + f"\n)\nUPDATE uq_upd\nSET {s}"
+    ),
+    "mysql": lambda t, s, w, n, o: f"UPDATE {t}\nSET {s}"
+    + (f"\nWHERE {w}" if w else "")
+    + (f"\nORDER BY {o}" if o else "")
+    + f"\nLIMIT {n}",
+    "oracle": lambda t, s, w, n, o: (
+        f"UPDATE {t}\nSET {s}\nWHERE rowid IN (SELECT rid FROM "
+        f"(SELECT rowid AS rid FROM {t}"
+        + (f" WHERE {w}" if w else "")
+        + f" ORDER BY {o}) WHERE ROWNUM <= {n})"
+        if o
+        else f"UPDATE {t}\nSET {s}\nWHERE "
+        + (f"{w} AND ROWNUM <= {n}" if w else f"ROWNUM <= {n}")
+    ),
+    "postgresql": lambda t, s, w, n, o: f"UPDATE {t}\nSET {s}\nWHERE ctid IN "
+    + f"(SELECT ctid FROM {t}"
+    + (f" WHERE {w}" if w else "")
+    + (f" ORDER BY {o}" if o else "")
+    + f" LIMIT {n})",
+}
+
+
+def _emit_capped_update(
+    node: UpdateStatement, dialect: str, table: str, sets: str, cap: int
+) -> str:
+    """Render a MySQL ``UPDATE … [ORDER BY …] LIMIT n`` row cap per target."""
+    where_sql = _emit_condition(node.where, dialect) if node.where else None
+    order_sql = (
+        ", ".join(_emit_order_item(o, dialect) for o in node.order_by)
+        if node.order_by
+        else None
+    )
+    return _UPDATE_CAP[dialect](table, sets, where_sql, cap, order_sql)
+
+
+def _emit_update(node: UpdateStatement, dialect: str) -> str:
+    """Emit an UPDATE statement.
+
+    A cross-table update (``from_clause``/``joins`` present) is rendered in each
+    engine's idiomatic form. T-SQL keeps ``UPDATE t SET ... FROM ... JOIN``;
+    PostgreSQL uses ``UPDATE t SET ... FROM ... WHERE <join preds>``; MySQL puts
+    the joins before SET (``UPDATE t JOIN s ON ... SET ...``); Oracle, which has
+    no ``UPDATE ... FROM``, uses correlated subqueries. A plain single-table
+    update is unchanged.
+    """
+    if node.from_clause is not None or node.joins:
+        return _emit_cross_table_update(node, dialect)
+
+    table = _emit_table_ref(node.table, dialect)
+    set_parts = []
+    for col, val in node.assignments:
+        if dialect == "mysql":
+            val = _wrap_mysql_update_self_ref(val, node.table.name)
+        val = _coerce_bit_literal(node.table, col, val, dialect)
+        val = _coerce_date_literal(node.table, col, val, dialect)
+        set_parts.append(
+            f"{_ident_if_plain(col, dialect)} = {_emit_expression(val, dialect)}"
+        )
+    sets = ", ".join(set_parts)
+
+    # MySQL ``UPDATE … [ORDER BY …] LIMIT n`` row cap — rendered per target via a
+    # keyed subquery (twin of the DELETE cap). Dropping the cap updated ALL
+    # matching rows; the ORDER BY only picks WHICH rows when a cap is present.
+    cap = (
+        _plain_int_value(node.limit.limit) if node.limit and node.limit.limit else None
+    )
+    if cap is not None:
+        return _emit_capped_update(node, dialect, table, sets, cap)
+
+    # T-SQL rejects an alias after the UPDATE target (``UPDATE t ep SET``,
+    # error 102); its aliased spelling is ``UPDATE ep SET … FROM t ep``
+    # (correlated subqueries keep resolving against the alias).
+    alias = getattr(node.table, "alias", None)
+    if dialect == "tsql" and alias:
+        result = f"UPDATE {alias}\nSET {sets}\nFROM {table}"
+        if node.where:
+            result += f"\nWHERE {_emit_condition(node.where, dialect)}"
+        return result
+
+    result = f"UPDATE {table}\nSET {sets}"
+
+    if node.where:
+        result += f"\nWHERE {_emit_condition(node.where, dialect)}"
+
+    return result
+
+
 from unique.core.converter.emit import (  # noqa: E402
     _emit_condition,
+    _emit_cross_table_update,
     _emit_expression,
     _emit_order_item,
     _emit_select,
     _emit_table_ref,
     _ident,
+    _ident_if_plain,
     _plain_int_value,
+    _wrap_mysql_update_self_ref,
     emit_node,
+)
+from unique.core.converter.harvest import (  # noqa: E402
+    _coerce_bit_literal,
+    _coerce_date_literal,
 )

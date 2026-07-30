@@ -2839,49 +2839,6 @@ def _wrap_mysql_update_self_ref(val: ASTNode, target: str) -> ASTNode:
     return val
 
 
-def _emit_update(node: UpdateStatement, dialect: str) -> str:
-    """Emit an UPDATE statement.
-
-    A cross-table update (``from_clause``/``joins`` present) is rendered in each
-    engine's idiomatic form. T-SQL keeps ``UPDATE t SET ... FROM ... JOIN``;
-    PostgreSQL uses ``UPDATE t SET ... FROM ... WHERE <join preds>``; MySQL puts
-    the joins before SET (``UPDATE t JOIN s ON ... SET ...``); Oracle, which has
-    no ``UPDATE ... FROM``, uses correlated subqueries. A plain single-table
-    update is unchanged.
-    """
-    if node.from_clause is not None or node.joins:
-        return _emit_cross_table_update(node, dialect)
-
-    table = _emit_table_ref(node.table, dialect)
-    set_parts = []
-    for col, val in node.assignments:
-        if dialect == "mysql":
-            val = _wrap_mysql_update_self_ref(val, node.table.name)
-        val = _coerce_bit_literal(node.table, col, val, dialect)
-        val = _coerce_date_literal(node.table, col, val, dialect)
-        set_parts.append(
-            f"{_ident_if_plain(col, dialect)} = {_emit_expression(val, dialect)}"
-        )
-    sets = ", ".join(set_parts)
-
-    # T-SQL rejects an alias after the UPDATE target (``UPDATE t ep SET``,
-    # error 102); its aliased spelling is ``UPDATE ep SET … FROM t ep``
-    # (correlated subqueries keep resolving against the alias).
-    alias = getattr(node.table, "alias", None)
-    if dialect == "tsql" and alias:
-        result = f"UPDATE {alias}\nSET {sets}\nFROM {table}"
-        if node.where:
-            result += f"\nWHERE {_emit_condition(node.where, dialect)}"
-        return result
-
-    result = f"UPDATE {table}\nSET {sets}"
-
-    if node.where:
-        result += f"\nWHERE {_emit_condition(node.where, dialect)}"
-
-    return result
-
-
 def _emit_join_table_ref(table: TableRef | SubqueryExpression, dialect: str) -> str:
     """Emit a join's source table, whether a plain table or a subquery."""
     if isinstance(table, SubqueryExpression):
