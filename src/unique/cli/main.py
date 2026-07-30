@@ -7,12 +7,16 @@
 from __future__ import annotations
 
 import sys
+from typing import TYPE_CHECKING
 
 import click
 
 from unique.core.registry import DialectRegistry
 from unique.core.transpiler import TranspileOptions, Transpiler
 from unique.core.validation import validate_source
+
+if TYPE_CHECKING:
+    from unique.core.similarity import SimilarityReport
 
 
 @click.group()
@@ -146,6 +150,95 @@ def validate(input_file: str, dialect: str) -> None:
     for issue in issues:
         click.echo(f"  {issue}", err=True)
     sys.exit(1)
+
+
+@cli.command()
+@click.argument("file_a", type=click.Path(exists=True))
+@click.argument("file_b", type=click.Path(exists=True))
+@click.option(
+    "--dialect-a",
+    "dialect_a",
+    default=None,
+    help="Dialect of FILE_A (auto-detected if omitted).",
+)
+@click.option(
+    "--dialect-b",
+    "dialect_b",
+    default=None,
+    help="Dialect of FILE_B (auto-detected if omitted).",
+)
+@click.option(
+    "--json", "as_json", is_flag=True, default=False, help="Emit the report as JSON."
+)
+def compare(
+    file_a: str,
+    file_b: str,
+    dialect_a: str | None,
+    dialect_b: str | None,
+    as_json: bool,
+) -> None:
+    """Report the STRUCTURAL SIMILARITY of two SQL scripts.
+
+    Both scripts are normalized through the transpiler (PostgreSQL pivot) and
+    compared by structural fingerprint and weighted tree alignment. The result
+    is a structural-similarity percentage with a per-dimension breakdown — it
+    is NOT a probability of semantic equivalence (see docs/03-unsupported.md).
+    """
+    from unique.core.similarity import compare as compare_scripts
+
+    with open(file_a, encoding="utf-8") as f:
+        sql_a = f.read()
+    with open(file_b, encoding="utf-8") as f:
+        sql_b = f.read()
+
+    try:
+        report = compare_scripts(sql_a, sql_b, dialect_a, dialect_b)
+    except ValueError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(2)
+
+    if as_json:
+        import json
+
+        payload = {"file_a": file_a, "file_b": file_b, **report.to_dict()}
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    _print_comparison(file_a, file_b, report)
+
+
+def _print_comparison(file_a: str, file_b: str, report: SimilarityReport) -> None:
+    """Render a :class:`SimilarityReport` for humans."""
+    label_a = (
+        f"{file_a} ({report.dialect_a}{', auto-detected' if report.detected_a else ''})"
+    )
+    label_b = (
+        f"{file_b} ({report.dialect_b}{', auto-detected' if report.detected_b else ''})"
+    )
+    click.echo(f"Comparing {label_a}")
+    click.echo(f"     with {label_b}")
+    click.echo(f"\nStructural similarity: {report.overall}%")
+    click.echo("(structural, not a probability of semantic equivalence)\n")
+    names = {
+        "dml_structure": "DML structure",
+        "predicates": "Predicates",
+        "control_flow": "Control flow",
+        "tree_match": "Tree match",
+    }
+    for key, label in names.items():
+        click.echo(f"  {label:<16} {report.dimensions[key]:5.1f}%")
+    click.echo(
+        f"\nAligned statement pairs: {len(report.statement_pairs)}   "
+        f"Unmatched: A={report.unmatched_a} B={report.unmatched_b}"
+    )
+    if report.warnings:
+        click.echo(
+            f"\nTranspiler warnings during normalization: {len(report.warnings)}"
+        )
+        for msg in report.warnings[:5]:
+            click.echo(f"  - {msg}", err=True)
+        if len(report.warnings) > 5:
+            click.echo(f"  … and {len(report.warnings) - 5} more", err=True)
 
 
 @cli.command(name="dialects")
