@@ -76,10 +76,8 @@ Batch totals: func 25, invalid 20, silent-drop 12, lying-warning 10, composition
 
 | id | class | src→targets | wrong output | expected / live evidence | BLUE note |
 |----|-------|-------------|--------------|--------------------------|-----------|
-| red2-pg-extract-isoyear-unit | invalid (2) | postgresql→tsql,mysql,oracle | EXTRACT(ISOYEAR..) passed through verbatim | live PG valid; tsql 155 not-a-datepart; MySQL 1064; Oracle ORA-00907. No warning | Compute ISOYEAR per target or degrade-with-warning; same for ISODOW/JULIAN/MILLENNIUM/DECADE/CENTURY |
 | red2-pg-window-exclude-current | func (5) | postgresql→tsql,mysql,oracle | EXCLUDE CURRENT ROW/GROUP/TIES dropped from OVER() | live t(a)=(1,1,2,3): PG=6,6,5,4; Oracle transpiled=7,7,7,7. No warning | Warn/degrade or rewrite EXCLUDE |
 | red2-my-bitstring-numeric-pg | invalid (2) | mysql→postgresql | b'101'+0 shipped verbatim to PG (BIT literal) | live MySQL=5; PG "operator does not exist: bit + integer". No warning (tsql/ora gated) | Fold bit-string used numerically to int like the hex path |
-| red2-ts-datepart-week-iso | func (5) | tsql→postgresql,mysql,oracle | DATEPART(WEEK) (non-ISO) mapped to ISO week fns | live 2021-01-01: tsql=1, pg/mysql/oracle=53. No warning | Map DATEPART(WEEK) to non-ISO week per target; reserve ISO fns for ISO_WEEK |
 | red2-pg-fk-ondelete-setdefault-oracle | invalid (2) | postgresql→oracle | FK ON DELETE SET DEFAULT passed through | live Oracle ORA-03001 unimplemented feature. No warning (MySQL tolerates) | Oracle lacks SET DEFAULT action — degrade+warn |
 | red2-ts-exec-named-param-mysql | invalid (2) | tsql→mysql | CALL proc(v_id = 1, v_flag = 0) named-param | live MySQL 1054 Unknown column 'v_id'; positional CALL works. No warning | MySQL CALL is positional — reorder named args or degrade+warn |
 | red2-ts-raiserror-format-arg-drop | silent-drop (4) | tsql→postgresql,oracle | RAISERROR %d substitution arg 42 dropped, message left literal | T-SQL raises "value is 42 today"; PG/Oracle emit literal 'value is %d today', arg gone, NO warning (MySQL leg warns) | Translate %d/%s to PG RAISE format args / Oracle concat; at least warn |

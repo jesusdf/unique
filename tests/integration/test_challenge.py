@@ -5603,3 +5603,42 @@ class TestDateAddDiffUnits:
             assert r.warnings and "UNIQUE:" in r.sql, r.sql
             assert "NANOSECOND" in r.sql, r.sql  # unit named for review
         assert "DATEDIFF(NANOSECOND" in _tx(src, "tsql", "tsql")
+
+
+class TestExtractUnitSpace:
+    """RED round-2 EXTRACT/DATEPART unit space.
+
+    * red2-pg-extract-isoyear-unit: PG EXTRACT(ISOYEAR) computed per target as
+      the year of the ISO week's Thursday. Live-verified value 2020 on all four.
+    * red2-ts-datepart-week-iso: T-SQL DATEPART(WEEK) is the NON-ISO,
+      DATEFIRST-based week (was mapped to the ISO week functions, value 53 vs 1);
+      mapped to each engine's non-ISO week formula. DATEPART(ISO_WEEK) keeps the
+      ISO functions. Live-verified value 1 for 2021-01-01 on all four.
+    """
+
+    def test_isoyear_maps_per_engine(self) -> None:
+        case = _case("challenge_postgresql.sql", "red2-pg-extract-isoyear")
+        assert "EXTRACT(YEAR FROM (TRUNC(DATE '2020-03-15', 'IW') + 3))" in _tx(
+            case, "postgresql", "oracle"
+        )
+        assert "DATEDIFF(DAY, '19000101'" in _tx(case, "postgresql", "tsql")
+        for target in ("tsql", "mysql", "oracle"):
+            body = _exec_lines(_tx(case, "postgresql", target))
+            assert "ISOYEAR" not in body.upper(), body  # unit is gone
+
+    def test_datepart_week_is_noniso(self) -> None:
+        case = _case("challenge_sqlserver.sql", "red2-ts-datepart-week-iso")
+        # non-ISO formula, NOT the ISO week functions
+        my = _tx(case, "tsql", "mysql")
+        assert "DAYOFWEEK(MAKEDATE(YEAR(" in my, my
+        assert "WEEK('2021-01-01', 3)" not in my, my  # ISO form must be gone
+        pg = _tx(case, "tsql", "postgresql")
+        assert "EXTRACT(DOY FROM DATE '2021-01-01')" in pg, pg
+        o4 = _tx(case, "tsql", "oracle")
+        assert "TO_CHAR(DATE '2021-01-01', 'DDD')" in o4, o4
+
+    def test_datepart_iso_week_stays_iso(self) -> None:
+        # Neighbor: DATEPART(ISO_WEEK) must keep the ISO week functions.
+        src = "SELECT DATEPART(ISO_WEEK, '2021-01-01') AS w"
+        assert "WEEK('2021-01-01', 3)" in _tx(src, "tsql", "mysql")
+        assert "TO_CHAR('2021-01-01', 'IW')" in _tx(src, "tsql", "oracle")

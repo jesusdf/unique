@@ -1086,6 +1086,102 @@ def _weekday_extract_expr(part: str, value: str, dialect: str) -> str | None:
     return None
 
 
+def _extract_iso_week(value: str, dialect: str) -> str | None:
+    """ISO 8601 week (1-53) per target — PG EXTRACT(WEEK), T-SQL ISO_WEEK, ..."""
+    return {
+        "oracle": f"TO_NUMBER(TO_CHAR({value}, 'IW'))",
+        "mysql": f"WEEK({value}, 3)",  # mode 3 = ISO 8601
+        "tsql": f"DATEPART(ISO_WEEK, {value})",
+        "postgresql": f"EXTRACT(WEEK FROM {value})",
+    }.get(dialect)
+
+
+def _extract_week_noniso(value: str, dialect: str) -> str | None:
+    """T-SQL DATEPART(WEEK): week 1 contains Jan 1, boundaries on @@DATEFIRST.
+
+    Under the default (Sunday) that is ``FLOOR((doy + jan1_weekday - 2)/7) + 1``
+    with jan1_weekday numbered Sunday=1..Saturday=7. Live-verified equal to
+    DATEPART(WEEK) across edge dates on all four engines (2026-07-30).
+    """
+    # PG/Oracle need a DATE-typed operand (an untyped ISO string is ambiguous on
+    # PG and picks TRUNC's numeric overload on Oracle); MySQL/T-SQL take the
+    # bare string. wrap_oracle_date_arg emits the ANSI ``DATE '…'`` literal.
+    dv = wrap_oracle_date_arg(value)
+    return {
+        "postgresql": (
+            f"(FLOOR((EXTRACT(DOY FROM {dv}) + "
+            f"EXTRACT(DOW FROM DATE_TRUNC('year', {dv})) - 1) / 7) + 1)"
+        ),
+        "mysql": (
+            f"(FLOOR((DAYOFYEAR({value}) + "
+            f"DAYOFWEEK(MAKEDATE(YEAR({value}), 1)) - 2) / 7) + 1)"
+        ),
+        "oracle": (
+            f"(FLOOR((TO_NUMBER(TO_CHAR({dv}, 'DDD')) + "
+            f"(MOD(TRUNC({dv}, 'YYYY') - DATE '1970-01-04', 7) + 1) - 2) / 7) + 1)"
+        ),
+        "tsql": f"DATEPART(WEEK, {value})",
+    }.get(dialect)
+
+
+def _extract_isoyear(value: str, dialect: str) -> str | None:
+    """PG EXTRACT(ISOYEAR): the calendar year of the ISO week's Thursday, i.e.
+    the year of (Monday of the ISO week + 3 days). Live-verified across edge
+    dates on all four engines (2026-07-30)."""
+    return {
+        "postgresql": f"EXTRACT(ISOYEAR FROM {value})",
+        "tsql": (
+            f"YEAR(DATEADD(DAY, 3, "
+            f"DATEADD(DAY, -(DATEDIFF(DAY, '19000101', {value}) % 7), {value})))"
+        ),
+        "oracle": f"EXTRACT(YEAR FROM (TRUNC({value}, 'IW') + 3))",
+        "mysql": (
+            f"YEAR(DATE_ADD(DATE_SUB({value}, INTERVAL WEEKDAY({value}) DAY), "
+            "INTERVAL 3 DAY))"
+        ),
+    }.get(dialect)
+
+
+#: PG-only EXTRACT fields with no faithful cross-engine form (a locale/Julian/
+#: session-tz computation) — degraded off PG rather than shipped invalid.
+_PG_EXOTIC_EXTRACT = frozenset(
+    {
+        "ISODOW",
+        "JULIAN",
+        "MILLENNIUM",
+        "DECADE",
+        "CENTURY",
+        "MILLISECONDS",
+        "TIMEZONE",
+        "TIMEZONE_HOUR",
+        "TIMEZONE_MINUTE",
+    }
+)
+
+
+def _emit_week_year_field(part: str, value: str, dialect: str) -> str | None:
+    """Emit ISO/non-ISO week, ISO year, or a PG-only exotic EXTRACT field.
+
+    T-SQL DATEPART(ISO_WEEK) (part WEEKISO) and non-T-SQL EXTRACT(WEEK) are ISO
+    8601; T-SQL DATEPART(WEEK) is the NON-ISO, DATEFIRST-based week (a distinct
+    field). ISOYEAR maps per target. The remaining PG-only fields degrade off PG.
+    Returns None when *part* is none of these.
+    """
+    src = SOURCE_DIALECT.get()
+    if part in ("WEEKISO", "ISOWEEK") or (part == "WEEK" and src not in ("tsql",)):
+        return _extract_iso_week(value, dialect)
+    if part == "WEEK" and src in ("tsql",):
+        return _extract_week_noniso(value, dialect)
+    if part == "ISOYEAR":
+        return _extract_isoyear(value, dialect)
+    if part in _PG_EXOTIC_EXTRACT and dialect not in ("postgresql",):
+        return (
+            f"NULL /* UNIQUE: EXTRACT({part}) has no {dialect} equivalent — "
+            "the value was not computed (docs/03-unsupported.md) */"
+        )
+    return None
+
+
 def _emit_function(node: FunctionCall, dialect: str) -> str:
     """Emit a function call."""
     fn_name = node.name.upper()
@@ -2047,16 +2143,11 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         _weekday = _weekday_extract_expr(part, value, dialect)
         if _weekday is not None:
             return _weekday
-        if part == "WEEK":
-            # PG's WEEK is ISO 8601. Oracle's EXTRACT rejects it; MySQL's native
-            # EXTRACT(WEEK) follows default_week_format (mode 0, off by one) and
-            # T-SQL's DATEPART(WEEK) is DATEFIRST-dependent — all wrong for ISO.
-            if dialect == "oracle":
-                return f"TO_NUMBER(TO_CHAR({value}, 'IW'))"
-            if dialect == "mysql":
-                return f"WEEK({value}, 3)"  # mode 3 = ISO 8601
-            if dialect == "tsql":
-                return f"DATEPART(ISO_WEEK, {value})"
+        # ISO/non-ISO week, ISO year and the PG-only exotic fields (their own
+        # per-target formulas or an honest degrade).
+        _wy = _emit_week_year_field(part, value, dialect)
+        if _wy is not None:
+            return _wy
         if part == "QUARTER" and dialect == "oracle":
             return f"TO_NUMBER(TO_CHAR({value}, 'Q'))"
         if part == "EPOCH":
