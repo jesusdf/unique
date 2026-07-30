@@ -6,11 +6,11 @@ Per-source-engine counts of the challenge corpus's `-- CASE[status][class=...]:`
 
 | Source | fixed | limit | open | total |
 |---|---|---|---|---|
-| mysql | 247 | 56 | 4 | 307 |
-| oracle | 138 | 44 | 4 | 186 |
-| postgresql | 238 | 48 | 3 | 289 |
-| sqlserver | 147 | 21 | 4 | 172 |
-| **all** | 770 | 169 | 15 | 954 |
+| mysql | 250 | 56 | 1 | 307 |
+| oracle | 141 | 44 | 1 | 186 |
+| postgresql | 241 | 48 | 0 | 289 |
+| sqlserver | 151 | 21 | 0 | 172 |
+| **all** | 783 | 169 | 2 | 954 |
 
 ## By finding class
 

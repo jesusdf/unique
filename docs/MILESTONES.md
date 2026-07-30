@@ -10,6 +10,31 @@ Newest first.
 
 ---
 
+## Challenge campaign 2026-07-30, cycle 2 — seeded probe + docs armament
+
+RED round 2 (one seeded 1-hour probe over cycle-1's leads): **27 findings /
+75 points / 6 classes** — headline a real data-loss (MySQL `DELETE … ORDER BY
+… LIMIT` dropped the cap and deleted every matching row). BLUE closed
+**27/27** across two workers: the date-function unit/format-model space swept
+as a class (unmapped units now warn by name, never silently wrong), the
+asymmetric false-unmap family wired symmetrically (JSON_VALUE, DIV, nextval,
+matview, LIKE char-classes + DAYOFWEEK/`~*` from the sweep), the ordered
+DELETE cap per target, EXCLUDE window frames, SAVEPOINT-in-procedure, and the
+comment/statement-swallow class extended to SET. Docs armament shipped in the
+same cycle: hand-curated `docs/rationale/` (6 pages, 52 entries, every claim
+corpus-traceable — the audit style paid off: it caught six dead assertions
+misfiled in SUSPECT_CASES and two doc-vs-code discrepancies) plus T8's
+generated `docs/reference/` (14 pages from `core/mappings.py` + the corpus,
+CI freshness gate — which caught its first real drift the day it landed).
+Backlog: B29–B32 briefs approved (ENUM order, date-type propagation,
+rationale metadata, `UNIQUE-NNNN` warning codes). Ratchets tightened:
+emit 3718→3696, dialect-compares 575→571. Corpus:
+**783 `[fixed]` / 169 `[limit]` / 2 `[open]` (both briefed)** of 954.
+Remaining known, uncased observations (UPDATE ORDER BY LIMIT, non-literal
+TRY_CAST, SET TRANSACTION, GOTO) → cycle 3's narrow scope.
+
+---
+
 ## Challenge campaign 2026-07-30, cycle 1 — PURPLE-directed red&blue (v0.35.0+)
 
 First campaign run under the PURPLE role (architect/analyst directing worker
