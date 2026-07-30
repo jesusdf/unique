@@ -75,6 +75,13 @@ def _exec(sql: str) -> str:
 # that must be gone; ``degrade`` marks a warned/annotated documented limit.
 CASES: dict[str, dict[str, dict[str, object]]] = {
     # --- genuine translations ------------------------------------------------
+    # func: T-SQL ``datetime + int`` adds days; MySQL numerically coerces
+    # (20200101000001) and PG has no ``timestamp + int``. Rewrite to
+    # DATE_ADD / ``+ INTERVAL 'n day'`` (Oracle native). All = 2020-01-02.
+    "reda-ts-date-plus-int": {
+        "mysql": {"present": ["DATE_ADD(", "INTERVAL 1 DAY"], "absent": ["+ 1"]},
+        "postgresql": {"present": ["+ INTERVAL '1 day'"], "absent": ["+ 1 AS"]},
+    },
     "ts-bitops": {
         "oracle": {"present": ["BITAND(5, 3)", "-(5) - 1"], "absent": ["5 & 3", "~5"]},
         "postgresql": {"present": ["5 # 3"], "absent": ["5 ^ 3"]},

@@ -308,6 +308,18 @@ CASES.update(
                 "mysql": Expect(present=("INTERVAL WEEKDAY(",), absent=("date_trunc",)),
             },
         ),
+        # func: PG ``date - int`` is day arithmetic; MySQL numerically coerces
+        # (garbage) and T-SQL rejects it. Rewrite to DATE_SUB / DATEADD (mirrors
+        # the '+' path). All targets return 2020-02-23 (live-diffed).
+        "pg-date-minus-integer": Case(
+            "pg-date-minus-integer ",
+            {
+                "tsql": Expect(present=("DATEADD(DAY, -7,",), absent=("- 7",)),
+                "mysql": Expect(
+                    present=("DATE_SUB(", "INTERVAL 7 DAY"), absent=("- 7",)
+                ),
+            },
+        ),
         "pg-drop-default": Case(
             "pg-drop-default ",
             {

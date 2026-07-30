@@ -1025,6 +1025,22 @@ def _is_nonneg_int_literal(node: ASTNode) -> bool:
     )
 
 
+#: Cast target types that denote a date+time value (day arithmetic applies, but
+#: ``timestamp ± int`` needs INTERVAL on MySQL/PG). Plain DATE is excluded — it is
+#: handled by :func:`_date_literal_sql`.
+_DATETIME_CAST_TYPES = frozenset(
+    {"DATETIME", "DATETIME2", "TIMESTAMP", "SMALLDATETIME", "DATETIMEOFFSET"}
+)
+
+
+def _is_datetime_cast(node: ASTNode) -> bool:
+    """True if node is a CAST to a datetime/timestamp type (not a plain DATE)."""
+    return (
+        isinstance(node, CastExpression)
+        and node.target_type.name.split("(")[0].strip().upper() in _DATETIME_CAST_TYPES
+    )
+
+
 def _date_literal_sql(node: ASTNode, dialect: str) -> str | None:
     """Emit a sqlglot ``DATE '…'`` literal (a DATE_STR_TO_DATE wrapper around a
     string) as the target's date literal, or None if node is not one."""
@@ -1191,22 +1207,89 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
                 return f"DATEDIFF(DAY, {rd}, {ld}){_sub_carrier}"
             return f"DATEDIFF({ld}, {rd})"  # MySQL
 
-    # ``date + n`` adds n days on PostgreSQL/Oracle (yielding a date), but MySQL
-    # reads it as a NUMERIC addition (2020-01-01 + 30 = 20200131) and T-SQL
-    # rejects it. From a PG/Oracle source, spell a date-literal-plus-integer as
-    # DATE_ADD / DATEADD on those targets so the day arithmetic is preserved.
+    # ``timestamp - timestamp`` is an INTERVAL on PG/Oracle (e.g. '02:00:00'),
+    # but T-SQL/MySQL have no interval type: the raw subtraction is invalid on
+    # T-SQL (error 8117) and numerically coerced on MySQL (a wrong scalar). No
+    # faithful interval result is possible, so degrade to a second-count via
+    # DATEDIFF/TIMESTAMPDIFF with a warned carrier (challenge pg-date-minus
+    # timestamp-diff note). PG/Oracle keep the native interval.
     if (
-        node.operator == BinaryOperator.ADD
+        node.operator == BinaryOperator.SUB
+        and dialect in ("tsql", "mysql")
+        and SOURCE_DIALECT.get() in ("postgresql", "oracle")
+        and _is_datetime_cast(node.left)
+        and _is_datetime_cast(node.right)
+    ):
+        _tl = _emit_expression(node.left, dialect)
+        _tr = _emit_expression(node.right, dialect)
+        _ts_carrier = (
+            " /* UNIQUE: timestamp difference is an INTERVAL with no "
+            f"{dialect} equivalent; emitted as a SECOND count "
+            "(docs/03-unsupported.md) */"
+        )
+        if dialect == "tsql":
+            return f"DATEDIFF(SECOND, {_tr}, {_tl}){_ts_carrier}"
+        return f"TIMESTAMPDIFF(SECOND, {_tr}, {_tl}){_ts_carrier}"
+
+    # ``date ± n`` is day arithmetic on PostgreSQL/Oracle/T-SQL (yielding a date),
+    # but MySQL reads it as a NUMERIC operation (2020-01-01 + 30 = 20200131;
+    # 2020-03-01 - 7 = 20200294) and T-SQL rejects ``date`` ± int (error 206).
+    # From a PG/Oracle source, spell a date-literal ± integer as DATE_ADD /
+    # DATE_SUB (MySQL) or DATEADD (T-SQL) so the day arithmetic is preserved. The
+    # '+' path predates the '-' path (challenge pg-date-minus-integer).
+    if (
+        node.operator in (BinaryOperator.ADD, BinaryOperator.SUB)
         and dialect in ("mysql", "tsql")
         and SOURCE_DIALECT.get() in ("postgresql", "oracle")
     ):
-        for dside, nside in ((node.left, node.right), (node.right, node.left)):
+        # For SUB only ``date - n`` is day arithmetic (``n - date`` is not), so
+        # the date must be the left operand; ADD is commutative.
+        sides = (
+            ((node.left, node.right),)
+            if node.operator == BinaryOperator.SUB
+            else ((node.left, node.right), (node.right, node.left))
+        )
+        for dside, nside in sides:
             dlit = _date_literal_sql(dside, dialect)
             if dlit is not None and _is_nonneg_int_literal(nside):
                 n = _emit_expression(nside, dialect)
+                if node.operator == BinaryOperator.SUB:
+                    if dialect == "mysql":
+                        return f"DATE_SUB({dlit}, INTERVAL {n} DAY)"
+                    return f"DATEADD(DAY, -{n}, {dlit})"
                 if dialect == "mysql":
                     return f"DATE_ADD({dlit}, INTERVAL {n} DAY)"
                 return f"DATEADD(DAY, {n}, {dlit})"
+
+    # A datetime/timestamp expression ± an integer is day arithmetic on
+    # T-SQL/Oracle sources, but MySQL numerically coerces the datetime
+    # (2020-01-01 + 1 = 20200101000001) and PG has no ``timestamp + int``
+    # operator (error). Rewrite a datetime-cast ± int to DATE_ADD/DATE_SUB
+    # (MySQL) or ``expr ± INTERVAL 'n day'`` (PG). Oracle/T-SQL targets keep the
+    # native form (challenge reda-ts-date-plus-int).
+    if (
+        node.operator in (BinaryOperator.ADD, BinaryOperator.SUB)
+        and dialect in ("mysql", "postgresql")
+        and SOURCE_DIALECT.get() in ("tsql", "oracle")
+    ):
+        sides = (
+            ((node.left, node.right),)
+            if node.operator == BinaryOperator.SUB
+            else ((node.left, node.right), (node.right, node.left))
+        )
+        for dside, nside in sides:
+            if _is_datetime_cast(dside) and _is_nonneg_int_literal(nside):
+                dt = _emit_expression(dside, dialect)
+                n = _emit_expression(nside, dialect)
+                if dialect == "mysql":
+                    fn = (
+                        "DATE_SUB"
+                        if node.operator == BinaryOperator.SUB
+                        else "DATE_ADD"
+                    )
+                    return f"{fn}({dt}, INTERVAL {n} DAY)"
+                op = "-" if node.operator == BinaryOperator.SUB else "+"
+                return f"{dt} {op} INTERVAL '{n} day'"
 
     # MySQL '+' is always arithmetic; T-SQL '+' on strings concatenates
     # ('5' + '5' = '55', not 10). When a MySQL source adds numeric string

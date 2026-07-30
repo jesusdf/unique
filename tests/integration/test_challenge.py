@@ -3090,6 +3090,31 @@ class TestMysqlSafeDivision:
         assert "NULLIF" not in r_pg2.sql, r_pg2.sql
 
 
+class TestTimestampDifferenceDegrade:
+    """``timestamp - timestamp`` is an INTERVAL on PG/Oracle but has no interval
+    value type on T-SQL/MySQL — degrade to a SECOND count with a warned carrier
+    (never the silent invalid/garbage raw subtraction)."""
+
+    _SQL = (
+        "SELECT TIMESTAMP '2020-01-01 12:00:00' - "
+        "TIMESTAMP '2020-01-01 10:00:00' AS d"
+    )
+
+    def test_tsql_and_mysql_degrade_with_warning(self) -> None:
+        for target, fn in (
+            ("tsql", "DATEDIFF(SECOND,"),
+            ("mysql", "TIMESTAMPDIFF(SECOND,"),
+        ):
+            r = Transpiler().transpile(self._SQL, source="postgresql", target=target)
+            assert fn in r.sql, r.sql
+            assert "UNIQUE:" in r.sql and r.warnings, r.sql
+
+    def test_oracle_keeps_native_interval(self) -> None:
+        r = Transpiler().transpile(self._SQL, source="postgresql", target="oracle")
+        assert "TIMESTAMP '2020-01-01 12:00:00' - " in r.sql, r.sql
+        assert "DATEDIFF" not in r.sql, r.sql
+
+
 class TestMysqlDateSubtraction:
     """MySQL's DATE - DATE is a numeric YYYYMMDD subtraction (2020-03-01 -
     2020-01-01 = 200), not a day count; the meaningful day count (60) is emitted
