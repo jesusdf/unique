@@ -54,3 +54,5 @@ own engine first.
 - 24 findings, 90 points, 6 classes. START commit cedf53a (worktree).
 - By class: func 8 (40), invalid 8 (16), silent-drop 3 (12), consistency 2 (8), lying-warning 2 (4), composition 1 (5). func = 44%; concentration cap satisfied (no class > 50%), >= 3 classes.
 - Cross-cutting: sqlglot 30.14 unread-args tripwire false/vague-fires on Window.over (all windows), Insert.default, Div.safe/typed — audit ALLOWED_UNREAD. Oracle date_trunc unit->format map wrong ('WEEK'/'QUARTER'). Temporal '-' operator (date-int, ts-ts) unconverted while '+' is handled.
+
+<!-- RED batch END: committed-time >= 1h; over==True. 24 findings / 90 pts / 6 classes. -->
