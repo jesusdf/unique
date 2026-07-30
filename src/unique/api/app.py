@@ -203,6 +203,7 @@ class TranspileWarning(BaseModel):
 
     message: str
     feature: str
+    code: str | None = None
 
 
 class TranspileResponse(BaseModel):
@@ -333,7 +334,7 @@ def transpile_sql(request: TranspileRequest) -> TranspileResponse:
     return TranspileResponse(
         sql=result.sql,
         warnings=[
-            TranspileWarning(message=w.message, feature=w.feature)
+            TranspileWarning(message=w.message, feature=w.feature, code=w.code)
             for w in result.warnings
         ],
         unsupported=result.unsupported,

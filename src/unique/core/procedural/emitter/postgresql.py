@@ -295,7 +295,7 @@ class PostgresEmitter(ProceduralEmitter):
             if rowified is None:
                 # An aggregate over the transition table has no row form.
                 return self._degrade_pseudo_table_trigger(
-                    "-- UNIQUE: INSTEAD OF trigger aggregates over the "
+                    "-- UNIQUE-1181: INSTEAD OF trigger aggregates over the "
                     "inserted/deleted transition table; PostgreSQL INSTEAD OF "
                     "triggers are row-level only — port by hand "
                     "(docs/03-unsupported.md)\n"
@@ -310,7 +310,7 @@ class PostgresEmitter(ProceduralEmitter):
             if _on_table:
                 _timing = "BEFORE"
                 _instead_note = (
-                    "-- UNIQUE: PostgreSQL allows INSTEAD OF only on views; "
+                    "-- UNIQUE-1182: PostgreSQL allows INSTEAD OF only on views; "
                     "on a table the equivalent is a BEFORE row trigger "
                     "returning NULL (the original operation is suppressed)\n"
                 )
@@ -476,7 +476,7 @@ class PostgresEmitter(ProceduralEmitter):
         # document the discarded code (a T-SQL RETURN <code> has no PG meaning).
         if self._in_pg_procedure and node.value:
             val = self._emit_node(node.value)
-            return f"RETURN;  -- UNIQUE: discarded procedure RETURN value ({val})"
+            return f"RETURN;  -- UNIQUE-1177: discarded procedure RETURN value ({val})"
         if node.value:
             val = self._emit_node(node.value)
             return f"RETURN {val};"
@@ -490,7 +490,7 @@ class PostgresEmitter(ProceduralEmitter):
         # Inside a plpgsql function transaction control is illegal; a procedure
         # starts its transaction implicitly. Document the dropped BEGIN.
         return (
-            "/* UNIQUE: BEGIN TRANSACTION dropped -- PostgreSQL manages "
+            "/* UNIQUE-1183: BEGIN TRANSACTION dropped -- PostgreSQL manages "
             "the routine transaction implicitly */"
         )
 
@@ -501,14 +501,14 @@ class PostgresEmitter(ProceduralEmitter):
         # syntax error, so document the drop instead of shipping invalid SQL.
         sp = f" {name}" if name else ""
         return (
-            f"/* UNIQUE: SAVEPOINT{sp} dropped -- PL/pgSQL has no explicit "
+            f"/* UNIQUE-1184: SAVEPOINT{sp} dropped -- PL/pgSQL has no explicit "
             "savepoints; wrap the statements in a BEGIN … EXCEPTION block, which "
             "rolls back to its start on error (docs/03-unsupported.md) */"
         )
 
     def _rollback_to_savepoint(self, name: str) -> str:
         return (
-            f"/* UNIQUE: ROLLBACK TO SAVEPOINT {name} dropped -- PL/pgSQL has no "
+            f"/* UNIQUE-1185: ROLLBACK TO SAVEPOINT {name} dropped -- PL/pgSQL has no "
             "explicit savepoints; the enclosing BEGIN … EXCEPTION block rolls "
             "back automatically on error (docs/03-unsupported.md) */"
         )

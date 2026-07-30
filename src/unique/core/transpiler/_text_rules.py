@@ -274,13 +274,20 @@ def _mysql_safe_comments(sql: str) -> str:
     return _MYSQL_BAD_COMMENT_RE.sub(r"\1-- ", sql)
 
 
-def _warn(message: str, feature: str, source: str, target: str) -> TransformWarning:
+def _warn(
+    message: str,
+    feature: str,
+    source: str,
+    target: str,
+    code: str | None = None,
+) -> TransformWarning:
     """Build a TransformWarning with dialect context."""
     return TransformWarning(
         message=message,
         feature=feature,
         source_dialect=source,
         target_dialect=target,
+        code=code,
     )
 
 
@@ -314,6 +321,7 @@ def _aggregate_warnings(warnings: list[TransformWarning]) -> list[TransformWarni
                     feature=warning.feature,
                     source_dialect=warning.source_dialect,
                     target_dialect=warning.target_dialect,
+                    code=warning.code,
                 )
             )
     return result
@@ -328,24 +336,29 @@ _QI_ON_RE = re.compile(r"(?im)^\s*SET\s+QUOTED_IDENTIFIER\s+ON\b")
 # Capture the carrier message up to the block-comment terminator ``*/`` (or the
 # line end for ``--`` carriers) — an inline ``/* UNIQUE: … */`` mid-statement is
 # followed by more SQL on the same line, which must NOT leak into the warning.
-_CARRIER_RE = re.compile(r"UNIQUE:\s*(?P<frag>.*?)(?:\*/|$)", re.M)
+# Matches both the legacy uncoded ``UNIQUE:`` (pre-B32 outputs) and the coded
+# ``UNIQUE-1234:`` form (B32), capturing the code when present so the
+# synthesized warning can carry it.
+_CARRIER_RE = re.compile(r"UNIQUE(?:-(?P<code>\d{4}))?:\s*(?P<frag>.*?)(?:\*/|$)", re.M)
 
 
-def _carrier_fragments(sql: str) -> list[str]:
-    """Extract the message fragment of each UNIQUE carrier comment in *sql*.
+def _carrier_fragments(sql: str) -> list[tuple[str, str | None]]:
+    """Extract (message fragment, code) of each UNIQUE carrier in *sql*.
 
     The fragment is the carrier text up to (excluding) a trailing
-    "Original:" marker, deduplicated preserving order.
+    "Original:" marker, deduplicated preserving order. ``code`` is the
+    ``UNIQUE-NNNN`` string when the carrier is coded, else ``None``.
     """
     seen: set[str] = set()
-    fragments: list[str] = []
+    fragments: list[tuple[str, str | None]] = []
     for match in _CARRIER_RE.finditer(sql):
         frag = match.group("frag").strip()
         frag = re.sub(r"\s*Original:\s*$", "", frag).rstrip(" .;")
         frag = frag.rstrip("*/ ").rstrip()
         if frag and frag not in seen:
             seen.add(frag)
-            fragments.append(frag)
+            digits = match.group("code")
+            fragments.append((frag, f"UNIQUE-{digits}" if digits else None))
     return fragments
 
 

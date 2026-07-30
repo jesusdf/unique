@@ -744,7 +744,7 @@ def test_ora_case(case_id: str, target: str) -> None:
             result.warnings
         ), f"{case_id} -> {target}: expected a warning\n{result.sql}"
         assert (
-            "UNIQUE:" in result.sql
+            "UNIQUE-" in result.sql
         ), f"{case_id} -> {target}: expected a UNIQUE carrier\n{result.sql}"
     for tok in exp.present:
         assert tok in body, f"{case_id} -> {target}: missing {tok!r}\n{result.sql}"

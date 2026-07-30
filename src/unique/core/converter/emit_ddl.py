@@ -76,18 +76,18 @@ _LOCAL_TZ_TYPE: dict[str, str] = {
 #: entry: its native spelling loses nothing. ``{name}`` = the column name.
 _LOCAL_TZ_NOTE: dict[str, str] = {
     "postgresql": (
-        "-- UNIQUE: Oracle WITH LOCAL TIME ZONE and PostgreSQL timestamptz "
+        "-- UNIQUE-1039: Oracle WITH LOCAL TIME ZONE and PostgreSQL timestamptz "
         "both display column {name} in the session time zone (same instant, "
         "session-dependent wall clock) (docs/03-unsupported.md)"
     ),
     "tsql": (
-        "-- UNIQUE: tsql has no session-local timestamp type — column {name} "
+        "-- UNIQUE-1040: tsql has no session-local timestamp type — column {name} "
         "WITH LOCAL TIME ZONE maps to DATETIMEOFFSET; the value's instant is "
         "kept but the session-time-zone display is not reproduced "
         "(docs/03-unsupported.md)"
     ),
     "mysql": (
-        "-- UNIQUE: mysql has no session-local timestamp type — column {name} "
+        "-- UNIQUE-1041: mysql has no session-local timestamp type — column {name} "
         "WITH LOCAL TIME ZONE maps to TIMESTAMP; the value's instant is kept "
         "but the session-time-zone display is not reproduced "
         "(docs/03-unsupported.md)"
@@ -130,7 +130,7 @@ def _type_gap_map(
             return (
                 "INTERVAL DAY TO SECOND",
                 (),
-                f"-- UNIQUE: Oracle has no TIME type — column {col.name} "
+                f"-- UNIQUE-1042: Oracle has no TIME type — column {col.name} "
                 f"stores the time of day as INTERVAL DAY TO SECOND{tz} "
                 "(docs/03-unsupported.md)",
             )
@@ -138,7 +138,7 @@ def _type_gap_map(
             return (
                 "INTERVAL DAY TO SECOND",
                 (),
-                f"-- UNIQUE: PostgreSQL INTERVAL mixes year-month and "
+                f"-- UNIQUE-1043: PostgreSQL INTERVAL mixes year-month and "
                 f"day-second fields; column {col.name} is mapped to INTERVAL "
                 "DAY TO SECOND — year-month values need a separate "
                 "INTERVAL YEAR TO MONTH column (docs/03-unsupported.md)",
@@ -149,7 +149,7 @@ def _type_gap_map(
         return (
             "VARCHAR",
             (30,),
-            f"-- UNIQUE: {dialect} has no INTERVAL column type — column "
+            f"-- UNIQUE-1044: {dialect} has no INTERVAL column type — column "
             f"{col.name} keeps the interval as text (docs/03-unsupported.md)",
         )
     if (
@@ -161,7 +161,7 @@ def _type_gap_map(
         return (
             dtype,
             (6,),
-            f"-- UNIQUE: MySQL fractional-seconds precision caps at 6 — "
+            f"-- UNIQUE-1045: MySQL fractional-seconds precision caps at 6 — "
             f"column {col.name} precision {params[0]} clamped to 6 "
             "(docs/03-unsupported.md)",
         )
@@ -176,7 +176,7 @@ def _type_gap_map(
             return (
                 mapped,
                 (),
-                f"-- UNIQUE: {dialect} has no bit-string type — column "
+                f"-- UNIQUE-1046: {dialect} has no bit-string type — column "
                 f"{col.name} BIT({params[0]}) stores its numeric value as "
                 f"{mapped} (docs/03-unsupported.md)",
             )
@@ -208,7 +208,7 @@ def _emit_enum_type(col: ColumnDefinition, dialect: str) -> tuple[str, str, str]
         )
     total_len = sum(len(v) for v in values) + max(len(values) - 1, 0)
     note = (
-        f"-- UNIQUE: MySQL SET type on {col_name} has no {dialect} "
+        f"-- UNIQUE-1047: MySQL SET type on {col_name} has no {dialect} "
         f"equivalent; stored as {varchar}({total_len}). "
         f"Allowed members: {quoted_values}"
     )
@@ -295,14 +295,14 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
             return (
                 f"SELECT *\nINTO {table}\nFROM {node.like_source}\n"
                 "WHERE 1 = 0\n"
-                "-- UNIQUE: LIKE clone copies column structure only here; "
+                "-- UNIQUE-1048: LIKE clone copies column structure only here; "
                 "the source's indexes/keys are not cloned"
             )
         if dialect == "oracle":
             return (
                 f"CREATE {temp}TABLE {exists}{table} AS\n"
                 f"SELECT *\nFROM {node.like_source}\nWHERE 1 = 0\n"
-                "-- UNIQUE: LIKE clone copies column structure only here; "
+                "-- UNIQUE-1048: LIKE clone copies column structure only here; "
                 "the source's indexes/keys are not cloned"
             )
         return f"CREATE {temp}TABLE {exists}{table} LIKE {node.like_source}"
@@ -612,7 +612,7 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                         # CYCLE) can't be a MySQL column clause; flag rather than
                         # silently reset the sequence to start 1 / step 1.
                         identity += (
-                            f" /* UNIQUE: source IDENTITY (START {seed} INCREMENT "
+                            f" /* UNIQUE-1049: source IDENTITY (START {seed} INCREMENT "
                             f"{step}) has no MySQL column form — AUTO_INCREMENT "
                             "starts at 1, steps by 1 (docs/03-unsupported.md) */"
                         )
@@ -699,7 +699,7 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
             )
             if col.on_update and dialect != "mysql":
                 on_update_notes.append(
-                    f"-- UNIQUE: MySQL's {col.on_update} on column {col_name} has "
+                    f"-- UNIQUE-1050: MySQL's {col.on_update} on column {col_name} has "
                     f"no {dialect} column-level equivalent; add an ON UPDATE "
                     "trigger to refresh it"
                 )
@@ -713,7 +713,7 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
             )
             if col.collate and dialect != SOURCE_DIALECT.get():
                 collate_notes.append(
-                    f"-- UNIQUE: column {col_name} collation/charset "
+                    f"-- UNIQUE-1051: column {col_name} collation/charset "
                     f"({col.collate}) has no portable {dialect} equivalent; the "
                     "column uses the default collation (comparisons/ordering may "
                     "differ) — set it explicitly on the target or supply the "
@@ -728,7 +728,7 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
             )
             if col.invisible and dialect in ("postgresql", "tsql"):
                 invisible_notes.append(
-                    f"-- UNIQUE: column {col_name} was INVISIBLE (excluded from "
+                    f"-- UNIQUE-1052: column {col_name} was INVISIBLE (excluded from "
                     f"SELECT *) on the source; {dialect} has no invisible-column "
                     "attribute, so the column is now visible to SELECT * "
                     "(docs/03-unsupported.md)"
@@ -783,7 +783,7 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     ),
                 )
                 trailing_comments.append(
-                    "-- UNIQUE: PostgreSQL UNIQUE … NULLS NOT DISTINCT (NULLs "
+                    "-- UNIQUE-1053: PostgreSQL UNIQUE … NULLS NOT DISTINCT (NULLs "
                     f"compare equal) has no {dialect} equivalent; a plain UNIQUE "
                     "treats NULLs as distinct (docs/03-unsupported.md)"
                 )
@@ -813,7 +813,7 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     ),
                 )
                 trailing_comments.append(
-                    "-- UNIQUE: T-SQL forbids a cascading action on a "
+                    "-- UNIQUE-1054: T-SQL forbids a cascading action on a "
                     "self-referencing FK (error 1785); downgraded to NO ACTION "
                     "— emulate with an AFTER trigger if the automatic action "
                     "is required (docs/03-unsupported.md)"
@@ -831,7 +831,7 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     sql=_FK_SET_DEFAULT_RE.sub("", constraint.sql),
                 )
                 trailing_comments.append(
-                    "-- UNIQUE: Oracle has no ON DELETE SET DEFAULT referential "
+                    "-- UNIQUE-1055: Oracle has no ON DELETE SET DEFAULT referential "
                     "action; dropped (FK reverts to NO ACTION) — emulate with an "
                     "AFTER DELETE trigger if required (docs/03-unsupported.md)"
                 )
@@ -899,7 +899,7 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
             else:
                 opts = ", ".join(node.unsupported_options)
                 trailing_comments.append(
-                    f"-- UNIQUE: T-SQL In-Memory OLTP storage option(s) [{opts}] "
+                    f"-- UNIQUE-1056: T-SQL In-Memory OLTP storage option(s) [{opts}] "
                     f"have no {dialect} equivalent; the table is created as a "
                     "regular disk-based table (no logical/value difference)"
                 )
@@ -911,7 +911,7 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                 result += f" {node.table_collate}"
             else:
                 trailing_comments.append(
-                    f"-- UNIQUE: MySQL table default collation/charset "
+                    f"-- UNIQUE-1057: MySQL table default collation/charset "
                     f"({node.table_collate}) has no portable {dialect} "
                     "equivalent; string columns use the default collation "
                     "(comparisons/ordering may differ) — set it explicitly on "
@@ -1037,7 +1037,7 @@ def _emit_create_view(node: CreateViewStatement, dialect: str) -> str:
         result = f"{result}\nWITH {opt}"
     if dropped:
         carriers = "\n".join(
-            f"-- UNIQUE: view modifier {mod} is not portable on {dialect}; dropped"
+            f"-- UNIQUE-1058: view modifier {mod} is not portable on {dialect}; dropped"
             for mod in dropped
         )
         result = f"{carriers}\n{result}"
@@ -1058,21 +1058,21 @@ def _emit_drop(node: DropStatement, dialect: str) -> str:
     if node.object_type == "SEQUENCE" and dialect == "mysql":
         # Mirrors the CREATE SEQUENCE carrier: MySQL has no sequences.
         return (
-            "-- UNIQUE: MySQL has no sequences (use an AUTO_INCREMENT "
+            "-- UNIQUE-1059: MySQL has no sequences (use an AUTO_INCREMENT "
             "column); original preserved:\n"
             f"-- DROP SEQUENCE {exists}{name}"
         )
     if node.object_type == "TYPE" and dialect == "mysql":
         # MySQL has no user-defined types in any form.
         return (
-            "-- UNIQUE: MySQL has no user-defined types; original "
+            "-- UNIQUE-1060: MySQL has no user-defined types; original "
             f"preserved:\n-- DROP TYPE {exists}{name}"
         )
     if node.object_type == "INDEX":
         if dialect in ("tsql", "mysql"):
             if not node.on_table:
                 return (
-                    f"-- UNIQUE: {dialect} DROP INDEX requires the owning "
+                    f"-- UNIQUE-1061: {dialect} DROP INDEX requires the owning "
                     "table, which the source statement does not carry; "
                     "original preserved:\n"
                     f"-- DROP INDEX {exists}{name}"
@@ -1094,7 +1094,7 @@ def _emit_drop(node: DropStatement, dialect: str) -> str:
         if dialect == "postgresql":
             if not node.on_table:
                 return (
-                    "-- UNIQUE: PostgreSQL DROP TRIGGER requires the "
+                    "-- UNIQUE-1062: PostgreSQL DROP TRIGGER requires the "
                     "owning table (ON tbl), which the source statement "
                     "does not carry; original preserved:\n"
                     f"-- DROP TRIGGER {exists}{name}"

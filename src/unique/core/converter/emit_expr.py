@@ -139,7 +139,7 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         if SOURCE_DIALECT.get() == dialect:
             return node.source_sql
         return (
-            f"NULL /* UNIQUE: {node.detail} ({node.source_sql}) — "
+            f"NULL /* UNIQUE-1063: {node.detail} ({node.source_sql}) — "
             "see docs/03-unsupported.md */"
         )
     if isinstance(node, PassthroughSQL):
@@ -171,7 +171,7 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
                 "tsql": "DATENAME(TZOFFSET, SYSDATETIMEOFFSET())",
             }[dialect]
             return (
-                f"{_stz} /* UNIQUE: Oracle SESSIONTIMEZONE is session-"
+                f"{_stz} /* UNIQUE-1064: Oracle SESSIONTIMEZONE is session-"
                 "dependent; the mapped expression reports this session's "
                 "zone/offset in the target's own format "
                 "(docs/03-unsupported.md) */"
@@ -666,7 +666,7 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         if dialect == "oracle" and _cast_to in ("TIME", "INTERVAL"):
             _what = "TIME" if _cast_to == "TIME" else "bare INTERVAL"
             return (
-                f"{inner} /* UNIQUE: Oracle has no {_what} type — value kept as "
+                f"{inner} /* UNIQUE-1065: Oracle has no {_what} type — value kept as "
                 "text (docs/03-unsupported.md) */"
             )
         # MySQL's JSON type has no faithful cross-engine cast: T-SQL has no JSON
@@ -679,7 +679,7 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             and _cast_to == "JSON"
         ):
             return (
-                f"{inner} /* UNIQUE: MySQL JSON type has no faithful cross-engine "
+                f"{inner} /* UNIQUE-1066: MySQL JSON type has no faithful cross-engine "
                 "equivalent (T-SQL has no JSON type; canonical JSON spacing differs "
                 "on PG/Oracle) — value kept as text — see docs/03-unsupported.md */"
             )
@@ -691,7 +691,7 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             and _cast_to in _PG_GEOMETRIC_TYPES
         ):
             return (
-                f"{inner} /* UNIQUE: PostgreSQL geometric type "
+                f"{inner} /* UNIQUE-1067: PostgreSQL geometric type "
                 f"{_cast_to.lower()} has no cross-engine equivalent — value kept "
                 "as text (docs/03-unsupported.md) */"
             )
@@ -710,7 +710,7 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             )
         ):
             return (
-                f"CAST({inner} AS {dtype}) /* UNIQUE: PostgreSQL NaN/Infinity has "
+                f"CAST({inner} AS {dtype}) /* UNIQUE-1068: PostgreSQL NaN/Infinity has "
                 f"no {dialect} numeric equivalent (docs/03-unsupported.md) */"
             )
         # MySQL's UNSIGNED integer cast (sqlglot: UBIGINT/UINT/…) has no signed-
@@ -723,7 +723,7 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         ):
             _signed = "NUMBER" if dialect == "oracle" else "NUMERIC"
             return (
-                f"CAST({inner} AS {_signed}) /* UNIQUE: MySQL UNSIGNED has no "
+                f"CAST({inner} AS {_signed}) /* UNIQUE-1069: MySQL UNSIGNED has no "
                 f"{dialect} equivalent; unsigned wraparound not preserved "
                 "(docs/03-unsupported.md) */"
             )
@@ -831,7 +831,7 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             # Non-numeric target with no error-safe cast: keep the valid cast but
             # flag that the fallback was dropped (documented divergence).
             return (
-                f"CAST({inner} AS {dtype}) /* UNIQUE: Oracle DEFAULT ... ON "
+                f"CAST({inner} AS {dtype}) /* UNIQUE-1070: Oracle DEFAULT ... ON "
                 f"CONVERSION ERROR has no {dialect} error-safe cast for this "
                 "type; fallback dropped -- see docs/03-unsupported.md */"
             )
@@ -845,7 +845,7 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         # the whole scalar to a carrier + warning.
         if getattr(query, "has_for_xml", False) and dialect != "tsql":
             return (
-                "NULL /* UNIQUE: T-SQL FOR XML/JSON row serialization has no "
+                "NULL /* UNIQUE-1071: T-SQL FOR XML/JSON row serialization has no "
                 "cross-engine equivalent — see docs/03-unsupported.md */"
             )
         if dialect in ("tsql", "oracle") and not node.quantifier:
@@ -898,7 +898,7 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             dialect,
         ):
             return (
-                f"{node.sql} /* UNIQUE: {node.reason}; "
+                f"{node.sql} /* UNIQUE-1072: {node.reason}; "
                 f"no {dialect} mapping — review */"
             )
         # Inline expression context (e.g. a column DEFAULT): emit the raw
@@ -1475,7 +1475,7 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
         and node.right.sql.upper().lstrip().startswith("INTERVAL")
     ):
         return (
-            "NULL /* UNIQUE: MySQL date arithmetic on a non-datetime string "
+            "NULL /* UNIQUE-1073: MySQL date arithmetic on a non-datetime string "
             "literal yields NULL (docs/03-unsupported.md) */"
         )
     # ``DATE 'a' - DATE 'b'`` is a day count on every engine, but spelled
@@ -1492,7 +1492,7 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             # (2020-03-01 - 2020-01-01 = 200, not 60 days); the meaningful day
             # count is emitted instead, so flag the deliberate normalization.
             _sub_carrier = (
-                " /* UNIQUE: MySQL DATE - DATE is a numeric YYYYMMDD subtraction; "
+                " /* UNIQUE-1074: MySQL DATE - DATE is a numeric YYYYMMDD subtraction; "
                 "normalized to a day count (docs/03-unsupported.md) */"
                 if SOURCE_DIALECT.get() == "mysql" and dialect != "mysql"
                 else ""
@@ -1519,7 +1519,7 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
         _tl = _emit_expression(node.left, dialect)
         _tr = _emit_expression(node.right, dialect)
         _ts_carrier = (
-            " /* UNIQUE: timestamp difference is an INTERVAL with no "
+            " /* UNIQUE-1075: timestamp difference is an INTERVAL with no "
             f"{dialect} equivalent; emitted as a SECOND count "
             "(docs/03-unsupported.md) */"
         )
@@ -2226,7 +2226,7 @@ def _emit_window(node: WindowFunction, dialect: str) -> str:
         ordered = bool(re.search(r"(?i)\bORDER\s+BY\b|\bWITHIN\s+GROUP\b", func))
         if dialect in ("tsql", "mysql") or (dialect == "postgresql" and ordered):
             return (
-                "NULL /* UNIQUE: windowed string aggregation (string-agg OVER …) "
+                "NULL /* UNIQUE-1076: windowed string aggregation (string-agg OVER …) "
                 f"has no {dialect} equivalent — see docs/03-unsupported.md */"
             )
     spec_parts: list[str] = []
@@ -2262,7 +2262,7 @@ def _emit_window(node: WindowFunction, dialect: str) -> str:
             "mysql",
         ) and node.window.frame.lstrip().upper().startswith("GROUPS"):
             return (
-                f"NULL /* UNIQUE: a GROUPS window frame has no {dialect} "
+                f"NULL /* UNIQUE-1077: a GROUPS window frame has no {dialect} "
                 "equivalent (only ROWS/RANGE, and no faithful rewrite with "
                 "ORDER-BY ties) — see docs/03-unsupported.md */"
             )
@@ -2278,7 +2278,7 @@ def _emit_window(node: WindowFunction, dialect: str) -> str:
             spec_parts.append(node.window.exclude)
         else:
             return (
-                f"NULL /* UNIQUE: a window frame {node.window.exclude} has no "
+                f"NULL /* UNIQUE-1078: a window frame {node.window.exclude} has no "
                 f"{dialect} equivalent (T-SQL/MySQL have no EXCLUDE, and no "
                 "faithful ROWS/RANGE rewrite) — see docs/03-unsupported.md */"
             )

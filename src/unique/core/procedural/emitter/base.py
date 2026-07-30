@@ -438,7 +438,7 @@ class ProceduralEmitter:
         else:
             base = dt.name
         if dt.origin_comment:
-            return f"{base} /* UNIQUE: {dt.origin_comment} */"
+            return f"{base} /* UNIQUE-1152: {dt.origin_comment} */"
         return base
 
     def _emit_params(
@@ -937,7 +937,7 @@ class ProceduralEmitter:
 
     def _emit_trigger_function_unsupported(self, node: CreateFunctionStatement) -> str:
         note = (
-            "-- UNIQUE: PostgreSQL trigger function ('RETURNS TRIGGER') has no "
+            "-- UNIQUE-1153: PostgreSQL trigger function ('RETURNS TRIGGER') has no "
             f"{self.dialect_name} equivalent (no trigger functions; the body "
             "belongs to a CREATE TRIGGER). The non-portable translation is "
             "commented out below for review:\n"
@@ -955,7 +955,7 @@ class ProceduralEmitter:
 
     def _emit_table_valued_function(self, node: CreateFunctionStatement) -> str:
         note = (
-            f"-- UNIQUE: inline table-valued function ('RETURNS TABLE') has no "
+            f"-- UNIQUE-1154: inline table-valued function ('RETURNS TABLE') has no "
             f"direct equivalent. {self._tvf_unsupported_note()}.\n"
             f"-- The non-portable translation is commented out below for "
             f"review:\n"
@@ -1050,7 +1050,7 @@ class ProceduralEmitter:
         if self._PSEUDO_TABLE_CARRIER_MARKER not in text:
             return text
         note = (
-            "-- UNIQUE: trigger reads the T-SQL inserted/deleted pseudo-tables "
+            "-- UNIQUE-1155: trigger reads the T-SQL inserted/deleted pseudo-tables "
             f"in a set-based way {self.dialect_name} cannot express; the "
             "translation is preserved commented out for a manual rewrite:\n"
         )
@@ -1065,7 +1065,7 @@ class ProceduralEmitter:
         collection and re-aggregates in AFTER STATEMENT)."""
         events = self._join_trigger_events(node.events)
         return (
-            f"-- UNIQUE: Oracle COMPOUND TRIGGER {node.name} ({node.timing} "
+            f"-- UNIQUE-1156: Oracle COMPOUND TRIGGER {node.name} ({node.timing} "
             f"{events} ON {node.table}) has no automatic {self.dialect_name} "
             "equivalent — it collects affected rows in a PL/SQL collection and "
             "re-aggregates in AFTER STATEMENT. Rewrite manually (PostgreSQL: a "
@@ -1086,7 +1086,7 @@ class ProceduralEmitter:
             f"{node.execute_function}();"
         )
         return (
-            "-- UNIQUE: PostgreSQL statement-level trigger delegating to a "
+            "-- UNIQUE-1157: PostgreSQL statement-level trigger delegating to a "
             f"trigger function has no {self.dialect_name} equivalent (no "
             "transition tables / trigger functions). Original binding:\n"
             f"-- {binding}"
@@ -1163,7 +1163,7 @@ class ProceduralEmitter:
         slice_str = f" SLICE {node.slice_depth}" if node.slice_depth else ""
         header = f"FOREACH {node.variable}{slice_str} IN ARRAY {node.array_expr}"
         return (
-            f"-- UNIQUE: {header} LOOP … has no {self._dialect} equivalent "
+            f"-- UNIQUE-1158: {header} LOOP … has no {self._dialect} equivalent "
             "(no array type); statement preserved as a comment:\n"
             f"-- {header} LOOP … END LOOP;"
         )
@@ -1173,7 +1173,7 @@ class ProceduralEmitter:
         overrides); everywhere else it is documented, never shipped executable
         (``DECLARE PRAGMA AUTONOMOUS_TRANSACTION;`` was a hard parse error)."""
         return (
-            f"-- UNIQUE: PRAGMA {node.name} has no {self.dialect_name} "
+            f"-- UNIQUE-1159: PRAGMA {node.name} has no {self.dialect_name} "
             "equivalent; dropped."
         )
 
@@ -1439,7 +1439,7 @@ class ProceduralEmitter:
             f"-- {line}" if line.strip() else "--" for line in body.split("\n")
         )
         return (
-            "-- UNIQUE: anonymous PL/SQL block has no top-level "
+            "-- UNIQUE-1160: anonymous PL/SQL block has no top-level "
             f"{self.dialect_name} equivalent; preserved below:\n{commented}"
         )
 
@@ -1578,7 +1578,7 @@ class ProceduralEmitter:
             rest = stripped[len("sp_executesql") :].strip()
             sql_arg = self._first_arg(rest)
             note = (
-                " -- UNIQUE: sp_executesql parameter declarations/bindings "
+                " -- UNIQUE-1161: sp_executesql parameter declarations/bindings "
                 "dropped; pass them via EXECUTE ... USING manually"
                 if "," in rest
                 else ""
@@ -1639,7 +1639,7 @@ class ProceduralEmitter:
             rest = stripped[len("sp_executesql") :].strip()
             sql_arg = self._first_arg(rest)
             note = (
-                " -- UNIQUE: sp_executesql parameter declarations/bindings "
+                " -- UNIQUE-1161: sp_executesql parameter declarations/bindings "
                 "dropped; pass them via PREPARE ... USING manually"
                 if "," in rest
                 else ""
@@ -1770,7 +1770,7 @@ class ProceduralEmitter:
         expr = self._emit_node(node.expression)
         if self._in_mysql_function:
             return (
-                f"SET @uq_notice = {expr};  -- UNIQUE: notice has no output "
+                f"SET @uq_notice = {expr};  -- UNIQUE-1162: notice has no output "
                 "channel inside a MySQL function; message kept in @uq_notice"
             )
         return f"SELECT {expr};"
@@ -1820,7 +1820,7 @@ class ProceduralEmitter:
         comment = ""
         if rest:
             comment = (
-                f"  -- UNIQUE: original RAISERROR/THROW severity/state args "
+                f"  -- UNIQUE-1163: original RAISERROR/THROW severity/state args "
                 f"dropped: {rest}"
             )
         return f"{sig};{comment}"
@@ -1952,7 +1952,7 @@ class ProceduralEmitter:
         """BEGIN-transaction form. Default: implicit, document the dropped
         statement (Oracle/PostgreSQL). T-SQL and MySQL override."""
         return (
-            f"/* UNIQUE: BEGIN TRANSACTION dropped -- {self._dialect} starts a "
+            f"/* UNIQUE-1164: BEGIN TRANSACTION dropped -- {self._dialect} starts a "
             "transaction implicitly */"
         )
 
@@ -1974,7 +1974,7 @@ class ProceduralEmitter:
         """
         if node.kind == "TIME":
             return (
-                f"/* UNIQUE: WAITFOR TIME '{node.value}' has no {self._dialect} "
+                f"/* UNIQUE-1165: WAITFOR TIME '{node.value}' has no {self._dialect} "
                 "equivalent (wait until an absolute time) */"
             )
         secs = node.seconds if node.seconds is not None else 0
@@ -2030,7 +2030,7 @@ class ProceduralEmitter:
             return self._fetch_without_into_carrier(cursor_name)
         if direction and direction.upper() != "NEXT":
             return (
-                f"-- UNIQUE: FETCH {direction} has no {self._dialect} "
+                f"-- UNIQUE-1166: FETCH {direction} has no {self._dialect} "
                 "equivalent (cursors are forward-only); statement "
                 f"preserved as a comment:\n"
                 f"-- FETCH {direction} FROM {cursor_name} INTO {into_str};"
@@ -2043,7 +2043,7 @@ class ProceduralEmitter:
         is not known here, so document the drop rather than emit an invalid
         empty ``INTO``."""
         return (
-            f"-- UNIQUE: FETCH without INTO — {self._dialect} requires target "
+            f"-- UNIQUE-1167: FETCH without INTO — {self._dialect} requires target "
             "variables (the source discarded the fetched row); preserved as a "
             f"comment:\n-- FETCH {cursor_name};"
         )
@@ -2084,7 +2084,7 @@ class ProceduralEmitter:
         jump as a carrier + warning rather than dropping the control flow
         silently or shipping an invalid statement. Oracle/T-SQL override."""
         return (
-            f"/* UNIQUE: GOTO {node.label} dropped -- {self._dialect} has no "
+            f"/* UNIQUE-1168: GOTO {node.label} dropped -- {self._dialect} has no "
             "GOTO; control flow not replicated (docs/03-unsupported.md) */"
         )
 
@@ -2092,7 +2092,7 @@ class ProceduralEmitter:
         """Default: the target has no GOTO/label (PG plpgsql / MySQL). Preserve
         the label as a carrier + warning. Oracle/T-SQL override."""
         return (
-            f"/* UNIQUE: label {node.name} dropped -- {self._dialect} has no "
+            f"/* UNIQUE-1169: label {node.name} dropped -- {self._dialect} has no "
             "GOTO/label (docs/03-unsupported.md) */"
         )
 
@@ -2134,11 +2134,11 @@ class ProceduralEmitter:
         # never silently changes behaviour or breaks the target script.
         if node.reason == "Could not parse procedural construct":
             body = "\n".join(f"-- {line}" for line in node.sql.splitlines() or [""])
-            return f"-- UNIQUE: could not translate; preserved for review\n{body}"
+            return f"-- UNIQUE-1170: could not translate; preserved for review\n{body}"
         # Transformer-degraded whole units share the same carrier contract.
         if "preserved as a comment" in node.reason:
             body = "\n".join(f"-- {line}" for line in node.sql.splitlines() or [""])
-            return f"-- UNIQUE: {node.reason}\n{body}"
+            return f"-- UNIQUE-1171: {node.reason}\n{body}"
         return node.sql
 
     def _emit_literal(self, node: Literal) -> str:

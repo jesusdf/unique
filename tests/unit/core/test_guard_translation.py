@@ -300,7 +300,7 @@ class TestFaithfulColumnProbeGuard:
         # statement runs via information_schema + IF() + PREPARE (user
         # report 2026-07-29; the guard used to be dropped with a warning).
         result = Transpiler().transpile(self._SRC, source="tsql", target="mysql")
-        assert "UNIQUE:" not in result.sql
+        assert "UNIQUE-" not in result.sql
         assert "information_schema.columns" in result.sql
         assert "table_name = 't1'" in result.sql
         assert "column_name = 'c1'" in result.sql

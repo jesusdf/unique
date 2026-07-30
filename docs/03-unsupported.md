@@ -3,6 +3,13 @@
 This document lists SQL features that are explicitly **out of scope** for
 transpilation, along with the reasoning.
 
+**Diagnostic codes.** Every degrade/warning carries a stable code of the form
+`UNIQUE-NNNN` (four digits, flat sequential — the same idea as `ORA-00942` or
+`rustc E0308`). Carrier comments therefore read `-- UNIQUE-1234: …` /
+`/* UNIQUE-1234: … */`, and the matching `warnings` entry exposes it as
+`.code`. Codes are **append-only**: never renumbered, never reused. The
+authoritative catalog is `src/unique/core/diagnostics.py`.
+
 ---
 
 ## 0. SQLite is import-only

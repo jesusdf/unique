@@ -635,7 +635,7 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
         _ii_st = _ii.group("st").upper() if _ii else ""
         return CommentStatement(
             text=(
-                f"-- UNIQUE: SET IDENTITY_INSERT {_ii_tbl} {_ii_st} is a T-SQL "
+                f"-- UNIQUE-1002: SET IDENTITY_INSERT {_ii_tbl} {_ii_st} is a T-SQL "
                 "session directive with no cross-engine equivalent; dropped (the "
                 "target accepts an explicit value into an identity/serial/"
                 "auto_increment column) (docs/03-unsupported.md)"

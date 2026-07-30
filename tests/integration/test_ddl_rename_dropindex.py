@@ -41,7 +41,7 @@ def test_rename_column_becomes_sp_rename_on_tsql() -> None:
 def test_rename_column_stays_native_elsewhere(target: str) -> None:
     r = _t("ALTER TABLE t1 RENAME COLUMN old_c TO new_c;", "oracle", target)
     assert "RENAME COLUMN" in r.sql.upper()
-    assert "UNIQUE:" not in r.sql
+    assert "UNIQUE-" not in r.sql
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +114,7 @@ def test_merge_gets_tsql_terminator_and_no_dual() -> None:
         "WHEN NOT MATCHED THEN INSERT (id, c) VALUES (b.id, 2);"
     )
     r = _t(src, "oracle", "tsql")
-    assert "UNIQUE:" not in r.sql, r.sql
+    assert "UNIQUE-" not in r.sql, r.sql
     assert "DUAL" not in r.sql.upper()
     body = r.sql.strip()
     assert body.rstrip("GO").rstrip().endswith(";"), r.sql
@@ -135,7 +135,7 @@ _B1 = (
 def test_add_pk_clustered_normalizes(target: str) -> None:
     r = _t(_B1, "tsql", target)
     up = " ".join(r.sql.split()).upper()
-    assert "UNIQUE:" not in r.sql, r.sql
+    assert "UNIQUE-" not in r.sql, r.sql
     assert re.search(r"ADD CONSTRAINT \S*PK_T1\S* PRIMARY KEY", up), r.sql
     # Storage clauses and per-column sort order are T-SQL-only.
     for tok in ("CLUSTERED", "PAD_INDEX", "NULLS", " ASC", " DESC", "ON [PRIMARY]"):

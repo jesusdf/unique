@@ -33,19 +33,19 @@ class TestPgGucSettings:
     @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
     def test_guc_assignment_degrades(self, target: str) -> None:
         out = _t("SET extra_float_digits = 0;", target)
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
         assert not re.search(r"(?im)^\s*SET\s+extra_float_digits", out), out
 
     @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
     def test_guc_to_spelling_degrades(self, target: str) -> None:
         out = _t("set enable_presorted_aggregate to off;", target)
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
         assert not re.search(r"(?im)^\s*set\s+enable_", out), out
 
     @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
     def test_reset_degrades(self, target: str) -> None:
         out = _t("RESET enable_seqscan;", target)
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
         assert not re.search(r"(?im)^\s*RESET\b", out), out
 
     def test_guc_kept_on_pg_target(self) -> None:
@@ -54,7 +54,7 @@ class TestPgGucSettings:
 
     def test_set_transaction_keeps_its_path(self) -> None:
         out = _t("SET TRANSACTION ISOLATION LEVEL READ COMMITTED;", "tsql")
-        assert "UNIQUE:" not in out or "TRANSACTION" in out.upper(), out
+        assert "UNIQUE-" not in out or "TRANSACTION" in out.upper(), out
         assert re.search(r"(?i)TRANSACTION", out), out
 
 
@@ -131,7 +131,7 @@ class TestPgSetTransactionAccessMode:
         # exercises that only a genuine SET TRANSACTION statement matches.
         out = _t("SELECT * FROM transaction_log WHERE mode = 'READ ONLY';", "tsql")
         assert "transaction_log" in out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestValuesRelation:
@@ -165,7 +165,7 @@ class TestValuesRelation:
 
     def test_values_with_string_agg(self) -> None:
         out = _t("select string_agg(a, ',') from (values ('aa'),('bb')) g(a);", "tsql")
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
         assert re.search(r"(?i)STRING_AGG", out), out
 
 
@@ -464,7 +464,7 @@ class TestPgTableInheritance:
     @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
     def test_inherits_degrades_whole(self, target: str) -> None:
         r = Transpiler().transpile(self._INH, source="postgresql", target=target)
-        assert "UNIQUE:" in r.sql, r.sql
+        assert "UNIQUE-" in r.sql, r.sql
         assert "INHERITS" in r.sql.upper(), r.sql
         code = [
             ln
@@ -477,7 +477,7 @@ class TestPgTableInheritance:
     @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
     def test_partition_of_degrades_whole(self, target: str) -> None:
         r = Transpiler().transpile(self._PART, source="postgresql", target=target)
-        assert "UNIQUE:" in r.sql, r.sql
+        assert "UNIQUE-" in r.sql, r.sql
         assert "PARTITION OF" in r.sql.upper(), r.sql
         code = [
             ln
@@ -490,12 +490,12 @@ class TestPgTableInheritance:
     def test_inherits_kept_on_pg(self) -> None:
         out = _t(self._INH, "postgresql")
         assert re.search(r"(?i)INHERITS\s*\(parent\)", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_partition_of_kept_on_pg(self) -> None:
         out = _t(self._PART, "postgresql")
         assert re.search(r"(?i)PARTITION OF p FOR VALUES IN \(1\)", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestDeferrableConstraintAttribute:
@@ -694,7 +694,7 @@ class TestMysqlFunctionNotice:
         )
         assert re.search(r"(?i)SET @uq_notice = CONCAT\('v ',\s*a\)", r.sql), r.sql
         assert not re.search(r"(?im)^\s*SELECT CONCAT", r.sql), r.sql
-        assert "UNIQUE:" in r.sql, r.sql
+        assert "UNIQUE-" in r.sql, r.sql
 
     def test_notice_in_procedure_keeps_select(self) -> None:
         out = _t(
@@ -955,7 +955,7 @@ class TestArrayConstructsDegrade:
     def test_array_agg_kept_on_pg(self) -> None:
         out = _t("select array_agg(x) from t;", "postgresql")
         assert re.search(r"(?i)ARRAY_AGG\(x\)", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestNestedDollarQuotedLiterals:
@@ -1035,7 +1035,7 @@ class TestPgCatalogInternalsDegrade:
 
     def test_plain_cast_kept(self) -> None:
         out = _t("select cast(id as text) from t;", "oracle")
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
         assert re.search(r"(?i)CAST\(id AS", out), out
 
 
@@ -1068,7 +1068,7 @@ class TestOrderedSetAggregatesDegrade:
             "oracle",
         )
         assert re.search(r"(?i)WITHIN GROUP", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     @pytest.mark.parametrize("target", ["mysql", "tsql"])
     def test_array_cast_degrades(self, target: str) -> None:
@@ -1109,12 +1109,12 @@ class TestMysqlFullOuterJoinDegrades:
     def test_full_join_kept_on_tsql(self) -> None:
         out = _t("select * from a full outer join b on a.i = b.i;", "tsql")
         assert re.search(r"(?i)FULL OUTER JOIN", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_left_join_untouched_mysql(self) -> None:
         out = _t("select * from a left join b on a.i = b.i;", "mysql")
         assert re.search(r"(?i)LEFT JOIN", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestUserAggregateCallsDegrade:
@@ -1154,7 +1154,7 @@ class TestUserAggregateCallsDegrade:
     def test_count_star_untouched(self) -> None:
         out = _t("select count(*) from t;", "tsql")
         assert re.search(r"(?i)COUNT\(\*\)", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestOracleUnderscoreIdentifiers:
@@ -1226,7 +1226,7 @@ class TestIndexRebuildRefinements:
         out = _t("create index i1 on j1(id1) where id1 % 1000 = 1;", "tsql")
         assert "WHERE" not in out.upper(), out
         assert re.search(r"(?i)CREATE INDEX i1 ON j1 \(id1\)", out), out
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
 
     def test_complex_predicate_unique_degrades(self) -> None:
         r = Transpiler().transpile(
@@ -1264,7 +1264,7 @@ class TestSessionAuthorizationDegrades:
     def test_kept_on_pg(self) -> None:
         out = _t("SET SESSION AUTHORIZATION regress_user;", "postgresql")
         assert re.search(r"(?i)SET SESSION AUTHORIZATION", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestMysqlUserTypesDegrade:
@@ -1314,7 +1314,7 @@ class TestQualifiedStarCountDegrades:
     def test_plain_count_star_untouched(self) -> None:
         out = _t("select count(*) from t;", "mysql")
         assert re.search(r"(?i)COUNT\(\*\)", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestPgIndexToMysql:
@@ -1331,7 +1331,7 @@ class TestPgIndexToMysql:
         out = _t("create index i1 on j1(id1) where id1 is not null;", "mysql")
         assert "WHERE" not in out.upper(), out
         assert re.search(r"(?i)CREATE INDEX i1 ON j1 \(id1\)", out), out
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
 
     def test_partial_unique_degrades_mysql(self) -> None:
         r = Transpiler().transpile(
@@ -1428,7 +1428,7 @@ class TestTsqlRaiserrorExpressionHoist:
         # with an EXCEPTION handler degrades to a carrier rather than emitting
         # invalid SQL (the SQLERRM->ERROR_MESSAGE map is covered in a procedure
         # context). No raw sqlerrm leaks as executable text.
-        assert "-- UNIQUE:" in out and "preserved as a comment" in out, out
+        assert "-- UNIQUE-" in out and "preserved as a comment" in out, out
         body = "\n".join(
             ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
         )
@@ -2255,7 +2255,7 @@ class TestParseFallbackDegradesCrossDialect:
             if ln.strip() and not ln.strip().startswith("--")
         ]
         assert not code, out
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
 
 
 class TestTableColumnAliases:
@@ -3500,7 +3500,7 @@ class TestReturningOracle:
         ]
         assert any("UPDATE cv" in ln for ln in code), out
         assert not any("RETURNING" in ln.upper() for ln in code), out
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
 
 
 class TestOnConflictMysqlAndEStrings:
@@ -3805,7 +3805,7 @@ class TestSystemGlobalsInDml:
 
     def test_rowcount_pg_neutral(self) -> None:
         out = _t2("SELECT @@ROWCOUNT AS r;", "tsql", "postgresql")
-        assert re.search(r"(?i)SELECT 0 /\* UNIQUE:", out), out
+        assert re.search(r"(?i)SELECT 0 /\* UNIQUE-", out), out
 
     def test_sql_rowcount_tsql(self) -> None:
         out = _t2("SELECT SQL%ROWCOUNT AS r FROM DUAL;", "oracle", "tsql")
@@ -3823,7 +3823,7 @@ class TestFetchStatusTopLevel:
     def test_fetch_status_neutral_pg(self) -> None:
         out = _t2("SELECT 1 WHERE @@FETCH_STATUS = 0;", "tsql", "postgresql")
         assert "@@FETCH_STATUS" not in out.split("/*")[0], out
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
 
 
 class TestForeignBuiltinNote:
@@ -3837,16 +3837,16 @@ class TestForeignBuiltinNote:
         # Wave 209 upgraded the inline note (still invalid SQL: error
         # 195) to the whole-statement carrier.
         out = _t("SELECT CORR(b, a) FROM aggtest;", "tsql")
-        assert "UNIQUE:" in out and "Corr" in out, out
+        assert "UNIQUE-" in out and "Corr" in out, out
         assert not re.search(r"(?im)^\s*SELECT CORR", out), out
 
     def test_native_builtin_unnoted(self) -> None:
         out = _t2("SELECT GETDATE();", "tsql", "tsql")
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_mapped_function_unnoted(self) -> None:
         out = _t2("SELECT NVL(a, b) FROM t;", "oracle", "tsql")
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestPgTableShorthand:
@@ -3898,7 +3898,7 @@ class TestLiveOutputValidation:
         ]
         assert not code or all("DATE_FORMAT" not in ln for ln in code), r.sql
         assert any(w.feature == "live_validation" for w in r.warnings) or not [
-            ln for ln in r.sql.splitlines() if "UNIQUE: live" in ln
+            ln for ln in r.sql.splitlines() if re.search(r"UNIQUE(?:-\d{4})?: live", ln)
         ], r.sql
 
 
@@ -3966,7 +3966,7 @@ class TestArrayModelFidelity:
         out = _t("select array[1,2,3];", "postgresql")
         assert "ARRAY[1, 2, 3]" in out, out
         assert not re.search(r"(?i)ARRAY\(", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_nested_array_literal_pg(self) -> None:
         out = _t("select array[[1,2],[3,4]];", "postgresql")
@@ -3976,14 +3976,14 @@ class TestArrayModelFidelity:
     def test_array_subquery_constructor_pg(self) -> None:
         out = _t("select array(select c from t2) from t1;", "postgresql")
         assert re.search(r"(?is)ARRAY\(SELECT c\s+FROM t2\)", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
         assert "SelectStatement(" not in out, out
 
     def test_subscript_index_preserved_pg(self) -> None:
         out = _t("select arr[2] from t;", "postgresql")
         assert "arr[2]" in out, out
         assert "arr[1]" not in out, out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_paren_array_subscript_preserved_pg(self) -> None:
         out = _t("select (array[1,2,3])[1];", "postgresql")
@@ -3993,7 +3993,7 @@ class TestArrayModelFidelity:
     def test_variadic_array_pg(self) -> None:
         out = _t("select myfn(variadic array[1,2,3]);", "postgresql")
         assert re.search(r"(?i)VARIADIC ARRAY\[1, 2, 3\]", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_percentile_array_arg_valid_pg(self) -> None:
         out = _t(
@@ -4003,7 +4003,7 @@ class TestArrayModelFidelity:
         )
         assert "ARRAY[0.25, 0.5]" in out, out
         assert not re.search(r"(?i)ARRAY\(0\.25", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
     def test_subscript_degrades_off_pg(self, target: str) -> None:
@@ -4040,7 +4040,7 @@ class TestArrayModelFidelity:
             "oracle",
         )
         assert re.search(r"(?i)WITHIN GROUP", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     @pytest.mark.parametrize("target", ["tsql", "mysql"])
     def test_array_subquery_carrier_has_no_ir_repr(self, target: str) -> None:
@@ -4074,7 +4074,7 @@ class TestArrayModelFidelity:
     def test_any_array_kept_on_pg(self) -> None:
         out = _t("delete from t where id = any(array[1,2,3]);", "postgresql")
         assert re.search(r"(?i)ANY\(ARRAY\[1, 2, 3\]\)", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestEmbeddedFallbackSpelling:
@@ -4124,14 +4124,14 @@ class TestDropTriggerOnTable:
     def test_pg_keeps_on_table(self) -> None:
         out = _t("drop trigger if exists mytrig on t1;", "postgresql")
         assert re.search(r"(?i)DROP TRIGGER IF EXISTS mytrig ON t1", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
     def test_on_correctly_dropped_off_pg(self, target: str) -> None:
         out = _t("drop trigger if exists mytrig on t1;", target)
         assert re.search(r"(?i)DROP TRIGGER", out), out
         assert not re.search(r"(?i)ON t1", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     @pytest.mark.parametrize("source", ["tsql", "mysql", "oracle"])
     def test_sourceless_on_degrades_to_pg(self, source: str) -> None:
@@ -4162,7 +4162,7 @@ class TestFunctionRelations:
         out = _t("select * from generate_series(1,3) g;", "postgresql")
         assert re.search(r"(?i)FROM generate_series\(1, 3\) (AS )?g", out), out
         assert not re.search(r"(?i)FROM\s+g\b(?!enerate)", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_join_function_preserved_pg(self) -> None:
         out = _t(
@@ -4171,12 +4171,12 @@ class TestFunctionRelations:
         )
         assert re.search(r"(?i)JOIN generate_series\(1, 3\) (AS )?g", out), out
         assert not re.search(r"(?i)JOIN g\b(?!enerate)", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_unnest_relation_with_column_alias_pg(self) -> None:
         out = _t("select * from unnest(arr) as u(x);", "postgresql")
         assert re.search(r"(?i)FROM UNNEST\(arr\) (AS )?u\(x\)", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_with_ordinality_pg(self) -> None:
         out = _t(
@@ -4186,7 +4186,7 @@ class TestFunctionRelations:
         assert re.search(
             r"(?i)generate_series\(1, 3\) WITH ORDINALITY (AS )?g\(v, o\)", out
         ), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_comma_lateral_shape_pg(self) -> None:
         # The corpus shape that exposed the class: SRF + comma + LATERAL.
@@ -4196,7 +4196,7 @@ class TestFunctionRelations:
             "postgresql",
         )
         assert re.search(r"(?i)generate_series\(1, 3\)", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_unnest_relation_still_degrades_off_pg(self) -> None:
         r = Transpiler().transpile(
@@ -4232,7 +4232,7 @@ class TestCommaLateralJoin:
         )
         assert re.search(r"(?i)CROSS JOIN LATERAL", out), out
         assert not re.search(r"(?i)(?<!CROSS )JOIN LATERAL", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_conditioned_lateral_keeps_on_pg(self) -> None:
         out = _t(
@@ -4317,7 +4317,7 @@ class TestFunctionRelationTargets:
         # source built-in with no Oracle form (e.g. generate_series) degrades.
         out = _t("select * from my_table_fn(1,3) g;", "oracle")
         assert re.search(r"(?i)TABLE\(my_table_fn\(1, 3\)\) g", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_srf_relation_rewritten_on_tsql(self) -> None:
         # PG generate_series() as a relation has no built-in T-SQL form on the
@@ -4354,7 +4354,7 @@ class TestDataModifyingCte:
         assert re.search(r"(?i)INSERT INTO t", out), out
         assert re.search(r"(?i)RETURNING", out), out
         assert not re.search(r"(?i)AS \(\s*SELECT \*\s*\)", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_with_delete_returning_preserved_pg(self) -> None:
         out = _t(
@@ -4362,7 +4362,7 @@ class TestDataModifyingCte:
             "postgresql",
         )
         assert re.search(r"(?i)DELETE FROM t", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
     def test_dml_cte_degrades_off_pg(self, target: str) -> None:
@@ -4590,7 +4590,7 @@ class TestFetchDirections:
             if ln.strip() and not ln.strip().startswith("--")
         ]
         assert not any(re.search(r"(?i)FETCH LAST", ln) for ln in code), out
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
 
     def test_plain_fetch_unchanged_pg(self) -> None:
         src = (
@@ -4633,7 +4633,7 @@ class TestBareRaiseAndUsing:
         # A T-SQL scalar function forbids TRY/CATCH (error 443), so the function
         # (with its EXCEPTION handler) degrades to a carrier; the bare-reraise ->
         # THROW; map is covered where a procedure/trigger can hold a CATCH.
-        assert "-- UNIQUE:" in out and "preserved as a comment" in out, out
+        assert "-- UNIQUE-" in out and "preserved as a comment" in out, out
 
     def test_bare_reraise_mysql(self) -> None:
         out = _t(self._SRC_RERAISE, "mysql")
@@ -4845,7 +4845,7 @@ class TestTruncateTrigger:
         out = _t(self._SRC, "postgresql")
         assert re.search(r"(?i)BEFORE TRUNCATE\s+ON mytable", out), out
         assert "TRUNCATE ON;" not in out, out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
     def test_truncate_trigger_degrades_off_pg(self, target: str) -> None:
@@ -5233,7 +5233,7 @@ class TestNestedCteArmGate:
     def test_nested_cte_arm_kept_pg(self) -> None:
         out = _t(self._SRC, "postgresql")
         assert re.search(r"(?is)UNION ALL\s*\(WITH z", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestBareBooleanConditions:
@@ -5303,7 +5303,7 @@ class TestWave136LateralAndDeepCte:
             "tsql",
         )
         assert re.search(r"(?i)CROSS APPLY", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestCompositeRowValues:
@@ -5332,12 +5332,12 @@ class TestCompositeRowValues:
     def test_row_constructor_kept_pg(self) -> None:
         out = _t(self._ROW_SRC, "postgresql")
         assert "(a, b, c)" in out, out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_expanding_star_untouched(self) -> None:
         out = _t("select n.* from nocols n;", "tsql")
         assert re.search(r"(?i)SELECT n\.\*", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestBareWholeRowTriggerRef:
@@ -5409,7 +5409,7 @@ class TestWave139DecodeAndSetRole:
     def test_set_role_kept_mysql(self) -> None:
         out = _t("set role ru;", "mysql")
         assert re.search(r"(?i)set role ru", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestWave140GroupConcatAndDeleteAlias:
@@ -5521,7 +5521,7 @@ class TestEStringsInBodies:
         # (stronger than the old decoded-re-render assertion: the exact
         # user-written literal must survive, not a normalization of it).
         assert "E'foo\\\\bar'" in out, out
-        assert "-- UNIQUE:" in out, out
+        assert "-- UNIQUE-" in out, out
 
 
 class TestWave144TupleColumnAndTempFn:
@@ -5607,7 +5607,7 @@ class TestWave145MysqlAggForms:
     def test_count_distinct_untouched_mysql(self) -> None:
         out = _t("select count(distinct a) from t;", "mysql")
         assert re.search(r"(?i)COUNT\(DISTINCT a\)", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_literal_separator_untouched_mysql(self) -> None:
         out = _t("select string_agg(v, ',') from t;", "mysql")
@@ -5664,7 +5664,7 @@ class TestMysqlNonConstLag:
     def test_constant_offset_kept_mysql(self) -> None:
         out = _t("select lag(ten, 2) over (order by ten) from t;", "mysql")
         assert re.search(r"(?i)LAG\(ten, 2\)", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_column_offset_kept_pg(self) -> None:
         out = _t("select lag(ten, four) over (order by ten) from t;", "postgresql")
@@ -5756,7 +5756,7 @@ class TestTableRowtypeParams:
     def test_rowtype_param_kept_pg(self) -> None:
         out = _t(self._SRC, "postgresql")
         assert re.search(r"(?i)t onek", out), out
-        assert "UNIQUE:" not in out.split("create function")[0], out
+        assert "UNIQUE-" not in out.split("create function")[0], out
 
 
 class TestUnknownParamType:
@@ -5808,7 +5808,7 @@ class TestRowCompareAny:
 
     def test_scalar_any_untouched(self) -> None:
         out = _t("select 1 from t where x = any (select q1 from c);", "mysql")
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestWave154RepeatConcat:
@@ -5962,7 +5962,7 @@ class TestWave157HavingAliasStringAggDistinct:
             "mysql",
             "tsql",
         )
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
         assert "STRING_AGG(DISTINCT" not in out.upper(), out
 
     def test_string_agg_distinct_kept_pg(self) -> None:
@@ -6150,7 +6150,7 @@ class TestWave162AdddateSqlMode:
             "mysql",
             "tsql",
         )
-        assert "UNIQUE:" in out and "SQL_MODE" in out.upper(), out
+        assert "UNIQUE-" in out and "SQL_MODE" in out.upper(), out
         assert "SET @sql_mode" not in out, out
 
     def test_set_sql_mode_kept_mysql(self) -> None:
@@ -6302,7 +6302,7 @@ class TestWave166PrefixIndexFlush:
             "mysql",
             "tsql",
         )
-        assert "UNIQUE:" in out and "FLUSH" in out.upper(), out
+        assert "UNIQUE-" in out and "FLUSH" in out.upper(), out
         assert "flush AS" not in out, out
         assert re.search(r"(?i)UPDATE t3 SET a = 1", out), out
 
@@ -6313,7 +6313,7 @@ class TestWave166PrefixIndexFlush:
             "mysql",
         )
         assert re.search(r"(?i)flush query cache", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestWave167MysqlSystemVars:
@@ -6328,7 +6328,7 @@ class TestWave167MysqlSystemVars:
             "mysql",
             "tsql",
         )
-        assert "UNIQUE:" in out and "server_id" in out, out
+        assert "UNIQUE-" in out and "server_id" in out, out
         assert re.search(r"(?im)^\s*RETURN @@server_id", out) is None, out
 
     def test_sysvar_kept_mysql(self) -> None:
@@ -6337,7 +6337,7 @@ class TestWave167MysqlSystemVars:
             "mysql",
             "mysql",
         )
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
         assert "@@server_id" in out, out
 
     def test_plain_routine_untouched(self) -> None:
@@ -6346,7 +6346,7 @@ class TestWave167MysqlSystemVars:
             "mysql",
             "tsql",
         )
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
         assert re.search(r"(?i)RETURN 42", out), out
 
 
@@ -6370,12 +6370,12 @@ class TestWave168InsertSetUservarIsTrue:
 
     def test_top_level_set_uservar_carrier(self) -> None:
         out = _t2("set @v0 = '2';", "mysql", "tsql")
-        assert "UNIQUE:" in out and "@v0" in out, out
+        assert "UNIQUE-" in out and "@v0" in out, out
         assert not re.search(r"(?im)^\s*SET @v0", out), out
 
     def test_top_level_set_uservar_kept_mysql(self) -> None:
         out = _t2("set @v0 = '2';", "mysql", "mysql")
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_predicate_is_true_tsql(self) -> None:
         out = _t2(
@@ -6472,7 +6472,7 @@ class TestWave171KillConnectionId:
             "mysql",
             "tsql",
         )
-        assert "UNIQUE:" in out and "kill query id" in out.lower(), out
+        assert "UNIQUE-" in out and "kill query id" in out.lower(), out
 
     def test_connection_id_spid_tsql(self) -> None:
         out = _t2(
@@ -6617,12 +6617,12 @@ class TestWave175AllComputedTable:
             "mysql",
             "tsql",
         )
-        assert "UNIQUE:" in out and "non-computed" in out, out
+        assert "UNIQUE-" in out and "non-computed" in out, out
         assert not re.search(r"(?im)^\s*CREATE TABLE", out), out
 
     def test_mixed_table_untouched(self) -> None:
         out = _t2("create table t2 (x int, a int as (1));", "mysql", "tsql")
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
         assert re.search(r"(?i)CREATE TABLE", out), out
 
     def test_all_computed_kept_mysql(self) -> None:
@@ -6631,7 +6631,7 @@ class TestWave175AllComputedTable:
             "mysql",
             "mysql",
         )
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
         assert re.search(r"(?i)CREATE TABLE", out), out
 
 
@@ -6693,7 +6693,7 @@ class TestWave178SysvarGateExecImmediate:
 
     def test_sysvar_insert_carrier_oracle(self) -> None:
         out = _t2("insert into t1 values (@@connect_timeout);", "mysql", "oracle")
-        assert "UNIQUE:" in out and "connect_timeout" in out, out
+        assert "UNIQUE-" in out and "connect_timeout" in out, out
         assert not re.search(r"(?im)^\s*INSERT INTO", out), out
 
     def test_sysvar_insert_carrier_pg(self) -> None:
@@ -6702,7 +6702,7 @@ class TestWave178SysvarGateExecImmediate:
             "mysql",
             "postgresql",
         )
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
 
     def test_ddl_in_body_exec_immediate(self) -> None:
         out = _t2(
@@ -6831,7 +6831,7 @@ class TestWave182ShowRepairInBody:
             "mysql",
             "oracle",
         )
-        assert "UNIQUE:" in out and "show create table tm1" in out.lower(), out
+        assert "UNIQUE-" in out and "show create table tm1" in out.lower(), out
         assert not re.search(r"(?m)^\s*;\s*$", out), out
 
     def test_optimize_carrier_tsql(self) -> None:
@@ -6841,7 +6841,7 @@ class TestWave182ShowRepairInBody:
             "mysql",
             "tsql",
         )
-        assert out.lower().count("unique:") >= 3, out
+        assert out.lower().count("unique-") >= 3, out
         assert "REPAIR AS" not in out, out
 
     def test_show_kept_mysql(self) -> None:
@@ -6853,7 +6853,7 @@ class TestWave182ShowRepairInBody:
             "mysql",
         )
         assert re.search(r"(?i)show create table tm1", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestWave183CommentOnlyBody:
@@ -6868,7 +6868,7 @@ class TestWave183CommentOnlyBody:
             "mysql",
             "oracle",
         )
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
         assert re.search(r"(?im)^\s*NULL;", out), out
 
     def test_executable_body_no_extra_null(self) -> None:
@@ -6957,7 +6957,7 @@ class TestWave186PgBodySemisSetopOrder:
             "mysql",
             "postgresql",
         )
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
         assert re.search(r"(?im)^\s*NULL;", out), out
 
     def test_setop_order_aggregate_carrier_pg(self) -> None:
@@ -6966,7 +6966,7 @@ class TestWave186PgBodySemisSetopOrder:
             "mysql",
             "postgresql",
         )
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
         assert not re.search(r"(?im)^\s*SELECT MAX", out), out
 
     def test_setop_order_column_untouched_pg(self) -> None:
@@ -6975,7 +6975,7 @@ class TestWave186PgBodySemisSetopOrder:
             "mysql",
             "postgresql",
         )
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestWave187BinaryCapCaseTruthiness:
@@ -7069,11 +7069,11 @@ class TestWave191PgSearchCte:
     def test_search_clause_verbatim_pg(self) -> None:
         out = _t2(self._SQL, "postgresql", "postgresql")
         assert re.search(r"(?i)search depth first by f, t set seq", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_search_clause_carrier_mysql(self) -> None:
         out = _t2(self._SQL, "postgresql", "mysql")
-        assert "UNIQUE:" in out and "SEARCH/CYCLE" in out, out
+        assert "UNIQUE-" in out and "SEARCH/CYCLE" in out, out
         assert not re.search(r"(?im)^\s*with recursive", out), out
 
     def test_plain_recursive_cte_untouched(self) -> None:
@@ -7083,7 +7083,7 @@ class TestWave191PgSearchCte:
             "postgresql",
             "mysql",
         )
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
         assert re.search(r"(?i)WITH RECURSIVE", out), out
 
 
@@ -7133,12 +7133,12 @@ class TestWave193UpdateFromDerived:
 
     def test_verbatim_pg(self) -> None:
         out = _t2(self._SQL, "postgresql", "postgresql")
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
         assert re.search(r"(?i)FROM \(VALUES", out), out
 
     def test_carrier_mysql(self) -> None:
         out = _t2(self._SQL, "postgresql", "mysql")
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
         assert not re.search(r"(?im)^\s*UPDATE utrtest", out), out
 
     def test_plain_update_from_table_untouched(self) -> None:
@@ -7147,7 +7147,7 @@ class TestWave193UpdateFromDerived:
             "postgresql",
             "mysql",
         )
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
         assert re.search(r"(?i)UPDATE a", out), out
 
 
@@ -7162,7 +7162,7 @@ class TestWave194NotTupleInStar:
             "postgresql",
             "tsql",
         )
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
         assert not re.search(r"(?im)^\s*SELECT \* FROM o", out), out
 
     def test_scalar_in_star_untouched(self) -> None:
@@ -7171,7 +7171,7 @@ class TestWave194NotTupleInStar:
             "postgresql",
             "tsql",
         )
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestWave195InSubqueryValue:
@@ -7300,7 +7300,7 @@ class TestWave199CteDeleteUsingAlterUsing:
         )
         assert "USING" not in out.upper(), out
         assert re.search(r"(?i)ALTER COLUMN name INT\b", out), out
-        assert "UNIQUE:" in out and "nullability" in out, out
+        assert "UNIQUE-" in out and "nullability" in out, out
 
     def test_alter_using_expression_carriers(self) -> None:
         out = _t2(
@@ -7308,7 +7308,7 @@ class TestWave199CteDeleteUsingAlterUsing:
             "postgresql",
             "tsql",
         )
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
 
     def test_alter_using_kept_pg(self) -> None:
         out = _t2(
@@ -7316,7 +7316,7 @@ class TestWave199CteDeleteUsingAlterUsing:
             "postgresql",
             "postgresql",
         )
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
         assert re.search(r"(?i)USING", out), out
 
 
@@ -7389,16 +7389,16 @@ class TestWave202RefcursorReturn:
 
     def test_refcursor_return_carrier_mysql(self) -> None:
         out = _t2(self._SQL, "postgresql", "mysql")
-        assert "UNIQUE:" in out and "cursor-valued" in out, out
+        assert "UNIQUE-" in out and "cursor-valued" in out, out
         assert not re.search(r"(?im)^\s*CREATE FUNCTION rt", out), out
 
     def test_refcursor_return_carrier_tsql(self) -> None:
         out = _t2(self._SQL, "postgresql", "tsql")
-        assert "UNIQUE:" in out and "cursor-valued" in out, out
+        assert "UNIQUE-" in out and "cursor-valued" in out, out
 
     def test_refcursor_kept_pg(self) -> None:
         out = _t2(self._SQL, "postgresql", "postgresql")
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
         assert re.search(r"(?i)RETURNS refcursor", out), out
 
 
@@ -7443,7 +7443,7 @@ class TestWave204ExpressionIndexes:
         )
         assert re.search(r"(?i)ON t1\s*\(\(CONCAT\(", out), out
         assert "(((" not in out, out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_expression_index_carrier_tsql(self) -> None:
         out = _t2(
@@ -7451,7 +7451,7 @@ class TestWave204ExpressionIndexes:
             "postgresql",
             "tsql",
         )
-        assert "UNIQUE:" in out and "computed column" in out, out
+        assert "UNIQUE-" in out and "computed column" in out, out
 
     def test_column_index_untouched(self) -> None:
         out = _t2("create index i1 on t1(a, b);", "postgresql", "mysql")
@@ -7515,7 +7515,7 @@ class TestWave206OracleReturningShapes:
             "postgresql",
             "oracle",
         )
-        assert "UNIQUE:" in out and "UPDATE … FROM" in out, out
+        assert "UNIQUE-" in out and "UPDATE … FROM" in out, out
         assert not re.search(r"(?im)^\s*WITH t", out), out
 
 
@@ -7534,7 +7534,7 @@ class TestWave207SystemReservedNtileNull:
             "postgresql",
             "mysql",
         )
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
 
     def test_ntile_int_untouched_mysql(self) -> None:
         out = _t2(
@@ -7542,7 +7542,7 @@ class TestWave207SystemReservedNtileNull:
             "postgresql",
             "mysql",
         )
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
         assert re.search(r"(?i)NTILE\(4\)", out), out
 
 
@@ -7557,7 +7557,7 @@ class TestWave208IntervalCastSrfWindow:
             "postgresql",
             "mysql",
         )
-        assert "UNIQUE:" in out and "INTERVAL" in out, out
+        assert "UNIQUE-" in out and "INTERVAL" in out, out
 
     def test_interval_cast_kept_pg(self) -> None:
         out = _t2(
@@ -7565,7 +7565,7 @@ class TestWave208IntervalCastSrfWindow:
             "postgresql",
             "postgresql",
         )
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_srf_window_carrier_tsql(self) -> None:
         out = _t2(
@@ -7573,7 +7573,7 @@ class TestWave208IntervalCastSrfWindow:
             "postgresql",
             "tsql",
         )
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
 
     def test_plain_window_untouched(self) -> None:
         out = _t2(
@@ -7581,7 +7581,7 @@ class TestWave208IntervalCastSrfWindow:
             "postgresql",
             "tsql",
         )
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestWave209UnmappedOperatorGate:
@@ -7592,12 +7592,12 @@ class TestWave209UnmappedOperatorGate:
 
     def test_corr_carrier_tsql(self) -> None:
         out = _t2("select corr(b, a) from aggtest;", "postgresql", "tsql")
-        assert "UNIQUE:" in out and "Corr" in out, out
+        assert "UNIQUE-" in out and "Corr" in out, out
         assert not re.search(r"(?im)^\s*SELECT CORR", out), out
 
     def test_corr_verbatim_pg(self) -> None:
         out = _t2("select corr(b, a) from aggtest;", "postgresql", "postgresql")
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
         assert re.search(r"(?i)CORR\(b, a\)", out), out
 
 
@@ -7631,7 +7631,7 @@ class TestWave211OracleBinaryCastBoolLiterals:
             "mysql",
             "oracle",
         )
-        assert "UNIQUE:" in out and "BINARY" in out, out
+        assert "UNIQUE-" in out and "BINARY" in out, out
 
     def test_bool_literal_numeric_oracle(self) -> None:
         out = _t2(
@@ -7711,7 +7711,7 @@ class TestWave214WholeRowCast:
             "postgresql",
             "mysql",
         )
-        assert "UNIQUE:" in out and "whole-row" in out, out
+        assert "UNIQUE-" in out and "whole-row" in out, out
 
     def test_whole_row_cast_kept_pg(self) -> None:
         out = _t2(
@@ -7719,7 +7719,7 @@ class TestWave214WholeRowCast:
             "postgresql",
             "postgresql",
         )
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_column_cast_untouched(self) -> None:
         out = _t2(
@@ -7727,7 +7727,7 @@ class TestWave214WholeRowCast:
             "postgresql",
             "mysql",
         )
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestWave215BeginAtomic:
@@ -7792,7 +7792,7 @@ class TestWave217EmbeddedUservarGate:
 
     def test_top_level_uservar_still_gated(self) -> None:
         out = _t2("insert into t1 values (@value);", "mysql", "tsql")
-        assert "UNIQUE:" in out and "@value" in out, out
+        assert "UNIQUE-" in out and "@value" in out, out
 
 
 class TestWave218NoBeginCallBody:
@@ -7879,12 +7879,12 @@ class TestWave221MysqlRefcursorVariable:
 
     def test_refcursor_var_carrier_mysql(self) -> None:
         out = _t2(self._SQL, "postgresql", "mysql")
-        assert "UNIQUE:" in out and "refcursor" in out, out
+        assert "UNIQUE-" in out and "refcursor" in out, out
         assert not re.search(r"(?im)^\s*DELIMITER", out), out
 
     def test_refcursor_var_kept_pg(self) -> None:
         out = _t2(self._SQL, "postgresql", "postgresql")
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestWave222MysqlReturningWithInsert:
@@ -7914,7 +7914,7 @@ class TestWave223ValuesFnOutfile:
             "mysql",
             "oracle",
         )
-        assert re.search(r"(?i)county = NULL /\* UNIQUE:", out), out
+        assert re.search(r"(?i)county = NULL /\* UNIQUE-", out), out
 
     def test_into_outfile_carrier_tsql(self) -> None:
         out = _t2(
@@ -7923,7 +7923,7 @@ class TestWave223ValuesFnOutfile:
             "mysql",
             "tsql",
         )
-        assert "UNIQUE:" in out and "OUTFILE" in out.upper(), out
+        assert "UNIQUE-" in out and "OUTFILE" in out.upper(), out
         assert "@outfile" not in out, out
         assert re.search(r"(?i)INSERT INTO t1 VALUES \(@x\)", out), out
 
@@ -7934,7 +7934,7 @@ class TestWave223ValuesFnOutfile:
             "mysql",
         )
         assert re.search(r"(?i)into outfile 'b2'", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestWave224ReturnsTableNoBody:
@@ -7949,7 +7949,7 @@ class TestWave224ReturnsTableNoBody:
             "postgresql",
             "tsql",
         )
-        assert "UNIQUE:" in out and "returnable" in out, out
+        assert "UNIQUE-" in out and "returnable" in out, out
 
     def test_returns_table_with_return_inline(self) -> None:
         out = _t2(
@@ -7974,12 +7974,12 @@ class TestWave225CommentOnInBody:
 
     def test_comment_on_carrier_mysql(self) -> None:
         out = _t2(self._SQL, "postgresql", "mysql")
-        assert "UNIQUE:" in out and "COMMENT ON" in out, out
+        assert "UNIQUE-" in out and "COMMENT ON" in out, out
         assert re.search(r"(?i)RETURN 1", out), out
 
     def test_comment_on_carrier_oracle(self) -> None:
         out = _t2(self._SQL, "postgresql", "oracle")
-        assert "UNIQUE:" in out and "COMMENT ON" in out.upper(), out
+        assert "UNIQUE-" in out and "COMMENT ON" in out.upper(), out
 
 
 class TestWave226IntoFirstSelect:
@@ -8088,7 +8088,7 @@ class TestWave230WritingFunctions:
             "postgresql",
             "tsql",
         )
-        assert "UNIQUE:" in out and "side-effecting" in out, out
+        assert "UNIQUE-" in out and "side-effecting" in out, out
 
     def test_readonly_function_untouched(self) -> None:
         out = _t2(
@@ -8097,7 +8097,7 @@ class TestWave230WritingFunctions:
             "postgresql",
             "tsql",
         )
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
         assert re.search(r"(?i)RETURN @a \+ 1", out), out
 
 
@@ -8150,7 +8150,7 @@ class TestWave233StarIntoMultipleVars:
             "mysql",
             "tsql",
         )
-        assert "UNIQUE:" in out and "column list" in out, out
+        assert "UNIQUE-" in out and "column list" in out, out
         assert "@x = *" not in out, out
 
     def test_expr_into_single_untouched(self) -> None:
@@ -8160,7 +8160,7 @@ class TestWave233StarIntoMultipleVars:
             "mysql",
             "tsql",
         )
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
         assert re.search(r"(?i)SELECT @x = max", out), out
 
 
@@ -8231,7 +8231,7 @@ class TestWave236MultiTableDrop:
     def test_multi_drop_mysql(self) -> None:
         out = _t2("drop table a, b, c;", "postgresql", "mysql")
         assert out.upper().count("DROP TABLE") == 3, out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_multi_drop_oracle(self) -> None:
         out = _t2("drop table a, b;", "postgresql", "oracle")
@@ -8280,7 +8280,7 @@ class TestWave238MysqlNonconstNthValue:
             "postgresql",
             "mysql",
         )
-        assert "UNIQUE:" in out, out
+        assert "UNIQUE-" in out, out
 
     def test_const_nth_value_untouched(self) -> None:
         out = _t2(
@@ -8288,7 +8288,7 @@ class TestWave238MysqlNonconstNthValue:
             "postgresql",
             "mysql",
         )
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
         assert re.search(r"(?i)NTH_VALUE\(ten, 2\)", out), out
 
 
@@ -8300,7 +8300,7 @@ class TestWave239MultiObjectDrop:
     def test_multi_drop_function(self) -> None:
         out = _t2("drop function a, b, c;", "postgresql", "tsql")
         assert out.upper().count("DROP FUNCTION") == 3, out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_multi_drop_view(self) -> None:
         out = _t2("drop view v1, v2;", "postgresql", "mysql")
@@ -8332,7 +8332,7 @@ class TestB10RunningColumnTypeAlterNullability:
         assert re.search(r"(?i)ALTER COLUMN a BIGINT NULL", out), out
         # the type never silently reverts to INT in an ALTER
         assert not re.search(r"(?i)ALTER COLUMN a INT\b", out), out
-        assert not out.strip().endswith("UNIQUE:"), out
+        assert not out.strip().endswith("UNIQUE-"), out
 
     def test_n9_no_spurious_warning_when_known(self) -> None:
         res = _r2(self._N9, "postgresql", "tsql")
@@ -8347,7 +8347,7 @@ class TestB10RunningColumnTypeAlterNullability:
         )
         out = _t2(sql, "postgresql", "tsql")
         assert re.search(r"(?i)ALTER COLUMN c BIGINT NOT NULL", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_unknown_column_warns(self) -> None:
         # A table ALTERed but never CREATEd in-script: nullability is unknown,
@@ -8357,7 +8357,7 @@ class TestB10RunningColumnTypeAlterNullability:
             "postgresql",
             "tsql",
         )
-        assert "UNIQUE:" in res.sql, res.sql
+        assert "UNIQUE-" in res.sql, res.sql
         assert res.warnings, res.warnings
         # best-effort executable statement still present
         assert re.search(r"(?i)ALTER COLUMN x BIGINT", res.sql), res.sql
@@ -8370,12 +8370,12 @@ class TestB10RunningColumnTypeAlterNullability:
         )
         out = _t2(sql, "postgresql", "tsql")
         assert re.search(r"(?i)ALTER COLUMN c BIGINT NULL", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_type_change_kept_pg(self) -> None:
         out = _t2(self._N9, "postgresql", "postgresql")
         assert re.search(r"(?i)ALTER COLUMN a (?:SET DATA )?TYPE BIGINT", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_rename_column_folds_into_running_map(self) -> None:
         sql = (
@@ -8385,7 +8385,7 @@ class TestB10RunningColumnTypeAlterNullability:
         )
         out = _t2(sql, "postgresql", "tsql")
         assert re.search(r"(?i)ALTER COLUMN a2 BIGINT NOT NULL", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
     def test_redundant_using_cast_strip_restates_known_notnull(self) -> None:
         # Neighbor: the USING-redundant-cast strip (wave 199) is a type
@@ -8397,4 +8397,4 @@ class TestB10RunningColumnTypeAlterNullability:
         out = _t2(sql, "postgresql", "tsql")
         assert re.search(r"(?i)ALTER COLUMN a BIGINT NOT NULL", out), out
         assert "USING" not in out.upper(), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out

@@ -634,7 +634,7 @@ class Transpiler:
                         reason = annotate_divergence(batch.sql, source, target)
                         if reason is not None:
                             result = TranspileResult(
-                                sql=f"-- UNIQUE: {reason}\n{result.sql}",
+                                sql=f"-- UNIQUE-1207: {reason}\n{result.sql}",
                                 warnings=[
                                     *result.warnings,
                                     _warn(reason, "value_divergence", source, target),
@@ -666,18 +666,24 @@ class Transpiler:
                 # comments (i.e. the statement was dropped from the output).
                 if batch.batch_type != BatchType.COMMENT:
                     frags = _carrier_fragments(terminated)
-                    new_frags = [f for f in frags if f not in reconciled_frags]
+                    new_frags = [(f, c) for f, c in frags if f not in reconciled_frags]
                     if new_frags:
                         existing = [w.message for w in all_warnings]
-                        for frag in new_frags:
+                        for frag, carrier_code in new_frags:
                             reconciled_frags.add(frag)
                             if not _warning_covers(frag, existing):
                                 all_warnings.append(
-                                    _warn(frag, "lossy_conversion", source, target)
+                                    _warn(
+                                        frag,
+                                        "lossy_conversion",
+                                        source,
+                                        target,
+                                        code=carrier_code,
+                                    )
                                 )
                                 existing.append(frag)
                     if is_comment:
-                        for frag in frags:
+                        for frag, _code in frags:
                             if frag not in unsupported_seen and not _warning_covers(
                                 frag, all_unsupported
                             ):
@@ -1003,7 +1009,7 @@ class Transpiler:
             body = "\n".join(f"-- {ln}" for ln in sql.strip().splitlines())
             return TranspileResult(
                 sql=(
-                    "-- UNIQUE: T-SQL CREATE SCHEMA has no Oracle equivalent — an "
+                    "-- UNIQUE-1208: T-SQL CREATE SCHEMA has no Oracle equivalent — an "
                     "Oracle schema is a database user. Create it manually, e.g. "
                     f"CREATE USER {name} …; original:\n{body}"
                 ),
@@ -1167,7 +1173,7 @@ class Transpiler:
             if n_org:
                 sql = stripped_sql
                 org_carrier = (
-                    "\n-- UNIQUE: Oracle ORGANIZATION INDEX/HEAP is a "
+                    "\n-- UNIQUE-1209: Oracle ORGANIZATION INDEX/HEAP is a "
                     "physical-storage clause with no equivalent here; dropped."
                 )
                 warnings.append(
@@ -1196,7 +1202,7 @@ class Transpiler:
                 )
             if state == "":
                 return TranspileResult(
-                    sql=f"/* UNIQUE: {sql.strip().rstrip(';')} -- tsql-only, no "
+                    sql=f"/* UNIQUE-1210: {sql.strip().rstrip(';')} -- tsql-only, no "
                     f"{target} equivalent (constraint check-state) */",
                     warnings=[
                         _warn(
@@ -1245,7 +1251,7 @@ class Transpiler:
                         )
                     )
                     return (
-                        f"-- UNIQUE: {sp} is a SQL Server system procedure with "
+                        f"-- UNIQUE-1211: {sp} is a SQL Server system procedure with "
                         f"no {target} equivalent; original call omitted:\n"
                         + "\n".join(f"-- {ln}" for ln in stmt.strip().splitlines())
                     )
@@ -1295,7 +1301,7 @@ class Transpiler:
                     # variables (PL/SQL only) — a bare RETURNING is ORA-63809. Both
                     # degrade with a documented carrier.
                     new_sql = (
-                        f"{body}\n-- UNIQUE: {target} has no standalone "
+                        f"{body}\n-- UNIQUE-1212: {target} has no standalone "
                         f"OUTPUT/RETURNING result set; the statement returned: "
                         f"{cols} (docs/03-unsupported.md)"
                     )
@@ -1333,7 +1339,7 @@ class Transpiler:
                 # T-SQL-only NEWID()); keep the original as a documented carrier
                 # rather than emit invalid SQL.
                 return TranspileResult(
-                    sql="-- UNIQUE: T-SQL default constraint value has no "
+                    sql="-- UNIQUE-1213: T-SQL default constraint value has no "
                     f"{target} equivalent:\n"
                     + "\n".join(f"-- {ln}" for ln in default_original.splitlines()),
                     warnings=[
@@ -1752,7 +1758,7 @@ class Transpiler:
             ):
                 return TranspileResult(
                     sql=(
-                        "-- UNIQUE: READ COMMITTED is Oracle's default "
+                        "-- UNIQUE-1214: READ COMMITTED is Oracle's default "
                         "isolation level (no-op; noted so a following SET "
                         "TRANSACTION mode statement can still open the "
                         "transaction)"
@@ -1779,7 +1785,7 @@ class Transpiler:
                 )
                 return TranspileResult(
                     sql=(
-                        "-- UNIQUE: T-SQL has no SET ROLE (use role "
+                        "-- UNIQUE-1215: T-SQL has no SET ROLE (use role "
                         "membership / EXECUTE AS); statement preserved "
                         f"as a comment.\n{commented}"
                     ),
@@ -1806,7 +1812,7 @@ class Transpiler:
                 )
                 return TranspileResult(
                     sql=(
-                        f"-- UNIQUE: {target} has no deferred-constraint "
+                        f"-- UNIQUE-1216: {target} has no deferred-constraint "
                         f"toggling (SET CONSTRAINTS); statement preserved "
                         f"as a comment.\n{commented}"
                     ),
@@ -1831,7 +1837,7 @@ class Transpiler:
                 )
                 return TranspileResult(
                     sql=(
-                        f"-- UNIQUE: SET SESSION AUTHORIZATION has no "
+                        f"-- UNIQUE-1217: SET SESSION AUTHORIZATION has no "
                         f"{target} equivalent; switch users natively.\n"
                         f"{commented}"
                     ),
@@ -1858,7 +1864,7 @@ class Transpiler:
                 head = " ".join(code.strip().split())[:60]
                 return TranspileResult(
                     sql=(
-                        f"-- UNIQUE: PostgreSQL session setting has no "
+                        f"-- UNIQUE-1218: PostgreSQL session setting has no "
                         f"{target} equivalent; configure the session "
                         f"natively.\n{commented}"
                     ),
@@ -1900,7 +1906,7 @@ class Transpiler:
                 head = " ".join(code.strip().split())[:60]
                 return TranspileResult(
                     sql=(
-                        f"-- UNIQUE: MySQL session setting has no {target} "
+                        f"-- UNIQUE-1219: MySQL session setting has no {target} "
                         f"equivalent; configure the session natively.\n"
                         f"{commented}"
                     ),
@@ -2102,7 +2108,7 @@ class Transpiler:
             first_err = err.splitlines()[0][:160]
             commented = "\n".join(f"-- {line}" for line in st.strip().splitlines())
             carrier = (
-                f"-- UNIQUE: live {target} validation rejected this "
+                f"-- UNIQUE-1220: live {target} validation rejected this "
                 f"statement ({first_err}); preserved as a comment:\n"
                 f"{commented}"
             )

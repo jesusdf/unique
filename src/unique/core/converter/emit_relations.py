@@ -93,7 +93,7 @@ def _emit_unpivot_relation(node: UnpivotRelation, dialect: str) -> str:
     carried = _unpivot_carried_columns(node.source, node.columns)
     if carried is None:
         return (
-            f"{src_sql} /* UNIQUE: UNPIVOT has no {dialect} equivalent and the "
+            f"{src_sql} /* UNIQUE-1149: UNPIVOT has no {dialect} equivalent and the "
             "source columns are not visible to rewrite it as UNION ALL — see "
             "docs/03-unsupported.md */"
         )
@@ -167,7 +167,7 @@ def _emit_pivot_relation(node: PivotRelation, dialect: str) -> str:
     group_cols = _pivot_group_columns(src, node)
     if group_cols is None:
         return (
-            f"{src_sql} /* UNIQUE: PIVOT has no {dialect} equivalent and the "
+            f"{src_sql} /* UNIQUE-1150: PIVOT has no {dialect} equivalent and the "
             "source columns are not visible to rewrite it as conditional "
             "aggregation — see docs/03-unsupported.md */"
         )

@@ -1,5 +1,7 @@
 """Tests for the shared converter (parse_sql and emit_sql)."""
 
+import re
+
 import pytest
 
 from unique.core.ast_nodes import (
@@ -442,7 +444,7 @@ class TestTransactionControl:
                         continue
                     out = emit_sql(parse_sql(stmt, src), tgt)
                     assert needle.upper() in out.upper(), (src, tgt, stmt, out)
-                    assert "-- UNIQUE:" not in out, (src, tgt, stmt, out)
+                    assert "-- UNIQUE-" not in out, (src, tgt, stmt, out)
 
 
 class TestTSQLTypePortability:
@@ -492,4 +494,4 @@ class TestRawSQLEmission:
             if line.strip() and not line.lstrip().startswith("--")
         ]
         assert not leaked, f"executable lines leaked: {leaked!r}"
-        assert "UNIQUE: x" in out
+        assert re.search(re.escape("UNIQUE") + r"(?:-\d{4})?" + re.escape(": x"), out)

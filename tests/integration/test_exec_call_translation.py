@@ -36,7 +36,7 @@ def test_oracle_exec_with_args_becomes_call(target: str, spelling: str) -> None:
     up = _norm(out).upper()
     assert "CALL MY_PROC('A', 1)" in up.replace('"', "")
     assert "EXEC" not in up  # no EXEC leaks (also excludes EXEC AS)
-    assert "UNIQUE:" not in out
+    assert "UNIQUE-" not in out
 
 
 @pytest.mark.parametrize("target", ["postgresql", "mysql"])
@@ -45,7 +45,7 @@ def test_oracle_exec_no_args_becomes_call(target: str) -> None:
     up = _norm(out).upper()
     assert re.search(r"CALL MY_PROC\s*\(\s*\)", up)
     assert "EXEC" not in up
-    assert "UNIQUE:" not in out
+    assert "UNIQUE-" not in out
 
 
 def test_oracle_exec_with_args_becomes_tsql_exec() -> None:
@@ -54,7 +54,7 @@ def test_oracle_exec_with_args_becomes_tsql_exec() -> None:
     up = _norm(out).upper()
     assert re.search(r"EXEC(?:UTE)?\s+MY_PROC\s+'A'\s*,\s*1", up)
     assert "EXEC AS" not in up
-    assert "UNIQUE:" not in out
+    assert "UNIQUE-" not in out
 
 
 def test_oracle_exec_no_args_becomes_tsql_exec() -> None:
@@ -62,7 +62,7 @@ def test_oracle_exec_no_args_becomes_tsql_exec() -> None:
     up = _norm(out).upper()
     assert re.search(r"EXEC(?:UTE)?\s+MY_PROC\s*;?", up)
     assert "EXEC AS" not in up
-    assert "UNIQUE:" not in out
+    assert "UNIQUE-" not in out
 
 
 def test_oracle_exec_arguments_never_dropped() -> None:
@@ -92,7 +92,7 @@ def test_named_args_become_tsql_at_param_form() -> None:
     up = _norm(out)
     assert "@V_a = 1" in up and "@V_b = 'x'" in up
     assert "=>" not in up
-    assert "UNIQUE:" not in out
+    assert "UNIQUE-" not in out
 
 
 def test_named_args_become_positional_on_mysql_with_warning() -> None:

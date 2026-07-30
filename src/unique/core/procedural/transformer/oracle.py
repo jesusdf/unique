@@ -163,7 +163,7 @@ class OracleTransformer(ProceduralTransformer):
                 # The documenting comment leads the statement — a trailing comment
                 # after the ``;`` splits off as its own (invalid) statement.
                 sql=(
-                    f"/* UNIQUE: was T-SQL table variable {var} */\n"
+                    f"/* UNIQUE-1196: was T-SQL table variable {var} */\n"
                     f"CREATE GLOBAL TEMPORARY TABLE {gtt} {cols} "
                     "ON COMMIT DELETE ROWS;"
                 )
@@ -173,7 +173,7 @@ class OracleTransformer(ProceduralTransformer):
         ddls += [
             RawSQL(
                 sql=(
-                    f"/* UNIQUE: was T-SQL temp table #{var} */\n"
+                    f"/* UNIQUE-1205: was T-SQL temp table #{var} */\n"
                     f"{re.sub(rf'\b{re.escape(var)}\b', gtt, create_sql)};"
                 )
             )

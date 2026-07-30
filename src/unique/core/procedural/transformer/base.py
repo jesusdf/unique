@@ -260,7 +260,7 @@ class ProceduralTransformer:
         "no-op UPDATE returns a different count on MySQL (docs/03-unsupported.md)"
     )
     _MYSQL_ROWCOUNT_NOTE = (
-        "/* UNIQUE: ROW_COUNT() counts changed rows, not matched rows like "
+        "/* UNIQUE-1192: ROW_COUNT() counts changed rows, not matched rows like "
         "the source (docs/03-unsupported.md) */"
     )
 
@@ -527,7 +527,7 @@ class ProceduralTransformer:
         if isinstance(node, RawSQL) and "SET option" in node.reason:
             return CommentStatement(
                 text=(
-                    f"/* UNIQUE: {node.sql} -- {self._source}-only, "
+                    f"/* UNIQUE-1193: {node.sql} -- {self._source}-only, "
                     f"no {self._target} equivalent */"
                 ),
                 style="block",
@@ -789,7 +789,7 @@ class ProceduralTransformer:
         """A neutral, syntactically-valid placeholder for a global with no
         faithful equivalent: ``0`` plus an inline block comment (never a line
         comment, which would swallow the rest of an inline condition)."""
-        return f"0 /* UNIQUE: {name} has no {self._target} equivalent; {hint} */"
+        return f"0 /* UNIQUE-1194: {name} has no {self._target} equivalent; {hint} */"
 
     def _system_var_map(self) -> dict[str, str]:
         """Per-target mapping of T-SQL system globals (@@ROWCOUNT, …). The base
@@ -1923,7 +1923,7 @@ class ProceduralTransformer:
             # Its body has been merged into the T-SQL trigger; drop the standalone
             # function rather than leave a redundant carrier comment.
             return CommentStatement(
-                text=f"-- UNIQUE: trigger function {node.name} inlined into its "
+                text=f"-- UNIQUE-1195: trigger function {node.name} inlined into its "
                 "T-SQL trigger",
                 style="line",
             )
@@ -2368,7 +2368,7 @@ class ProceduralTransformer:
         )
         sql = (
             f"{translated.rstrip(';')};  "
-            f"/* UNIQUE: was T-SQL table variable {name} */"
+            f"/* UNIQUE-1196: was T-SQL table variable {name} */"
         )
         return RawSQL(sql=sql, reason="table variable -> temporary table")
 
@@ -2504,7 +2504,7 @@ class ProceduralTransformer:
             )
             return CommentStatement(
                 text=(
-                    f"/* UNIQUE: SET {option} = {value} -- {self._source}-only, "
+                    f"/* UNIQUE-1197: SET {option} = {value} -- {self._source}-only, "
                     f"no {self._target} equivalent */"
                 ),
                 style="block",
@@ -2726,7 +2726,7 @@ class ProceduralTransformer:
                 )
                 return RawSQL(
                     sql=(
-                        "-- UNIQUE: T-SQL system procedure has no "
+                        "-- UNIQUE-1198: T-SQL system procedure has no "
                         f"{self._target} equivalent; original: "
                         f"EXEC {expr.sql.strip()}\n{self._noop_sql()}"
                     ),
@@ -3250,7 +3250,7 @@ class ProceduralTransformer:
             )
             return RawSQL(
                 sql=(
-                    "-- UNIQUE: T-SQL system procedure has no "
+                    "-- UNIQUE-1199: T-SQL system procedure has no "
                     f"{self._target} equivalent; original: {original}\n"
                     f"{self._noop_sql()}"
                 ),
@@ -3273,7 +3273,7 @@ class ProceduralTransformer:
             commented = "\n".join(f"-- {ln}" for ln in original.splitlines())
             return RawSQL(
                 sql=(
-                    "-- UNIQUE: Oracle package call has no "
+                    "-- UNIQUE-1200: Oracle package call has no "
                     f"{self._target} equivalent; original:\n{commented}\n"
                     f"{self._noop_sql()}"
                 ),
@@ -3536,7 +3536,7 @@ class ProceduralTransformer:
         def sub(segment: str) -> str:
             def repl(m: re.Match[str]) -> str:
                 body = m.group(1).strip()
-                if body.upper().startswith("UNIQUE:"):
+                if re.match(r"UNIQUE(?:-\d{4})?:", body.upper()):
                     return m.group(0)
                 body = body.replace("*/", "* /")
                 return f"/* {body} */" if body else "/* */"
@@ -4192,9 +4192,9 @@ class ProceduralTransformer:
                 # empty, and surface the carrier's note as the warning.
                 note = next(
                     (
-                        x.lstrip("- ").removeprefix("UNIQUE:").strip()
+                        re.sub(r"^UNIQUE(?:-\d{4})?:\s*", "", x.lstrip("- ")).strip()
                         for x in lines
-                        if x.lstrip().startswith("-- UNIQUE:")
+                        if re.match(r"\s*-- UNIQUE(?:-\d{4})?:", x)
                     ),
                     "statement preserved as a comment for manual rewrite",
                 )
@@ -4211,7 +4211,7 @@ class ProceduralTransformer:
         # is not a faithful conversion — use the fallback instead. Inline
         # ``/* UNIQUE: … */`` notes are documented FAITHFUL mappings
         # (VALUES(col)→NULL, wave 223) and pass.
-        if "-- UNIQUE:" in out:
+        if re.search(r"-- UNIQUE(?:-\d{4})?:", out):
             return None
         return out
 
@@ -4303,7 +4303,7 @@ class ProceduralTransformer:
                 # Oracle compound trigger), so the set-based DML is valid as-is.
                 return sql
             note = (
-                "-- UNIQUE: trigger uses the T-SQL set-based inserted/deleted "
+                "-- UNIQUE-1201: trigger uses the T-SQL set-based inserted/deleted "
                 "pseudo-tables, which have no row-level (NEW/OLD) equivalent. "
                 "Rewrite manually (PostgreSQL: a statement-level trigger with "
                 "REFERENCING NEW TABLE AS inserted OLD TABLE AS deleted; Oracle: "
@@ -4432,7 +4432,7 @@ class ProceduralTransformer:
                 f"-- {line}" if line.strip() else "--" for line in sql.split("\n")
             )
             return (
-                "-- UNIQUE: statement uses a table-valued function in FROM, "
+                "-- UNIQUE-1202: statement uses a table-valued function in FROM, "
                 "which MySQL does not support; commented out for review:\n"
                 f"{commented}"
             )
@@ -4442,7 +4442,7 @@ class ProceduralTransformer:
             cols = m.group(1).strip().rstrip(";").strip() if m else ""
             base = re.sub(r"(?i)\s*\bRETURNING\b.*$", "", sql).rstrip()
             sql = (
-                f"{base};\n-- UNIQUE: MySQL has no RETURNING/OUTPUT; "
+                f"{base};\n-- UNIQUE-1140: MySQL has no RETURNING/OUTPUT; "
                 f"the original statement returned: {cols}"
             )
             return sql
@@ -4969,7 +4969,7 @@ class ProceduralTransformer:
         )
         return self._CURSOR_ATTR_RESIDUE_RE.sub(
             lambda mm: (
-                f"/* UNIQUE: unmapped cursor attribute "
+                f"/* UNIQUE-1203: unmapped cursor attribute "
                 f"{mm.group(1)}%{mm.group(2)} */ (0 = 1)"
             ),
             sql,

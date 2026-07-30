@@ -40,14 +40,18 @@ class TestCreateProcAlias:
     def test_abbreviation_reaches_procedural_engine(self) -> None:
         for target in _TARGETS:
             out = _tx(self.ABBR, target)
-            assert "UNIQUE: Unhandled" not in out.sql, out.sql
+            assert not re.search(
+                re.escape("UNIQUE") + r"(?:-\d{4})?" + re.escape(": Unhandled"), out.sql
+            ), out.sql
             assert not out.unsupported, out.unsupported
             assert "PROCEDURE" in out.sql.upper()
             assert_statements_parse(out.sql, target, context=f"CREATE PROC->{target}")
 
     def test_lowercase_abbreviation(self) -> None:
         out = _tx("create proc p as begin select 1; end", "postgresql")
-        assert "UNIQUE: Unhandled" not in out.sql, out.sql
+        assert not re.search(
+            re.escape("UNIQUE") + r"(?:-\d{4})?" + re.escape(": Unhandled"), out.sql
+        ), out.sql
         assert "CREATE OR REPLACE PROCEDURE" in out.sql
 
 
@@ -65,7 +69,9 @@ class TestAlterProcAlias:
 
     def test_abbreviation_reaches_procedural_engine(self) -> None:
         out = _tx(self.ABBR, "postgresql")
-        assert "UNIQUE: Unhandled" not in out.sql, out.sql
+        assert not re.search(
+            re.escape("UNIQUE") + r"(?:-\d{4})?" + re.escape(": Unhandled"), out.sql
+        ), out.sql
         assert not out.unsupported, out.unsupported
         assert "PROCEDURE" in out.sql.upper()
 

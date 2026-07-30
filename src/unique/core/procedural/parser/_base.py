@@ -214,7 +214,7 @@ class ParserBase:
             self._advance()
 
     _RESTORABLE_NOTE_RE = re.compile(
-        r"(?is)^/\*\s*UNIQUE:\s*(.+?)\s*--\s*([a-z0-9_]+)-only,.*?\*/$"
+        r"(?is)^/\*\s*UNIQUE(?:-\d{4})?:\s*(.+?)\s*--\s*([a-z0-9_]+)-only,.*?\*/$"
     )
 
     @classmethod
@@ -1165,7 +1165,9 @@ class ParserBase:
             variadic=variadic,
         )
 
-    _CARRIER_TYPE_RE = re.compile(r"(?is)^/\*\s*UNIQUE:\s*(?!.*--)(.+?)\s*\*/$")
+    _CARRIER_TYPE_RE = re.compile(
+        r"(?is)^/\*\s*UNIQUE(?:-\d{4})?:\s*(?!.*--)(.+?)\s*\*/$"
+    )
     #: A carrier's original text is only restored when it looks like a type: a
     #: plain (optionally dotted / %TYPE / parameterised) identifier, or one of
     #: the multi-word datetime/interval compounds (``TIMESTAMP WITH [LOCAL] TIME

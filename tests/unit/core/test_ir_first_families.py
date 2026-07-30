@@ -658,7 +658,7 @@ class TestMojibakeUnitCarrier:
 
         r = Transpiler().transpile(self.SRC, "mysql", "tsql")
         assert "int AS default" not in r.sql, r.sql
-        assert "-- UNIQUE:" in r.sql, r.sql
+        assert "-- UNIQUE-" in r.sql, r.sql
         assert r.warnings, r.sql
 
     def test_body_statement_mojibake_degrades_whole(self) -> None:
@@ -672,7 +672,7 @@ class TestMojibakeUnitCarrier:
         )
         r = Transpiler().transpile(src, "mysql", "tsql")
         assert "AS ¤" not in r.sql, r.sql
-        assert "-- UNIQUE:" in r.sql, r.sql
+        assert "-- UNIQUE-" in r.sql, r.sql
         assert r.warnings, r.sql
 
 
@@ -911,7 +911,7 @@ class TestZeroPushZ4bBatch:
         # A T-SQL scalar function forbids TRY/CATCH (error 443), so this function
         # (with an EXCEPTION handler) degrades to a carrier rather than emitting
         # an invalid THROW; inside a function.
-        assert "-- UNIQUE:" in r.sql and "preserved as a comment" in r.sql, r.sql
+        assert "-- UNIQUE-" in r.sql and "preserved as a comment" in r.sql, r.sql
 
 
 class TestZeroPushW1Batch:

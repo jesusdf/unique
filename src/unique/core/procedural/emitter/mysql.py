@@ -174,14 +174,14 @@ class MySqlEmitter(ProceduralEmitter):
         # MySQL has no GOTO. A bare comment carrier would leave an empty
         # THEN/loop body (1064), so pair the carrier with the DO 0 no-op.
         return (
-            f"DO 0; /* UNIQUE: GOTO {node.label} dropped -- MySQL has no GOTO; "
+            f"DO 0; /* UNIQUE-1172: GOTO {node.label} dropped -- MySQL has no GOTO; "
             "control flow not replicated (docs/03-unsupported.md) */"
         )
 
     def _emit_label(self, node: LabelStatement) -> str:
         # MySQL has no GOTO/label; carrier + DO 0 no-op (see _emit_goto).
         return (
-            f"DO 0; /* UNIQUE: label {node.name} dropped -- MySQL has no "
+            f"DO 0; /* UNIQUE-1173: label {node.name} dropped -- MySQL has no "
             "GOTO/label (docs/03-unsupported.md) */"
         )
 
@@ -243,7 +243,7 @@ class MySqlEmitter(ProceduralEmitter):
         done = f"{variable}_done"
         if not cols:
             lines = [
-                "-- UNIQUE: Oracle implicit cursor FOR-loop expanded to an "
+                "-- UNIQUE-1174: Oracle implicit cursor FOR-loop expanded to an "
                 "explicit MySQL cursor.",
                 "-- Declare one variable per selected column and complete the "
                 "FETCH INTO list.",
@@ -271,7 +271,7 @@ class MySqlEmitter(ProceduralEmitter):
         ]
         indent = self._indent()
         lines = [
-            "-- UNIQUE: cursor FOR-loop expanded; loop variables are TEXT "
+            "-- UNIQUE-1175: cursor FOR-loop expanded; loop variables are TEXT "
             "(exact column types need --db-url metadata).",
             "BEGIN",
             *(f"{indent}DECLARE {variable}_{c} TEXT;" for c in cols),
@@ -376,7 +376,7 @@ class MySqlEmitter(ProceduralEmitter):
         # so the trigger is at least syntactically valid for review.
         if timing.upper().startswith("INSTEAD OF"):
             note = (
-                "-- UNIQUE: MySQL has no INSTEAD OF trigger; emitted as BEFORE "
+                "-- UNIQUE-1176: MySQL has no INSTEAD OF trigger; emitted as BEFORE "
                 "for review (original was INSTEAD OF, typically on a view).\n"
             )
             return note, "BEFORE"
@@ -428,7 +428,7 @@ class MySqlEmitter(ProceduralEmitter):
                 val = self._emit_node(node.value)
                 return (
                     f"LEAVE {self._proc_leave_label};  "
-                    f"-- UNIQUE: discarded procedure RETURN value ({val})"
+                    f"-- UNIQUE-1177: discarded procedure RETURN value ({val})"
                 )
             return f"LEAVE {self._proc_leave_label};"
         if node.value:
@@ -497,7 +497,7 @@ class MySqlEmitter(ProceduralEmitter):
         original = f"EXECUTE IMMEDIATE {expr} INTO {', '.join(into_vars)}"
         commented = "\n".join(f"-- {ln}" for ln in original.splitlines())
         return (
-            "-- UNIQUE: dynamic SELECT INTO variable has no direct MySQL "
+            "-- UNIQUE-1178: dynamic SELECT INTO variable has no direct MySQL "
             "form (rewrite the dynamic string to select INTO @session "
             f"variables); original:\n{commented}\nDO 0;"
         )

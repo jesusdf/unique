@@ -155,7 +155,12 @@ class TestInsteadOfTrigger:
         # emitted as an executable INSTEAD OF clause.
         code_lines = [ln for ln in out.splitlines() if not ln.strip().startswith("--")]
         assert all("INSTEAD OF" not in ln for ln in code_lines)
-        assert "-- UNIQUE: MySQL has no INSTEAD OF trigger" in out
+        assert re.search(
+            re.escape("-- UNIQUE")
+            + r"(?:-\d{4})?"
+            + re.escape(": MySQL has no INSTEAD OF trigger"),
+            out,
+        )
         assert "BEFORE UPDATE ON v" in out
 
     def test_instead_of_kept_on_postgresql(self) -> None:
@@ -596,7 +601,7 @@ class TestPostgresTriggerToMySQL:
         r = Transpiler().transpile(self.FUNC, source="postgresql", target="mysql")
         # No invalid RETURNS TRIGGER in the executable output.
         assert "RETURNS TRIGGER" not in self._code(r.sql).upper()
-        assert "UNIQUE:" in r.sql
+        assert "UNIQUE-" in r.sql
         assert r.warnings or r.unsupported
 
     def test_trigger_binding_degrades_with_warning(self) -> None:
@@ -607,7 +612,7 @@ class TestPostgresTriggerToMySQL:
         assert "DECLARE TABLE AS" not in code
         # No executable CREATE TRIGGER shell (MySQL cannot run this one).
         assert "EXECUTE FUNCTION" not in code
-        assert "UNIQUE:" in r.sql
+        assert "UNIQUE-" in r.sql
         assert r.warnings or r.unsupported
 
     def test_binding_roundtrips_to_postgresql(self) -> None:
@@ -658,7 +663,12 @@ class TestOracleCompoundTrigger:
     def test_lowers_to_row_level_postgresql(self) -> None:
         out = self._run("postgresql").sql
         # No carrier: the compound trigger is faithfully lowered, not documented.
-        assert "-- UNIQUE: Oracle COMPOUND TRIGGER" not in out
+        assert not re.search(
+            re.escape("-- UNIQUE")
+            + r"(?:-\d{4})?"
+            + re.escape(": Oracle COMPOUND TRIGGER"),
+            out,
+        )
         # A PostgreSQL row-level trigger + its trigger function.
         assert "CREATE OR REPLACE FUNCTION" in out
         assert "RETURNS TRIGGER" in out
@@ -674,7 +684,12 @@ class TestOracleCompoundTrigger:
 
     def test_degrades_to_carrier_mysql(self) -> None:
         r = self._run("mysql")
-        assert "-- UNIQUE: Oracle COMPOUND TRIGGER" in r.sql
+        assert re.search(
+            re.escape("-- UNIQUE")
+            + r"(?:-\d{4})?"
+            + re.escape(": Oracle COMPOUND TRIGGER"),
+            r.sql,
+        )
         assert "PLS_INTEGER" not in r.sql
         assert r.warnings or r.unsupported
 

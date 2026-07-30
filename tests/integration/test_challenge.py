@@ -30,7 +30,9 @@ _SOURCE_BY_FILE = {
     "challenge_mysql.sql": "mysql",
 }
 _ALL_ENGINES = ("tsql", "oracle", "postgresql", "mysql")
-_UNRECOGNIZED_MARKERS = ("UNIQUE: Unhandled", "could not translate")
+# ``: Unhandled`` matches both the legacy ``UNIQUE: Unhandled`` and the coded
+# ``UNIQUE-1144: Unhandled`` carrier (B32).
+_UNRECOGNIZED_MARKERS = (": Unhandled", "could not translate")
 
 
 def _read(fname: str) -> str:
@@ -149,7 +151,7 @@ def test_limit_cases_warn_and_annotate_on_every_failing_target() -> None:
             result = Transpiler().transpile(block, source=source, target=target)
             if not result.warnings:
                 failures.append(f"{fname}[{i}] -> {target}: no warning for a limit")
-            if "UNIQUE:" not in result.sql:
+            if "UNIQUE-" not in result.sql:
                 failures.append(f"{fname}[{i}] -> {target}: no UNIQUE annotation")
             for marker in _UNRECOGNIZED_MARKERS:
                 if marker in result.sql:
@@ -327,7 +329,9 @@ class TestTsqlCreateOrAlter:
     def test_maps_to_create_or_replace(self, target: str) -> None:
         out = _tx(_case("challenge_sqlserver.sql", "CREATE OR ALTER"), "tsql", target)
         assert "CREATE OR REPLACE PROCEDURE" in out, out
-        assert "UNIQUE: Unhandled" not in out, out
+        assert not re.search(
+            re.escape("UNIQUE") + r"(?:-\d{4})?" + re.escape(": Unhandled"), out
+        ), out
 
     def test_tsql_roundtrip_preserves_or_alter(self) -> None:
         out = _tx(_case("challenge_sqlserver.sql", "CREATE OR ALTER"), "tsql", "tsql")
@@ -540,7 +544,7 @@ class TestJsonAggregates:
         r = Transpiler().transpile(
             _case("challenge_mysql.sql", "my-json-agg "), source="mysql", target="tsql"
         )
-        assert r.warnings and "UNIQUE:" in r.sql, r.sql
+        assert r.warnings and "UNIQUE-" in r.sql, r.sql
 
 
 class TestAlterModifyColumn:
@@ -639,7 +643,7 @@ class TestWindowedStringAgg:
         case = _case("challenge_oracle.sql", "ora-listagg-over ")
         for target in ("postgresql", "tsql", "mysql"):
             result = Transpiler().transpile(case, source="oracle", target=target)
-            assert result.warnings and "UNIQUE:" in result.sql, target
+            assert result.warnings and "UNIQUE-" in result.sql, target
             # No executable window clause survives. The carrier comment mentions
             # "OVER …" as prose; the source ``--`` header also names OVER(...) — so
             # strip ``--`` lines and check for the "OVER (" call form only.
@@ -652,7 +656,7 @@ class TestWindowedStringAgg:
         out = _tx(
             "SELECT SUM(x) OVER (PARTITION BY d) AS r FROM t;", "postgresql", "tsql"
         )
-        assert "SUM(x) OVER" in out and "UNIQUE:" not in out, out
+        assert "SUM(x) OVER" in out and "UNIQUE-" not in out, out
 
 
 class TestForXml:
@@ -664,7 +668,7 @@ class TestForXml:
         case = _case("challenge_sqlserver.sql", "ts-for-xml ")
         for target in ("mysql", "oracle", "postgresql"):
             result = Transpiler().transpile(case, source="tsql", target=target)
-            assert result.warnings and "UNIQUE:" in result.sql, target
+            assert result.warnings and "UNIQUE-" in result.sql, target
             # Both the source ``--`` header and the ``/* … */`` carrier name
             # "FOR XML" as prose; strip comment lines then the carrier, and check
             # the remaining executable text has no live FOR XML clause.
@@ -686,7 +690,7 @@ class TestMysqlCastJson:
         case = _case("challenge_mysql.sql", "my-cast-json ")
         for target in ("oracle", "tsql", "postgresql"):
             result = Transpiler().transpile(case, source="mysql", target=target)
-            assert result.warnings and "UNIQUE:" in result.sql, target
+            assert result.warnings and "UNIQUE-" in result.sql, target
             body = "\n".join(
                 ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
             )
@@ -702,7 +706,7 @@ class TestMysqlUpdateXml:
         case = _case("challenge_mysql.sql", "my-xml-fns ")
         for target in ("oracle", "postgresql", "tsql"):
             result = Transpiler().transpile(case, source="mysql", target=target)
-            assert result.warnings and "UNIQUE:" in result.sql, target
+            assert result.warnings and "UNIQUE-" in result.sql, target
             body = "\n".join(
                 ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
             )
@@ -749,7 +753,7 @@ class TestFormatFunc:
         result = Transpiler().transpile(
             "SELECT format('%L', 'v') AS r;", source="postgresql", target="tsql"
         )
-        assert result.warnings and "UNIQUE:" in result.sql
+        assert result.warnings and "UNIQUE-" in result.sql
 
 
 class TestOracleTwoArgReplaceTranslate:
@@ -768,7 +772,7 @@ class TestOracleTwoArgReplaceTranslate:
     def test_mysql_translate_degrades(self) -> None:
         case = _case("challenge_oracle.sql", "ora-translate3 ")
         result = Transpiler().transpile(case, source="oracle", target="mysql")
-        assert result.warnings and "UNIQUE:" in result.sql
+        assert result.warnings and "UNIQUE-" in result.sql
         body = "\n".join(
             ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
         )
@@ -784,7 +788,7 @@ class TestCastPointGeometric:
         case = _case("challenge_postgresql.sql", "pg-cast-point ")
         for target in ("oracle", "tsql"):
             result = Transpiler().transpile(case, source="postgresql", target=target)
-            assert result.warnings and "UNIQUE:" in result.sql
+            assert result.warnings and "UNIQUE-" in result.sql
             body = "\n".join(
                 ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
             )
@@ -852,7 +856,7 @@ class TestSubstringRegex:
     def test_tsql_degrades(self) -> None:
         case = _case("challenge_postgresql.sql", "pg-substring-regex ")
         result = Transpiler().transpile(case, source="postgresql", target="tsql")
-        assert result.warnings and "UNIQUE:" in result.sql
+        assert result.warnings and "UNIQUE-" in result.sql
         body = "\n".join(
             ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
         )
@@ -869,7 +873,7 @@ class TestSubstringSimilarToEscape:
         case = _case("challenge_postgresql.sql", "pg-substring-escape ")
         for target in ("oracle", "tsql"):
             result = Transpiler().transpile(case, source="postgresql", target=target)
-            assert result.warnings and "UNIQUE:" in result.sql
+            assert result.warnings and "UNIQUE-" in result.sql
             body = "\n".join(
                 ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
             )
@@ -936,7 +940,7 @@ class TestAtTimeZone:
         case = _case("challenge_postgresql.sql", "pg-at-time-zone ")
         for target in ("oracle", "tsql", "mysql"):
             result = Transpiler().transpile(case, source="postgresql", target=target)
-            assert result.warnings and "UNIQUE:" in result.sql, target
+            assert result.warnings and "UNIQUE-" in result.sql, target
             # Both the -- header and the /* carrier */ name "AT TIME ZONE"; strip
             # comment lines then the carrier and check the executable text.
             body = "\n".join(
@@ -947,7 +951,7 @@ class TestAtTimeZone:
     def test_verbatim_on_own_dialect(self) -> None:
         case = _case("challenge_postgresql.sql", "pg-at-time-zone ")
         out = _tx(case, "postgresql", "postgresql")
-        assert "AT TIME ZONE 'UTC'" in out and "UNIQUE:" not in out, out
+        assert "AT TIME ZONE 'UTC'" in out and "UNIQUE-" not in out, out
 
 
 class TestGenerateSeriesFrom:
@@ -986,7 +990,7 @@ class TestGenerateSeriesFrom:
         assert "sys.all_objects" in _tx(case, "postgresql", "tsql")
         # MySQL has no inline table function → documented degrade.
         result = Transpiler().transpile(case, source="postgresql", target="mysql")
-        assert result.warnings and "UNIQUE:" in result.sql
+        assert result.warnings and "UNIQUE-" in result.sql
 
 
 class TestGroupingCube:
@@ -1003,7 +1007,7 @@ class TestGroupingCube:
     def test_grouping_folds_to_zero_on_mysql(self) -> None:
         case = _case("challenge_postgresql.sql", "pg-grouping-fn ")
         result = Transpiler().transpile(case, source="postgresql", target="mysql")
-        assert result.warnings and "UNIQUE:" in result.sql
+        assert result.warnings and "UNIQUE-" in result.sql
         body = "\n".join(
             ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
         )
@@ -1047,7 +1051,7 @@ class TestFunctionSideEffectDegrade:
                 source="postgresql",
                 target="tsql",
             )
-            assert result.warnings and "UNIQUE:" in result.sql, cid
+            assert result.warnings and "UNIQUE-" in result.sql, cid
             body = "\n".join(
                 ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
             )
@@ -1108,7 +1112,7 @@ class TestScrollCursorFetch:
         case = _case("challenge_sqlserver.sql", "ts-scroll-cursor ")
         for target in ("oracle", "postgresql", "mysql"):
             result = Transpiler().transpile(case, source="tsql", target=target)
-            assert result.warnings and "UNIQUE:" in result.sql, target
+            assert result.warnings and "UNIQUE-" in result.sql, target
             body = "\n".join(
                 ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
             )
@@ -1211,7 +1215,7 @@ class TestHashFns:
         assert "HASHBYTES('MD5', 'x')" in _tx(case, "postgresql", "tsql")
         for target in ("oracle", "tsql", "mysql"):
             result = Transpiler().transpile(case, source="postgresql", target=target)
-            assert result.warnings and "UNIQUE:" in result.sql, target
+            assert result.warnings and "UNIQUE-" in result.sql, target
 
 
 class TestChrAsciiUnicode:
@@ -1238,7 +1242,7 @@ class TestExtractMicroseconds:
         my = _tx(case, "postgresql", "mysql")
         assert "SECOND(" in my and "* 1000000" in my and "(6)" in my, my
         result = Transpiler().transpile(case, source="postgresql", target="oracle")
-        assert result.warnings and "UNIQUE:" in result.sql
+        assert result.warnings and "UNIQUE-" in result.sql
 
 
 class TestSequenceCurrval:
@@ -1252,7 +1256,7 @@ class TestSequenceCurrval:
             source="oracle",
             target="tsql",
         )
-        assert result.warnings and "UNIQUE:" in result.sql
+        assert result.warnings and "UNIQUE-" in result.sql
         assert "NEXT VALUE FOR s" in result.sql
         # no residual seq.CURRVAL in the executable text (only inside the carrier)
         assert "CURRVAL" not in _exec_lines(result.sql).upper().split("/*")[0]
@@ -1327,7 +1331,7 @@ class TestNotOperandParens:
         for target in ("mysql", "oracle"):
             assert "(NOT NULL) IS NULL" in _exec_lines(_tx(case, "postgresql", target))
         result = Transpiler().transpile(case, source="postgresql", target="tsql")
-        assert result.warnings and "UNIQUE:" in result.sql
+        assert result.warnings and "UNIQUE-" in result.sql
         assert "NOT NULL" not in _exec_lines(result.sql).split("/*")[0]
 
 
@@ -1464,7 +1468,7 @@ class TestDistinctCaseInsensitiveCollation:
         case = _case("challenge_mysql.sql", "my-distinct-case ")
         for target in ("postgresql", "oracle"):
             result = Transpiler().transpile(case, source="mysql", target=target)
-            assert result.warnings and "UNIQUE:" in result.sql, target
+            assert result.warnings and "UNIQUE-" in result.sql, target
             body = "\n".join(
                 ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
             ).split("/*")[0]
@@ -1481,7 +1485,7 @@ class TestMultisetCollectionUnnest:
         case = _case("challenge_oracle.sql", "ora-multiset-table ")
         for target in ("postgresql", "tsql"):
             result = Transpiler().transpile(case, source="oracle", target=target)
-            assert result.warnings and "UNIQUE:" in result.sql, target
+            assert result.warnings and "UNIQUE-" in result.sql, target
             assert "PassthroughSQL(" not in result.sql, target
             assert "SourceLocation(" not in result.sql, target
 
@@ -1495,7 +1499,7 @@ class TestExtractEpochInterval:
         case = _case("challenge_postgresql.sql", "pg-epoch ")
         for target in ("oracle", "tsql", "mysql"):
             result = Transpiler().transpile(case, source="postgresql", target=target)
-            assert result.warnings and "UNIQUE:" in result.sql, target
+            assert result.warnings and "UNIQUE-" in result.sql, target
             body = "\n".join(
                 ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
             )
@@ -1536,7 +1540,7 @@ class TestSpatialClrScopeResolution:
         for target in ("oracle", "postgresql", "mysql"):
             result = Transpiler().transpile(case, source="tsql", target=target)
             assert result.warnings, target
-            assert "UNIQUE:" in result.sql and "NULL" in result.sql, result.sql
+            assert "UNIQUE-" in result.sql and "NULL" in result.sql, result.sql
             # No live spatial call escapes as executable text (only inside the
             # carrier comment); ignore the source ``--`` header prose.
             body = "\n".join(
@@ -1547,7 +1551,7 @@ class TestSpatialClrScopeResolution:
     def test_verbatim_on_tsql(self) -> None:
         case = _case("challenge_sqlserver.sql", "ts-st-distance ")
         out = _tx(case, "tsql", "tsql")
-        assert "STDistance" in out and "UNIQUE:" not in out, out
+        assert "STDistance" in out and "UNIQUE-" not in out, out
 
 
 class TestBitStringCast:
@@ -2013,7 +2017,7 @@ class TestDateFormatMasks:
             source="mysql",
             target="oracle",
         )
-        assert r.warnings and "UNIQUE:" in r.sql, r.sql
+        assert r.warnings and "UNIQUE-" in r.sql, r.sql
 
     def test_number_format_mask(self) -> None:
         # T-SQL FORMAT(num, 'N2') -> Oracle/PG TO_CHAR FM mask, MySQL FORMAT(n, 2).
@@ -2029,7 +2033,7 @@ class TestDateFormatMasks:
         r = Transpiler().transpile(
             "SELECT TO_CHAR(1234.5, 'L9G999D99') AS r", source="oracle", target="mysql"
         )
-        assert r.warnings and "UNIQUE:" in r.sql, r.sql
+        assert r.warnings and "UNIQUE-" in r.sql, r.sql
 
 
 class TestTsqlIntToDatetime:
@@ -2266,7 +2270,7 @@ class TestInitcapSingleArg:
         r = Transpiler().transpile(
             _case("challenge_postgresql.sql", "pg-initcap"), "postgresql", "tsql"
         )
-        assert "-- UNIQUE:" in r.sql and r.warnings, r.sql
+        assert "-- UNIQUE-" in r.sql and r.warnings, r.sql
 
 
 class TestDatetimeFromParts:
@@ -2297,7 +2301,7 @@ class TestSequenceNextValue:
         r = Transpiler().transpile(
             _case("challenge_sqlserver.sql", "ts-seq-use"), "tsql", "mysql"
         )
-        assert "-- UNIQUE:" in r.sql and r.warnings, r.sql
+        assert "-- UNIQUE-" in r.sql and r.warnings, r.sql
 
 
 class TestNcharCharCodePoint:
@@ -2424,7 +2428,12 @@ class TestGroupByRollup:
             _case("challenge_sqlserver.sql", "ts-cube"), "tsql", "mysql"
         )
         assert "CUBE" not in _exec_lines(result.sql).upper(), result.sql
-        assert "UNIQUE: MySQL has no GROUP BY CUBE" in result.sql, result.sql
+        assert re.search(
+            re.escape("UNIQUE")
+            + r"(?:-\d{4})?"
+            + re.escape(": MySQL has no GROUP BY CUBE"),
+            result.sql,
+        ), result.sql
         assert any("CUBE" in w.message for w in result.warnings), [
             w.message for w in result.warnings
         ]
@@ -2441,7 +2450,12 @@ class TestGroupByRollup:
             _case("challenge_oracle.sql", "ora-grouping-sets"), "oracle", "mysql"
         )
         assert "GROUPING SETS" not in _exec_lines(result.sql).upper(), result.sql
-        assert "UNIQUE: MySQL has no GROUP BY GROUPING SETS" in result.sql, result.sql
+        assert re.search(
+            re.escape("UNIQUE")
+            + r"(?:-\d{4})?"
+            + re.escape(": MySQL has no GROUP BY GROUPING SETS"),
+            result.sql,
+        ), result.sql
         assert any("GROUPING SETS" in w.message for w in result.warnings), [
             w.message for w in result.warnings
         ]
@@ -2457,7 +2471,12 @@ class TestForUpdateLockCarrier:
             _case("challenge_postgresql.sql", "qdrop-FOR"), "postgresql", "tsql"
         )
         assert "FOR UPDATE" not in _exec_lines(result.sql).upper(), result.sql
-        assert "UNIQUE: T-SQL has no FOR UPDATE" in result.sql, result.sql
+        assert re.search(
+            re.escape("UNIQUE")
+            + r"(?:-\d{4})?"
+            + re.escape(": T-SQL has no FOR UPDATE"),
+            result.sql,
+        ), result.sql
         assert any("FOR UPDATE" in w.message for w in result.warnings), [
             w.message for w in result.warnings
         ]
@@ -2466,7 +2485,7 @@ class TestForUpdateLockCarrier:
     def test_oracle_mysql_keep_the_lock(self, target: str) -> None:
         out = _tx(_case("challenge_postgresql.sql", "qdrop-FOR"), "postgresql", target)
         assert "FOR UPDATE" in out.upper(), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE-" not in out, out
 
 
 class TestAlterNotValidStripped:
@@ -2484,7 +2503,7 @@ class TestAlterNotValidStripped:
             _case("challenge_postgresql.sql", keyword), "postgresql", target
         )
         assert "NOT VALID" not in _exec_lines(result.sql).upper(), result.sql
-        assert "UNIQUE:" in result.sql and "NOT VALID" in result.sql, result.sql
+        assert "UNIQUE-" in result.sql and "NOT VALID" in result.sql, result.sql
         assert any("NOT VALID" in w.message for w in result.warnings), [
             w.message for w in result.warnings
         ]
@@ -2535,7 +2554,10 @@ class TestCreateIndexConcurrently:
             target,
         )
         assert "CONCURRENTLY" not in _exec_lines(result.sql).upper(), result.sql
-        assert "UNIQUE: CONCURRENTLY" in result.sql, result.sql
+        assert re.search(
+            re.escape("UNIQUE") + r"(?:-\d{4})?" + re.escape(": CONCURRENTLY"),
+            result.sql,
+        ), result.sql
         assert any("CONCURRENTLY" in w.message for w in result.warnings), [
             w.message for w in result.warnings
         ]
@@ -2585,7 +2607,10 @@ class TestExcludeConstraintCarrier:
             _case("challenge_postgresql.sql", "drop2-EXCLUDE"), "postgresql", target
         )
         assert "EXCLUDE" not in _exec_lines(result.sql).upper(), result.sql
-        assert "UNIQUE: PostgreSQL EXCLUDE" in result.sql, result.sql
+        assert re.search(
+            re.escape("UNIQUE") + r"(?:-\d{4})?" + re.escape(": PostgreSQL EXCLUDE"),
+            result.sql,
+        ), result.sql
         assert any("EXCLUDE" in w.message for w in result.warnings), [
             w.message for w in result.warnings
         ]
@@ -2603,7 +2628,13 @@ class TestOnUpdateTimestampCarrier:
             _case("challenge_mysql.sql", "drop2-ON"), "mysql", target
         )
         assert "ON UPDATE" not in _exec_lines(result.sql).upper(), result.sql
-        assert "UNIQUE: MySQL's" in result.sql and "ON UPDATE" in result.sql, result.sql
+        assert (
+            re.search(
+                re.escape("UNIQUE") + r"(?:-\d{4})?" + re.escape(": MySQL's"),
+                result.sql,
+            )
+            and "ON UPDATE" in result.sql
+        ), result.sql
         assert any("ON UPDATE" in w.message for w in result.warnings), [
             w.message for w in result.warnings
         ]
@@ -2631,7 +2662,10 @@ class TestMemoryOptimizedCarrier:
             _case("challenge_sqlserver.sql", "drop5-MEMORY"), "tsql", target
         )
         assert "MEMORY_OPTIMIZED" not in _exec_lines(result.sql).upper(), result.sql
-        assert "UNIQUE: T-SQL In-Memory OLTP" in result.sql, result.sql
+        assert re.search(
+            re.escape("UNIQUE") + r"(?:-\d{4})?" + re.escape(": T-SQL In-Memory OLTP"),
+            result.sql,
+        ), result.sql
         assert any("MEMORY_OPTIMIZED" in w.message for w in result.warnings), [
             w.message for w in result.warnings
         ]
@@ -2648,14 +2682,14 @@ class TestCollationCarrier:
             _case("challenge_oracle.sql", "drop4-COLLATE"), "oracle", "tsql"
         )
         assert "COLLATE" not in _exec_lines(result.sql).upper(), result.sql
-        assert "UNIQUE:" in result.sql and "collation" in result.sql, result.sql
+        assert "UNIQUE-" in result.sql and "collation" in result.sql, result.sql
         assert any("collation" in w.message for w in result.warnings), result.sql
 
     def test_pg_column_collate_carried(self) -> None:
         result = Transpiler().transpile(
             _case("challenge_postgresql.sql", "drop4-COLLATE"), "postgresql", "mysql"
         )
-        assert "UNIQUE:" in result.sql and "collation" in result.sql, result.sql
+        assert "UNIQUE-" in result.sql and "collation" in result.sql, result.sql
         assert result.warnings, result.sql
 
     @pytest.mark.parametrize("target", ("oracle", "postgresql"))
@@ -2664,7 +2698,7 @@ class TestCollationCarrier:
             _case("challenge_mysql.sql", "drop4-COLLATE|utf8"), "mysql", target
         )
         assert "COLLATE" not in _exec_lines(result.sql).upper(), result.sql
-        assert "UNIQUE:" in result.sql and "collation" in result.sql, result.sql
+        assert "UNIQUE-" in result.sql and "collation" in result.sql, result.sql
         assert any("collation" in w.message for w in result.warnings), result.sql
 
 
@@ -2679,7 +2713,7 @@ class TestCharacterSetCarrier:
             _case("challenge_mysql.sql", "drop2-latin1"), "mysql", "oracle"
         )
         assert "CHARACTER SET" not in _exec_lines(result.sql).upper(), result.sql
-        assert "UNIQUE:" in result.sql and "charset" in result.sql, result.sql
+        assert "UNIQUE-" in result.sql and "charset" in result.sql, result.sql
         assert result.warnings, result.sql
 
     @pytest.mark.parametrize("target", ("oracle", "postgresql", "tsql"))
@@ -2688,7 +2722,7 @@ class TestCharacterSetCarrier:
             _case("challenge_mysql.sql", "drop5-utf8mb4"), "mysql", target
         )
         assert "CHARSET" not in _exec_lines(result.sql).upper(), result.sql
-        assert "UNIQUE:" in result.sql and "charset" in result.sql, result.sql
+        assert "UNIQUE-" in result.sql and "charset" in result.sql, result.sql
         assert result.warnings, result.sql
 
 
@@ -2767,7 +2801,9 @@ class TestTruncateRestartIdentity:
             source="postgresql",
             target="mysql",
         )
-        assert re.search(r"(?i)UNIQUE:.*CASCADE", res.sql) and res.warnings, res.sql
+        assert (
+            re.search(r"(?i)UNIQUE(?:-\d{4})?:.*CASCADE", res.sql) and res.warnings
+        ), res.sql
 
 
 class TestIndexNullsOrderCarrier:
@@ -2782,14 +2818,16 @@ class TestIndexNullsOrderCarrier:
             source="postgresql",
             target=target,
         )
-        assert re.search(r"(?i)UNIQUE:.*NULLS\s+FIRST/LAST", res.sql), res.sql
+        assert re.search(
+            r"(?i)UNIQUE(?:-\d{4})?:.*NULLS\s+FIRST/LAST", res.sql
+        ), res.sql
         assert res.warnings, "expected a loss warning"
 
     def test_plain_index_has_no_carrier(self) -> None:
         res = Transpiler().transpile(
             "CREATE INDEX ix ON t (a)", source="postgresql", target="oracle"
         )
-        assert "UNIQUE:" not in res.sql, res.sql
+        assert "UNIQUE-" not in res.sql, res.sql
 
 
 class TestMysqlComments:
@@ -2824,7 +2862,7 @@ class TestMysqlSqlCalcFoundRows:
 
     def test_plain_select_has_no_carrier(self) -> None:
         res = Transpiler().transpile("SELECT x FROM t", source="mysql", target="tsql")
-        assert "UNIQUE:" not in res.sql, res.sql
+        assert "UNIQUE-" not in res.sql, res.sql
 
 
 class TestMysqlDatetimePrecision:
@@ -3130,7 +3168,7 @@ class TestTimestampDifferenceDegrade:
         ):
             r = Transpiler().transpile(self._SQL, source="postgresql", target=target)
             assert fn in r.sql, r.sql
-            assert "UNIQUE:" in r.sql and r.warnings, r.sql
+            assert "UNIQUE-" in r.sql and r.warnings, r.sql
 
     def test_oracle_keeps_native_interval(self) -> None:
         r = Transpiler().transpile(self._SQL, source="postgresql", target="oracle")
@@ -3147,7 +3185,7 @@ class TestMysqlDateSubtraction:
         case = _case("challenge_mysql.sql", "my-date-diff-minus ")
         result = Transpiler().transpile(case, source="mysql", target="postgresql")
         assert result.warnings, "normalized date subtraction must warn"
-        assert "UNIQUE:" in result.sql, result.sql
+        assert "UNIQUE-" in result.sql, result.sql
 
 
 class TestSubstringFloatArgs:
@@ -3180,7 +3218,7 @@ class TestMysqlCharByteString:
         case = _case("challenge_mysql.sql", "my-char-256 ")
         result = Transpiler().transpile(case, source="mysql", target="oracle")
         assert result.warnings, "byte-CHAR quirk must warn"
-        assert "UNIQUE:" in result.sql, result.sql
+        assert "UNIQUE-" in result.sql, result.sql
 
 
 class TestChrUnicode:
@@ -3307,8 +3345,8 @@ class TestOracleIdentityOptions:
         case = _case("challenge_oracle.sql", "ora-identity-opts ")
         result = Transpiler().transpile(case, source="oracle", target="mysql")
         assert result.warnings, "dropped IDENTITY options must warn"
-        assert "UNIQUE:" in result.sql, result.sql
-        # AUTO_INCREMENT column must still be keyed (the carrier's "UNIQUE:" is
+        assert "UNIQUE-" in result.sql, result.sql
+        # AUTO_INCREMENT column must still be keyed (the carrier's "UNIQUE-" is
         # not a key).
         assert "KEY (`a`)" in result.sql, result.sql
 
@@ -3327,7 +3365,7 @@ class TestTablesample:
         case = _case("challenge_postgresql.sql", "pg-tablesample ")
         result = Transpiler().transpile(case, source="postgresql", target="mysql")
         assert result.warnings, "dropped TABLESAMPLE must warn"
-        assert "UNIQUE:" in result.sql and "TABLESAMPLE" in result.sql, result.sql
+        assert "UNIQUE-" in result.sql and "TABLESAMPLE" in result.sql, result.sql
 
 
 class TestUsingJoinQualified:
@@ -3465,7 +3503,7 @@ class TestCollationFn:
         case = _case("challenge_mysql.sql", "my-collation-fn ")
         result = Transpiler().transpile(case, source="mysql", target="oracle")
         assert result.warnings, "engine-specific collation must warn"
-        assert "UNIQUE:" in result.sql and "COLLATION(" in result.sql, result.sql
+        assert "UNIQUE-" in result.sql and "COLLATION(" in result.sql, result.sql
 
 
 class TestOracleTimeCast:
@@ -3480,7 +3518,7 @@ class TestOracleTimeCast:
         body = "\n".join(
             ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
         )
-        assert "UNIQUE:" in body and "AS TIME)" not in body, body
+        assert "UNIQUE-" in body and "AS TIME)" not in body, body
 
     def test_oracle_interval_cast_carries(self) -> None:
         case = _case("challenge_postgresql.sql", "pg-cast-interval ")
@@ -3489,7 +3527,7 @@ class TestOracleTimeCast:
         body = "\n".join(
             ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
         )
-        assert "UNIQUE:" in body and "AS INTERVAL)" not in body, body
+        assert "UNIQUE-" in body and "AS INTERVAL)" not in body, body
 
 
 class TestNanCast:
@@ -3501,7 +3539,7 @@ class TestNanCast:
         case = _case("challenge_postgresql.sql", "pg-nan-cmp ")
         result = Transpiler().transpile(case, source="postgresql", target="mysql")
         assert result.warnings, "NaN cast must warn"
-        assert "UNIQUE:" in result.sql and "NaN" in result.sql, result.sql
+        assert "UNIQUE-" in result.sql and "NaN" in result.sql, result.sql
 
 
 class TestRegexpSubstrGroup:
@@ -3513,7 +3551,7 @@ class TestRegexpSubstrGroup:
         case = _case("challenge_oracle.sql", "ora-regexp-group ")
         result = Transpiler().transpile(case, source="oracle", target="mysql")
         assert result.warnings, "dropped capture group must warn"
-        assert "UNIQUE:" in result.sql, result.sql
+        assert "UNIQUE-" in result.sql, result.sql
         assert "REGEXP_SUBSTR('a1b2c3', '(\\d)', 1, 1)" in result.sql, result.sql
 
 
@@ -3540,7 +3578,7 @@ class TestCastUnsigned:
         for target in ("oracle", "postgresql", "tsql"):
             result = Transpiler().transpile(case, source="mysql", target=target)
             assert result.warnings, "UNSIGNED must warn"
-            assert "UNIQUE:" in result.sql and "UBIGINT" not in result.sql, result.sql
+            assert "UNIQUE-" in result.sql and "UBIGINT" not in result.sql, result.sql
 
 
 class TestCastBinary:
@@ -4443,7 +4481,12 @@ class TestLiteralFolds:
         result = Transpiler().transpile(
             _case("challenge_mysql.sql", "my-fsubstr"), source="mysql", target="oracle"
         )
-        assert "UNIQUE: Oracle stores an empty string as NULL" in result.sql
+        assert re.search(
+            re.escape("UNIQUE")
+            + r"(?:-\d{4})?"
+            + re.escape(": Oracle stores an empty string as NULL"),
+            result.sql,
+        )
         assert result.warnings, result.warnings
 
     def test_pg_substr_edges_rewritten(self) -> None:
@@ -4469,7 +4512,10 @@ class TestLiteralFolds:
         result = Transpiler().transpile(
             "SELECT INSTR(c, 'l', 1, 2) FROM t;", source="oracle", target="tsql"
         )
-        assert "NULL /* UNIQUE: Oracle INSTR" in result.sql, result.sql
+        assert re.search(
+            re.escape("NULL /* UNIQUE") + r"(?:-\d{4})?" + re.escape(": Oracle INSTR"),
+            result.sql,
+        ), result.sql
         assert result.warnings, result.warnings
 
     def test_length_folds(self) -> None:
@@ -4545,7 +4591,12 @@ class TestLiteralFolds:
             source="mysql",
             target="tsql",
         )
-        assert "NULL /* UNIQUE: MySQL date arithmetic" in result.sql, result.sql
+        assert re.search(
+            re.escape("NULL /* UNIQUE")
+            + r"(?:-\d{4})?"
+            + re.escape(": MySQL date arithmetic"),
+            result.sql,
+        ), result.sql
         assert result.warnings, result.warnings
 
     def test_mysql_greatest_ci_folds(self) -> None:
@@ -5160,7 +5211,7 @@ class TestMergeConditionalDeleteFoldSafety:
         # No silent post-update DELETE WHERE fold.
         assert "DELETE WHERE" not in _exec_lines(r.sql), r.sql
         # The whole MERGE is degraded to a carrier + warning.
-        assert "-- UNIQUE:" in r.sql
+        assert "-- UNIQUE-" in r.sql
         assert r.warnings, "unsafe fold must warn"
         assert any("post-update" in w.message.lower() for w in r.warnings), r.warnings
 
@@ -5390,7 +5441,7 @@ class TestRowcountDivergenceAnnotation:
     def test_mysql_target_annotates_and_warns(self) -> None:
         r = Transpiler().transpile(self._ORACLE_SRC, "oracle", "mysql")
         assert "ROW_COUNT()" in r.sql, r.sql
-        assert "UNIQUE:" in r.sql, r.sql
+        assert "UNIQUE-" in r.sql, r.sql
         assert "changed rows" in r.sql, r.sql
         assert any(
             "ROW_COUNT() counts rows CHANGED" in w.message for w in r.warnings
@@ -5399,7 +5450,7 @@ class TestRowcountDivergenceAnnotation:
     def test_tsql_target_stays_unannotated(self) -> None:
         r = Transpiler().transpile(self._ORACLE_SRC, "oracle", "tsql")
         assert "@@ROWCOUNT" in r.sql, r.sql
-        assert "UNIQUE:" not in r.sql, r.sql
+        assert "UNIQUE-" not in r.sql, r.sql
         assert not r.warnings, r.warnings
 
     def test_warning_deduplicated_across_multiple_occurrences(self) -> None:
@@ -5434,7 +5485,7 @@ class TestRowcountDivergenceAnnotation:
         )
         r = Transpiler().transpile(src, "postgresql", "mysql")
         assert "ROW_COUNT()" in r.sql, r.sql
-        assert "UNIQUE:" in r.sql, r.sql
+        assert "UNIQUE-" in r.sql, r.sql
         assert any(
             "ROW_COUNT() counts rows CHANGED" in w.message for w in r.warnings
         ), r.warnings
@@ -5449,7 +5500,7 @@ class TestRowcountDivergenceAnnotation:
             "END"
         )
         r = Transpiler().transpile(src, "mysql", "mysql")
-        assert "UNIQUE:" not in r.sql, r.sql
+        assert "UNIQUE-" not in r.sql, r.sql
 
 
 class TestBitStringNumericFold:
@@ -5622,7 +5673,7 @@ class TestFkOnDeleteSetDefaultOracle:
             "ON DELETE SET DEFAULT" in w.message and "Oracle" in w.message
             for w in r.warnings
         ), r.warnings
-        assert "UNIQUE:" in r.sql, r.sql
+        assert "UNIQUE-" in r.sql, r.sql
         assert_statements_parse(body, "oracle", context="fk-setdefault")
 
     def test_pg_and_mysql_keep_set_default(self) -> None:
@@ -5700,7 +5751,7 @@ class TestWindowFrameExclude:
             body = _exec_lines(r.sql)
             # The window is not emitted at all — it degrades to a NULL carrier.
             assert "OVER (" not in body, r.sql
-            assert "NULL /* UNIQUE:" in body, r.sql
+            assert "NULL /* UNIQUE-" in body, r.sql
             assert any(
                 "EXCLUDE" in w.message and target in w.message for w in r.warnings
             ), r.warnings
@@ -5823,7 +5874,7 @@ class TestInvisibleColumn:
         for target in ("postgresql", "tsql"):
             r = Transpiler().transpile(src, "mysql", target)
             body = _exec_lines(r.sql)
-            assert "INVISIBLE" not in body.split("UNIQUE:")[0].upper(), r.sql
+            assert "INVISIBLE" not in body.split("UNIQUE-")[0].upper(), r.sql
             assert any(
                 "INVISIBLE" in w.message and target in w.message for w in r.warnings
             ), r.warnings
@@ -5996,14 +6047,14 @@ class TestFalseUnmapMappedSymmetrically:
             assert expected in out, out
             body = _exec_lines(out)
             assert "DIV" not in body.upper(), body  # MySQL operator is gone
-            assert "UNIQUE:" not in body, out
+            assert "UNIQUE-" not in body, out
 
     def test_json_value_scalar_maps_per_engine(self) -> None:
         case = _case("challenge_sqlserver.sql", "red2-ts-json-value")
         for target in ("mysql", "oracle"):
             out = _tx(case, "tsql", target)
             assert "JSON_VALUE('{\"a\":1}', '$.a')" in out, out
-            assert "UNIQUE:" not in _exec_lines(out), out
+            assert "UNIQUE-" not in _exec_lines(out), out
         pg = _tx(case, "tsql", "postgresql")
         assert "->> 'a'" in pg, pg
         assert "JSON_VALUE" not in _exec_lines(pg).upper(), pg
@@ -6016,7 +6067,7 @@ class TestFalseUnmapMappedSymmetrically:
         assert "seq.NEXTVAL" in o4, o4
         # MySQL genuinely has no sequences -> honest degrade with a warning.
         r = Transpiler().transpile(case, source="postgresql", target="mysql")
-        assert r.warnings and "UNIQUE:" in r.sql, r.sql
+        assert r.warnings and "UNIQUE-" in r.sql, r.sql
 
     def test_pg_materialized_view_native_on_oracle(self) -> None:
         case = _case("challenge_postgresql.sql", "red2-pg-matview")
@@ -6045,10 +6096,10 @@ class TestFalseUnmapMappedSymmetrically:
         for target in ("oracle", "mysql"):
             out = _tx(src, "postgresql", target)
             assert "REGEXP_LIKE(x, 'abc', 'i')" in out, out
-            assert "UNIQUE:" not in _exec_lines(out), out
+            assert "UNIQUE-" not in _exec_lines(out), out
         # T-SQL genuinely has no regex -> honest degrade with a warning.
         r = Transpiler().transpile(src, source="postgresql", target="tsql")
-        assert r.warnings and "UNIQUE:" in r.sql, r.sql
+        assert r.warnings and "UNIQUE-" in r.sql, r.sql
 
 
 class TestTsqlLikeCharClassTranslated:
@@ -6133,7 +6184,7 @@ class TestDateAddDiffUnits:
         src = "SELECT DATEDIFF(NANOSECOND, '2020-01-01', '2020-03-01') AS d"
         for target in ("mysql", "oracle", "postgresql"):
             r = Transpiler().transpile(src, source="tsql", target=target)
-            assert r.warnings and "UNIQUE:" in r.sql, r.sql
+            assert r.warnings and "UNIQUE-" in r.sql, r.sql
             assert "NANOSECOND" in r.sql, r.sql  # unit named for review
         assert "DATEDIFF(NANOSECOND" in _tx(src, "tsql", "tsql")
 
@@ -6214,7 +6265,7 @@ class TestOracleTruncRoundFormatModels:
         case = _case("challenge_oracle.sql", "red2-ora-trunc-format-unmapped")
         for target in ("postgresql", "tsql", "mysql"):
             r = Transpiler().transpile(case, source="oracle", target=target)
-            assert r.warnings and "UNIQUE:" in r.sql, r.sql
+            assert r.warnings and "UNIQUE-" in r.sql, r.sql
             body = _exec_lines(r.sql)
             assert "DATE_TRUNC(W" not in body and "DATE_TRUNC('W'" not in body, body
 
@@ -6229,7 +6280,7 @@ class TestOracleTruncRoundFormatModels:
         case = _case("challenge_oracle.sql", "red2-ora-round-date-fmt")
         for target in ("postgresql", "tsql", "mysql"):
             r = Transpiler().transpile(case, source="oracle", target=target)
-            assert r.warnings and "UNIQUE:" in r.sql, r.sql
+            assert r.warnings and "UNIQUE-" in r.sql, r.sql
             body = _exec_lines(r.sql)
             assert "AS NUMERIC" not in body.upper(), body  # not the numeric round
             assert "NULL" in body, body

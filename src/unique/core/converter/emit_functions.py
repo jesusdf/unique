@@ -134,7 +134,7 @@ def _degrade_date_unit(fn: str, unit_sql: str, dialect: str) -> str:
     no-silent-loss scan, so an unmapped unit never ships as invalid SQL.
     """
     return (
-        f"NULL /* UNIQUE: {fn} unit '{unit_sql}' has no {dialect} equivalent — "
+        f"NULL /* UNIQUE-1079: {fn} unit '{unit_sql}' has no {dialect} equivalent — "
         "the value was not computed (docs/03-unsupported.md) */"
     )
 
@@ -313,8 +313,8 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
             "MONTH",
         ):
             return (
-                f"({boundary} - CASE WHEN DATEADD({unit}, {boundary}, {start}) "
-                f"> {end} THEN 1 ELSE 0 END)"
+                f"({boundary} - CASE WHEN DATEADD({unit}, {boundary}, {start}) > {end} "
+                f"THEN 1 ELSE 0 END)"
             )
         return boundary
     if dialect == "mysql":
@@ -324,13 +324,13 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
             return f"FLOOR(DATEDIFF({end}, {start}) / 7)"
         if unit == "MONTH":
             return (
-                f"((YEAR({end}) * 12 + MONTH({end})) - "
-                f"(YEAR({start}) * 12 + MONTH({start})))"
+                f"((YEAR({end}) * 12 + MONTH({end})) - (YEAR({start}) * 12 + "
+                f"MONTH({start})))"
             )
         if unit == "QUARTER":
             return (
-                f"((YEAR({end}) * 4 + QUARTER({end})) - "
-                f"(YEAR({start}) * 4 + QUARTER({start})))"
+                f"((YEAR({end}) * 4 + QUARTER({end})) - (YEAR({start}) * 4 + "
+                f"QUARTER({start})))"
             )
         if unit == "YEAR":
             return f"(YEAR({end}) - YEAR({start}))"
@@ -338,8 +338,8 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
         if k is None:
             return None  # exotic unit: degrade to a carrier + warning, never raise
         return (
-            f"(FLOOR(UNIX_TIMESTAMP({end}) / {k}) - "
-            f"FLOOR(UNIX_TIMESTAMP({start}) / {k}))"
+            f"(FLOOR(UNIX_TIMESTAMP({end}) / {k}) - FLOOR(UNIX_TIMESTAMP({start}) / "
+            f"{k}))"
         )
     is_tsdiff = node.name.upper() == "TIMESTAMPDIFF"
     if dialect == "postgresql":
@@ -366,8 +366,8 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
             if k is None:
                 return None  # exotic unit: degrade to a carrier + warning
             return (
-                f"(FLOOR(EXTRACT(EPOCH FROM {end}) / {k}) - "
-                f"FLOOR(EXTRACT(EPOCH FROM {start}) / {k}))"
+                f"(FLOOR(EXTRACT(EPOCH FROM {end}) / {k}) - FLOOR(EXTRACT(EPOCH FROM "
+                f"{start}) / {k}))"
             )
         if is_tsdiff:
             return _complete_period_adjust(boundary, start, end, unit, dialect)
@@ -380,8 +380,8 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
             return f"(TRUNC(CAST({end} AS DATE)) - TRUNC(CAST({start} AS DATE)))"
         if unit == "WEEK":
             return (
-                f"FLOOR((TRUNC(CAST({end} AS DATE)) - "
-                f"TRUNC(CAST({start} AS DATE))) / 7)"
+                f"FLOOR((TRUNC(CAST({end} AS DATE)) - TRUNC(CAST({start} AS DATE))) / "
+                f"7)"
             )
         if unit == "MONTH":
             boundary = (
@@ -574,8 +574,8 @@ def _emit_group_concat(node: FunctionCall, dialect: str) -> str | None:
         # aggregated expression itself when the source specified none.
         order = order_sql or expr_sql
         return (
-            f"LISTAGG({distinct}{expr_sql}, {sep_sql(',')}) "
-            f"WITHIN GROUP (ORDER BY {order})"
+            f"LISTAGG({distinct}{expr_sql}, {sep_sql(',')}) WITHIN GROUP (ORDER BY "
+            f"{order})"
         )
     return None
 
@@ -740,7 +740,7 @@ def _emit_sequence_call(node: FunctionCall, dialect: str) -> str | None:
     return {
         "oracle": f"{seq}.CURRVAL",
         "tsql": (
-            "NULL /* UNIQUE: T-SQL has no sequence CURRVAL; capture "
+            "NULL /* UNIQUE-1080: T-SQL has no sequence CURRVAL; capture "
             f"NEXT VALUE FOR {seq} in a variable — see docs/03-unsupported.md */"
         ),
     }.get(dialect, f"currval('{bare}')")
@@ -903,8 +903,8 @@ def _emit_mysql_dayofweek(node: FunctionCall, dialect: str) -> str:
         "oracle": f"(MOD(MOD(TRUNC({v}) - DATE '1970-01-04', 7) + 7, 7) + 1)",
         "tsql": (
             f"DATEPART(WEEKDAY, {v})"
-            " /* UNIQUE: DATEPART(WEEKDAY) is @@DATEFIRST-dependent; assumes "
-            "the session default (Sunday=1) */"
+            " /* UNIQUE-1081: DATEPART(WEEKDAY) is @@DATEFIRST-dependent; assumes the "
+            "session default (Sunday=1) */"
         ),
     }.get(dialect, f"DAYOFWEEK({v})")
 
@@ -945,7 +945,8 @@ def _emit_bool_agg(node: FunctionCall, fn_name: str, dialect: str) -> str | None
 #: Oracle cannot store an empty string apart from NULL — the documented
 #: empty-string limit (docs/03-unsupported.md).
 _ORACLE_EMPTY = (
-    "'' /* UNIQUE: Oracle stores an empty string as NULL (docs/03-unsupported.md) */"
+    "'' /* UNIQUE-1082: Oracle stores an empty string as NULL (docs/03-unsupported.md) "
+    "*/"
 )
 
 
@@ -1072,7 +1073,7 @@ def _weekday_extract_expr(part: str, value: str, dialect: str) -> str | None:
         }.get(dialect)
     if part == "DAYOFWEEK":
         _wd_note = (
-            " /* UNIQUE: DATEPART(WEEKDAY) is @@DATEFIRST-dependent; converted "
+            " /* UNIQUE-1083: DATEPART(WEEKDAY) is @@DATEFIRST-dependent; converted "
             "assuming the session default (Sunday=1) */"
         )
         # T-SQL WEEKDAY (default @@DATEFIRST) = DOW(Sunday=0..6) + 1; MySQL
@@ -1109,16 +1110,16 @@ def _extract_week_noniso(value: str, dialect: str) -> str | None:
     dv = wrap_oracle_date_arg(value)
     return {
         "postgresql": (
-            f"(FLOOR((EXTRACT(DOY FROM {dv}) + "
-            f"EXTRACT(DOW FROM DATE_TRUNC('year', {dv})) - 1) / 7) + 1)"
+            f"(FLOOR((EXTRACT(DOY FROM {dv}) + EXTRACT(DOW FROM DATE_TRUNC('year', "
+            f"{dv})) - 1) / 7) + 1)"
         ),
         "mysql": (
-            f"(FLOOR((DAYOFYEAR({value}) + "
-            f"DAYOFWEEK(MAKEDATE(YEAR({value}), 1)) - 2) / 7) + 1)"
+            f"(FLOOR((DAYOFYEAR({value}) + DAYOFWEEK(MAKEDATE(YEAR({value}), 1)) - 2) "
+            f"/ 7) + 1)"
         ),
         "oracle": (
-            f"(FLOOR((TO_NUMBER(TO_CHAR({dv}, 'DDD')) + "
-            f"(MOD(TRUNC({dv}, 'YYYY') - DATE '1970-01-04', 7) + 1) - 2) / 7) + 1)"
+            f"(FLOOR((TO_NUMBER(TO_CHAR({dv}, 'DDD')) + (MOD(TRUNC({dv}, 'YYYY') - "
+            f"DATE '1970-01-04', 7) + 1) - 2) / 7) + 1)"
         ),
         "tsql": f"DATEPART(WEEK, {value})",
     }.get(dialect)
@@ -1131,8 +1132,8 @@ def _extract_isoyear(value: str, dialect: str) -> str | None:
     return {
         "postgresql": f"EXTRACT(ISOYEAR FROM {value})",
         "tsql": (
-            f"YEAR(DATEADD(DAY, 3, "
-            f"DATEADD(DAY, -(DATEDIFF(DAY, '19000101', {value}) % 7), {value})))"
+            f"YEAR(DATEADD(DAY, 3, DATEADD(DAY, -(DATEDIFF(DAY, '19000101', {value}) % "
+            f"7), {value})))"
         ),
         "oracle": f"EXTRACT(YEAR FROM (TRUNC({value}, 'IW') + 3))",
         "mysql": (
@@ -1199,13 +1200,13 @@ def _trunc_week_sunday(value: str, dialect: str) -> str | None:
     """Truncate to the start of the (Sunday-based, locale-default) week."""
     return {
         "postgresql": (
-            f"DATE_TRUNC('day', {value}) - "
-            f"CAST(EXTRACT(DOW FROM {value}) AS INT) * INTERVAL '1 day'"
+            f"DATE_TRUNC('day', {value}) - CAST(EXTRACT(DOW FROM {value}) AS INT) * "
+            f"INTERVAL '1 day'"
         ),
         "oracle": f"TRUNC({value}, 'DAY')",
         "tsql": (
-            f"DATEADD(DAY, -(DATEDIFF(DAY, '19000107', {value}) % 7), "
-            f"CAST({value} AS DATE))"
+            f"DATEADD(DAY, -(DATEDIFF(DAY, '19000107', {value}) % 7), CAST({value} AS "
+            f"DATE))"
         ),
         "mysql": (
             f"DATE_SUB(DATE({value}), INTERVAL (DAYOFWEEK(DATE({value})) - 1) DAY)"
@@ -1243,8 +1244,8 @@ def _trunc_render(trunc_part: str, value: str, dialect: str) -> str | None:
         ),
         # No native DATE_TRUNC — strip the sub-unit fields to the boundary.
         "hour": (
-            f"DATE_SUB({value}, "
-            f"INTERVAL (MINUTE({value}) * 60 + SECOND({value})) SECOND)"
+            f"DATE_SUB({value}, INTERVAL (MINUTE({value}) * 60 + SECOND({value})) "
+            f"SECOND)"
         ),
         "minute": f"DATE_SUB({value}, INTERVAL SECOND({value}) SECOND)",
     }
@@ -1308,7 +1309,7 @@ def _emit_date_round(node: FunctionCall, dialect: str) -> str | None:
         # Keep the native date ROUND (the operand stays a DATE literal/expression).
         return f"ROUND({_emit_expression(node.args[0], dialect)}, '{fmt}')"
     return (
-        f"NULL /* UNIQUE: Oracle ROUND(date, '{fmt}') (nearest {fmt} boundary) "
+        f"NULL /* UNIQUE-1084: Oracle ROUND(date, '{fmt}') (nearest {fmt} boundary) "
         f"has no faithful {dialect} equivalent — the value was not computed "
         "(docs/03-unsupported.md) */"
     )
@@ -1339,7 +1340,7 @@ def _emit_date_trunc(node: FunctionCall, dialect: str) -> str | None:
             if dialect in ("oracle",):
                 return f"TRUNC({value}, '{raw_up}')"
             return (
-                f"NULL /* UNIQUE: Oracle TRUNC(date, '{raw_up}') has no {dialect} "
+                f"NULL /* UNIQUE-1085: Oracle TRUNC(date, '{raw_up}') has no {dialect} "
                 "equivalent — the value was not computed (docs/03-unsupported.md) */"
             )
         return None
@@ -1363,7 +1364,7 @@ def _emit_week_year_field(part: str, value: str, dialect: str) -> str | None:
         return _extract_isoyear(value, dialect)
     if part in _PG_EXOTIC_EXTRACT and dialect not in ("postgresql",):
         return (
-            f"NULL /* UNIQUE: EXTRACT({part}) has no {dialect} equivalent — "
+            f"NULL /* UNIQUE-1086: EXTRACT({part}) has no {dialect} equivalent — "
             "the value was not computed (docs/03-unsupported.md) */"
         )
     return None
@@ -1419,9 +1420,9 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             _in = [_emit_expression(a, dialect) for a in node.args]
             return f"INSTR({_in[1]}, {_in[0]}, {', '.join(_in[2:])})"
         return (
-            "NULL /* UNIQUE: Oracle INSTR with an occurrence count or "
-            "backward (negative-start) search has no portable equivalent "
-            "for non-literal arguments — see docs/03-unsupported.md */"
+            "NULL /* UNIQUE-1087: Oracle INSTR with an occurrence count or backward "
+            "(negative-start) search has no portable equivalent for non-literal "
+            "arguments — see docs/03-unsupported.md */"
         )
     # A parameterless aggregate call is invalid on every engine — PG's own
     # error says "count(*) must be used"; that IS the faithful spelling.
@@ -1501,8 +1502,8 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
                 return f"(XPATH('{_xp.value}/text()', {_xml}::XML))[1]::TEXT"
             if dialect == "tsql":
                 return (
-                    f"CAST({_xml} AS XML).value("
-                    f"'({_xp.value}/text())[1]', 'NVARCHAR(MAX)')"
+                    f"CAST({_xml} AS XML).value('({_xp.value}/text())[1]', "
+                    f"'NVARCHAR(MAX)')"
                 )
 
     # MySQL UpdateXML(xml, xpath, new_fragment) replaces the matched node. PG has
@@ -1515,9 +1516,9 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         and dialect != "mysql"
     ):
         return (
-            "NULL /* UNIQUE: MySQL UpdateXML has no cross-engine equivalent "
-            "(PG lacks it; T-SQL .modify() and Oracle UPDATEXML differ) — "
-            "see docs/03-unsupported.md */"
+            "NULL /* UNIQUE-1088: MySQL UpdateXML has no cross-engine equivalent (PG "
+            "lacks it; T-SQL .modify() and Oracle UPDATEXML differ) — see "
+            "docs/03-unsupported.md */"
         )
 
     # COLLATION(x) returns the argument's collation NAME, which is engine-specific
@@ -1531,7 +1532,7 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     ):
         _c = _emit_expression(node.args[0], dialect)
         return (
-            f"COLLATION({_c}) /* UNIQUE: collation names are engine-specific and "
+            f"COLLATION({_c}) /* UNIQUE-1089: collation names are engine-specific and "
             "cannot match across engines (docs/03-unsupported.md) */"
         )
 
@@ -1543,7 +1544,8 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     if fn_name == "REGEXP_SUBSTR" and dialect == "mysql" and len(node.args) >= 6:
         _base = ", ".join(_emit_expression(a, dialect) for a in node.args[:4])
         return (
-            f"REGEXP_SUBSTR({_base}) /* UNIQUE: Oracle REGEXP_SUBSTR capture-group "
+            f"REGEXP_SUBSTR({_base}) /* UNIQUE-1090: Oracle REGEXP_SUBSTR "
+            f"capture-group "
             "extraction (6th arg) has no MySQL equivalent (docs/03-unsupported.md) */"
         )
 
@@ -1562,8 +1564,8 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         _d = _emit_expression(_unwrap_sqlglot_wrappers(node.args[0]), dialect)
         _first = f"DATE_SUB({_d}, INTERVAL DAYOFMONTH({_d}) - 1 DAY)"
         return (
-            f"CASE WHEN DAYOFMONTH({_d}) < 16 THEN {_first} "
-            f"ELSE DATE_ADD({_first}, INTERVAL 1 MONTH) END"
+            f"CASE WHEN DAYOFMONTH({_d}) < 16 THEN {_first} ELSE DATE_ADD({_first}, "
+            f"INTERVAL 1 MONTH) END"
         )
 
     # Oracle ROUND(date, fmt) rounds a date to the nearest boundary (not a
@@ -1714,9 +1716,9 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     # order-dependent (not equivalent), so degrade to a documented carrier.
     if fn_name == "TRANSLATE" and dialect == "mysql" and len(node.args) == 3:
         return (
-            "NULL /* UNIQUE: MySQL has no TRANSLATE and a nested-REPLACE "
-            "emulation is order-dependent (not equivalent) — "
-            "see docs/03-unsupported.md */"
+            "NULL /* UNIQUE-1091: MySQL has no TRANSLATE and a nested-REPLACE "
+            "emulation is order-dependent (not equivalent) — see "
+            "docs/03-unsupported.md */"
         )
 
     # MySQL REPLACE propagates NULL — REPLACE(str, NULL, x) is NULL — while
@@ -1942,7 +1944,7 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         rs_pat_node = node.args[1]
         if dialect == "tsql":
             return (
-                "NULL /* UNIQUE: SUBSTRING(x FROM POSIX pattern) has no T-SQL "
+                "NULL /* UNIQUE-1092: SUBSTRING(x FROM POSIX pattern) has no T-SQL "
                 "regex equivalent — see docs/03-unsupported.md */"
             )
         rs_pat = _emit_expression(rs_pat_node, dialect)
@@ -1966,9 +1968,9 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         and node.args[2].dtype == "string"
     ):
         return (
-            "NULL /* UNIQUE: SUBSTRING(x FROM SIMILAR-TO pattern FOR escape) has "
-            "no cross-engine equivalent (SQL-regex metachars differ from POSIX) — "
-            "see docs/03-unsupported.md */"
+            "NULL /* UNIQUE-1093: SUBSTRING(x FROM SIMILAR-TO pattern FOR escape) has "
+            "no cross-engine equivalent (SQL-regex metachars differ from POSIX) — see "
+            "docs/03-unsupported.md */"
         )
 
     # MySQL SUBSTRING rounds a fractional position/length (2.9 -> 3), but
@@ -2036,7 +2038,7 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if dialect == "oracle":
             # Oracle cannot represent '' apart from NULL — the approved limit.
             return (
-                "'' /* UNIQUE: Oracle stores an empty string as NULL "
+                "'' /* UNIQUE-1094: Oracle stores an empty string as NULL "
                 "(docs/03-unsupported.md) */"
             )
         return "''"
@@ -2139,8 +2141,8 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     # NULL — the faithful mapping (wave 223).
     if fn_name == "VALUES" and len(node.args) == 1 and dialect != "mysql":
         return (
-            "NULL /* UNIQUE: MySQL VALUES(col) outside INSERT … ON "
-            "DUPLICATE KEY UPDATE is NULL */"
+            "NULL /* UNIQUE-1095: MySQL VALUES(col) outside INSERT … ON DUPLICATE KEY "
+            "UPDATE is NULL */"
         )
 
     # MySQL's CONNECTION_ID(): every engine has a session id under a
@@ -2164,9 +2166,9 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         d1 = _emit_expression(node.args[0], dialect)
         d2 = _emit_expression(node.args[1], dialect)
         return (
-            f"CASE WHEN DAY({d1}) = DAY({d2}) OR (DAY({d1}) = DAY(EOMONTH({d1})) "
-            f"AND DAY({d2}) = DAY(EOMONTH({d2}))) THEN DATEDIFF(MONTH, {d2}, {d1}) "
-            f"ELSE DATEDIFF(MONTH, {d2}, {d1}) + (DAY({d1}) - DAY({d2})) / 31.0 END"
+            f"CASE WHEN DAY({d1}) = DAY({d2}) OR (DAY({d1}) = DAY(EOMONTH({d1})) AND "
+            f"DAY({d2}) = DAY(EOMONTH({d2}))) THEN DATEDIFF(MONTH, {d2}, {d1}) ELSE "
+            f"DATEDIFF(MONTH, {d2}, {d1}) + (DAY({d1}) - DAY({d2})) / 31.0 END"
         )
 
     # MySQL's INTERVAL(x, v1, v2, …) index function: position of the
@@ -2351,9 +2353,9 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             # to carry it — so degrade an interval argument to a carrier.
             if value.strip().upper().startswith("INTERVAL"):
                 return (
-                    "NULL /* UNIQUE: EXTRACT(EPOCH FROM interval) has no portable "
-                    "equivalent (T-SQL/MySQL have no interval value type) — "
-                    "see docs/03-unsupported.md */"
+                    "NULL /* UNIQUE-1096: EXTRACT(EPOCH FROM interval) has no portable "
+                    "equivalent (T-SQL/MySQL have no interval value type) — see "
+                    "docs/03-unsupported.md */"
                 )
             # Unix epoch seconds. PG's EPOCH for a timestamp WITHOUT time zone is
             # the literal difference from 1970-01-01 00:00:00 — no session-tz
@@ -2373,13 +2375,13 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             # (nor a MICROSECONDS extract), so it degrades to a carrier.
             if dialect == "tsql":
                 return (
-                    f"(DATEPART(SECOND, {value}) * 1000000 + "
-                    f"DATEPART(MICROSECOND, {value}))"
+                    f"(DATEPART(SECOND, {value}) * 1000000 + DATEPART(MICROSECOND, "
+                    f"{value}))"
                 )
             if dialect == "mysql":
                 return f"(SECOND({value}) * 1000000 + MICROSECOND({value}))"
             return (
-                "NULL /* UNIQUE: EXTRACT(MICROSECONDS FROM TIME) has no Oracle "
+                "NULL /* UNIQUE-1097: EXTRACT(MICROSECONDS FROM TIME) has no Oracle "
                 "equivalent (no TIME type) — see docs/03-unsupported.md */"
             )
         if dialect == "tsql":
@@ -2408,8 +2410,8 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             _l = ov_len or f"CHAR_LENGTH({ov_r})"
             return f"INSERT({ov_s}, {ov_pos}, {_l}, {ov_r})"
         return (
-            f"SUBSTR({ov_s}, 1, ({ov_pos}) - 1) || {ov_r} || "
-            f"SUBSTR({ov_s}, ({ov_pos}) + ({ov_len or f'LENGTH({ov_r})'}))"
+            f"SUBSTR({ov_s}, 1, ({ov_pos}) - 1) || {ov_r} || SUBSTR({ov_s}, ({ov_pos}) "
+            f"+ ({ov_len or f'LENGTH({ov_r})'}))"
         )
 
     # PG regexp_replace(src, pat, repl [, flags]): the 4th arg is a FLAGS string
@@ -2480,9 +2482,8 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             or sum(1 for c in specs if c in ("s", "I")) != len(node.args) - 1
         ):
             return (
-                "NULL /* UNIQUE: PG format() with %L/width/positional "
-                "specifiers has no cross-engine equivalent — "
-                "see docs/03-unsupported.md */"
+                "NULL /* UNIQUE-1098: PG format() with %L/width/positional specifiers "
+                "has no cross-engine equivalent — see docs/03-unsupported.md */"
             )
 
         def _quoted_ident(arg_sql: str) -> str:
@@ -2533,9 +2534,9 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         and dialect != "postgresql"
     ):
         return (
-            "NULL /* UNIQUE: PG sha256/sha512 returns a bytea digest; other engines "
-            "return a hex string (same digest, different representation) — "
-            "see docs/03-unsupported.md */"
+            "NULL /* UNIQUE-1099: PG sha256/sha512 returns a bytea digest; other "
+            "engines return a hex string (same digest, different representation) — see "
+            "docs/03-unsupported.md */"
         )
 
     # GROUPING(x) under a degraded MySQL CUBE/GROUPING SETS folds to 0 at the
@@ -2725,9 +2726,8 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             # pad misaligns a multi-char pad, e.g. LPAD('ab',5,'xy')='xyxab' not
             # 'yxyab'); guard the truncation case (input longer than length).
             return (
-                f"LEFT(REPLICATE({pad}, {length}), "
-                f"CASE WHEN {length} > LEN({s}) THEN {length} - LEN({s}) "
-                f"ELSE 0 END) + LEFT({s}, {length})"
+                f"LEFT(REPLICATE({pad}, {length}), CASE WHEN {length} > LEN({s}) THEN "
+                f"{length} - LEN({s}) ELSE 0 END) + LEFT({s}, {length})"
             )
         return f"{fn_name}({s}, {length}, {pad})"
 
@@ -3191,21 +3191,21 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         p = [_emit_expression(x, dialect) for x in node.args]
         if dialect == "postgresql":
             return (
-                f"make_timestamp({p[0]}, {p[1]}, {p[2]}, {p[3]}, {p[4]}, "
-                f"{p[5]} + {p[6]} / 1000.0)"
+                f"make_timestamp({p[0]}, {p[1]}, {p[2]}, {p[3]}, {p[4]}, {p[5]} + "
+                f"{p[6]} / 1000.0)"
             )
         if dialect == "oracle":
             base = (
-                f"{p[0]} || '-' || {p[1]} || '-' || {p[2]} || ' ' || "
-                f"{p[3]} || ':' || {p[4]} || ':' || {p[5]}"
+                f"{p[0]} || '-' || {p[1]} || '-' || {p[2]} || ' ' || {p[3]} || ':' || "
+                f"{p[4]} || ':' || {p[5]}"
             )
             return (
-                f"(TO_TIMESTAMP({base}, 'YYYY-MM-DD HH24:MI:SS') "
-                f"+ NUMTODSINTERVAL({p[6]} / 1000, 'SECOND'))"
+                f"(TO_TIMESTAMP({base}, 'YYYY-MM-DD HH24:MI:SS') + "
+                f"NUMTODSINTERVAL({p[6]} / 1000, 'SECOND'))"
             )
         base = (
-            f"CONCAT({p[0]}, '-', {p[1]}, '-', {p[2]}, ' ', "
-            f"{p[3]}, ':', {p[4]}, ':', {p[5]})"
+            f"CONCAT({p[0]}, '-', {p[1]}, '-', {p[2]}, ' ', {p[3]}, ':', {p[4]}, ':', "
+            f"{p[5]})"
         )  # mysql
         return f"(TIMESTAMP({base}) + INTERVAL ({p[6]}) * 1000 MICROSECOND)"
     seq_call = _emit_sequence_call(node, dialect)
@@ -3237,7 +3237,7 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         # Control/NUL bytes (CHAR(256) = 0x01 0x00) cannot live in a string
         # literal on PG/Oracle — keep the documented carrier.
         return (
-            f"CHR({_n}) /* UNIQUE: MySQL CHAR({_n}) is a multi-byte byte string, "
+            f"CHR({_n}) /* UNIQUE-1100: MySQL CHAR({_n}) is a multi-byte byte string, "
             "not a single code point (docs/03-unsupported.md) */"
         )
     if (
@@ -3352,8 +3352,8 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if dialect == "oracle":
             return f"LAST_DAY({d})"
         return (
-            f"CAST(DATE_TRUNC('month', {d}) + INTERVAL '1 month' "
-            f"- INTERVAL '1 day' AS DATE)"
+            f"CAST(DATE_TRUNC('month', {d}) + INTERVAL '1 month' - INTERVAL '1 day' AS "
+            f"DATE)"
         )
     if up == "QUARTER" and len(node.args) == 1 and dialect != "mysql":
         d = _emit_expression(node.args[0], dialect)
@@ -3426,8 +3426,8 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         )
         _stuff = f"STUFF({_st_s}, {_st_pos}, {_st_len}, {_st_new})"
         return (
-            f"CASE WHEN {_st_pos} < 1 OR {_st_pos} > LEN({_st_s}) "
-            f"THEN {_st_s} ELSE {_stuff} END"
+            f"CASE WHEN {_st_pos} < 1 OR {_st_pos} > LEN({_st_s}) THEN {_st_s} ELSE "
+            f"{_stuff} END"
         )
     # STUFF(s, start, len, new): delete `len` chars at `start`, insert `new`.
     # PG has OVERLAY, MySQL has INSERT(); Oracle has neither, so SUBSTR-concat.

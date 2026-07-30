@@ -41,7 +41,9 @@ _STRUCTURAL_KEYWORDS = (
     "JOIN",
 )
 
-_UNIQUE_COMMENT = re.compile(r"(?im)^\s*--\s*UNIQUE:")
+# Recognizes both the legacy uncoded ``UNIQUE:`` and the coded ``UNIQUE-1234:``
+# carrier form (B32) so pre-code and post-code outputs both match.
+_UNIQUE_COMMENT = re.compile(r"(?im)^\s*--\s*UNIQUE(?:-\d{4})?:")
 _LINE_COMMENT = re.compile(r"--[^\n]*")
 _BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
 _WHITESPACE = re.compile(r"\s+")
@@ -61,12 +63,12 @@ def carrier_bodies(sql: str) -> list[str]:
     bodies: list[str] = []
     i = 0
     while i < len(lines):
-        m = re.match(r"\s*-- UNIQUE:\s*(.*)", lines[i])
+        m = re.match(r"\s*-- UNIQUE(?:-\d{4})?:\s*(.*)", lines[i])
         if m and "preserved as a comment" in m.group(1).lower():
             body_lines: list[str] = []
             i += 1
             while i < len(lines) and lines[i].lstrip().startswith("--"):
-                if re.match(r"\s*-- UNIQUE:", lines[i]):
+                if re.match(r"\s*-- UNIQUE(?:-\d{4})?:", lines[i]):
                     break
                 body_lines.append(re.sub(r"^\s*--\s?", "", lines[i]))
                 i += 1
