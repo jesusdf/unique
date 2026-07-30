@@ -44,17 +44,6 @@ routines-unblocked and severity:*
 
 ---
 
-### F3 — web UI: link each emitted UNIQUE-NNNN to its docs anchor (P3; approved 2026-07-31)
-
-*Maintainer-specified: when the web UI shows a warning/error carrying one of
-our diagnostic codes, the code itself becomes a link to that code's entry in
-the repository documentation —
-`https://github.com/jesusdf/unique/blob/main/docs/reference/warnings.md#unique-NNNN`
-(the page's per-code anchors exist for exactly this). Applies wherever codes
-surface in the UI (transpile warnings list, compare warnings). Verify the
-anchor form GitHub actually honors on rendered markdown (`user-content-`
-prefix handling) and use the stable working form; open in a new tab.*
-
 ## Continuously tracked (not a discrete backlog)
 
 - Challenge corpus (`tests/fixtures/challenge/`) remains the live intake for
