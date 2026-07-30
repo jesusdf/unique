@@ -88,6 +88,7 @@ _CURATED_STOPWORDS: tuple[str, ...] = (
     "params",
     "data_type",
     "datatype",
+    "dataset",
     "sqlerrm",
     "sqlcode",
     "deallocate",
