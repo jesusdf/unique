@@ -28,8 +28,9 @@ def test_integer_division_literals_preserved() -> None:
     # PG 5/2 = 2 must stay 2 on the decimal-division engines.
     assert "5 DIV 2" in _t("SELECT 5 / 2 AS r", "postgresql", "mysql")
     assert "TRUNC(5 / 2)" in _t("SELECT 5 / 2 AS r", "postgresql", "oracle")
-    # MySQL 5/2 = 2.5 must stay decimal on the integer-division engines.
-    assert "5 * 1.0 / 2" in _t("SELECT 5 / 2 AS r", "mysql", "postgresql")
+    # MySQL 5/2 = 2.5 must stay decimal on the integer-division engines. MySQL's
+    # NULL-safe division also wraps the divisor in NULLIF (see TestMysqlSafeDivision).
+    assert "5 * 1.0 / NULLIF(2, 0)" in _t("SELECT 5 / 2 AS r", "mysql", "postgresql")
     assert "5 * 1.0 / 2" in _t("SELECT 5 / 2 AS r", "oracle", "tsql")
 
 

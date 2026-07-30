@@ -1053,6 +1053,20 @@ def _is_datetime_cast(node: ASTNode) -> bool:
     )
 
 
+def _emit_day_arith(operand: str, n: str, sub: bool, dialect: str) -> str:
+    """``operand ± n days`` spelled per target (shared by the temporal ± branches).
+
+    T-SQL/Oracle/PG treat ``date ± int`` as day arithmetic, but MySQL numerically
+    coerces the date and PG rejects ``timestamp + int`` — so emit DATE_ADD/DATE_SUB
+    (MySQL), DATEADD (T-SQL), or ``± INTERVAL 'n day'`` (PG/Oracle).
+    """
+    if dialect == "mysql":
+        return f"{'DATE_SUB' if sub else 'DATE_ADD'}({operand}, INTERVAL {n} DAY)"
+    if dialect == "tsql":
+        return f"DATEADD(DAY, {'-' if sub else ''}{n}, {operand})"
+    return f"{operand} {'-' if sub else '+'} INTERVAL '{n} day'"
+
+
 def _date_literal_sql(node: ASTNode, dialect: str) -> str | None:
     """Emit a sqlglot ``DATE '…'`` literal (a DATE_STR_TO_DATE wrapper around a
     string) as the target's date literal, or None if node is not one."""
@@ -1239,9 +1253,8 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             f"{dialect} equivalent; emitted as a SECOND count "
             "(docs/03-unsupported.md) */"
         )
-        if dialect == "tsql":
-            return f"DATEDIFF(SECOND, {_tr}, {_tl}){_ts_carrier}"
-        return f"TIMESTAMPDIFF(SECOND, {_tr}, {_tl}){_ts_carrier}"
+        diff_fn = {"tsql": "DATEDIFF", "mysql": "TIMESTAMPDIFF"}[dialect]
+        return f"{diff_fn}(SECOND, {_tr}, {_tl}){_ts_carrier}"
 
     # ``date ± n`` is day arithmetic on PostgreSQL/Oracle/T-SQL (yielding a date),
     # but MySQL reads it as a NUMERIC operation (2020-01-01 + 30 = 20200131;
@@ -1265,13 +1278,8 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             dlit = _date_literal_sql(dside, dialect)
             if dlit is not None and _is_nonneg_int_literal(nside):
                 n = _emit_expression(nside, dialect)
-                if node.operator == BinaryOperator.SUB:
-                    if dialect == "mysql":
-                        return f"DATE_SUB({dlit}, INTERVAL {n} DAY)"
-                    return f"DATEADD(DAY, -{n}, {dlit})"
-                if dialect == "mysql":
-                    return f"DATE_ADD({dlit}, INTERVAL {n} DAY)"
-                return f"DATEADD(DAY, {n}, {dlit})"
+                sub = node.operator == BinaryOperator.SUB
+                return _emit_day_arith(dlit, n, sub, dialect)
 
     # A datetime/timestamp expression ± an integer is day arithmetic on
     # T-SQL/Oracle sources, but MySQL numerically coerces the datetime
@@ -1293,15 +1301,8 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             if _is_datetime_cast(dside) and _is_nonneg_int_literal(nside):
                 dt = _emit_expression(dside, dialect)
                 n = _emit_expression(nside, dialect)
-                if dialect == "mysql":
-                    fn = (
-                        "DATE_SUB"
-                        if node.operator == BinaryOperator.SUB
-                        else "DATE_ADD"
-                    )
-                    return f"{fn}({dt}, INTERVAL {n} DAY)"
-                op = "-" if node.operator == BinaryOperator.SUB else "+"
-                return f"{dt} {op} INTERVAL '{n} day'"
+                sub = node.operator == BinaryOperator.SUB
+                return _emit_day_arith(dt, n, sub, dialect)
 
     # MySQL '+' is always arithmetic; T-SQL '+' on strings concatenates
     # ('5' + '5' = '55', not 10). When a MySQL source adds numeric string

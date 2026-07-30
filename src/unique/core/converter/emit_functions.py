@@ -739,6 +739,19 @@ def _emit_bool_agg(node: FunctionCall, fn_name: str, dialect: str) -> str | None
     return f"{'BOOL_OR' if agg == 'MAX' else 'BOOL_AND'}({arg})"
 
 
+#: Oracle cannot store an empty string apart from NULL — the documented
+#: empty-string limit (docs/03-unsupported.md).
+_ORACLE_EMPTY = (
+    "'' /* UNIQUE: Oracle stores an empty string as NULL (docs/03-unsupported.md) */"
+)
+
+
+def _empty_string_result(dialect: str) -> str:
+    """The empty-string value per target: '' everywhere, a warned carrier on
+    Oracle (which folds '' to NULL)."""
+    return {"oracle": _ORACLE_EMPTY}.get(dialect, "''")
+
+
 def _bool_agg_filter_arg(arg_node: ASTNode, agg: str, dialect: str) -> str | None:
     """Boolean aggregate over a FILTER-lowered CASE, for T-SQL/Oracle.
 
@@ -829,13 +842,9 @@ def _emit_substr_neg_start(
         adj_val = node.args[2].value + neg_start - 1  # fold to a constant
         if adj_val > 0:
             return f"SUBSTR({s}, 1, {adj_val})"
-        # The run lies entirely before position 1 -> empty result.
-        if dialect == "oracle":
-            return (
-                "'' /* UNIQUE: Oracle stores an empty string as NULL "
-                "(docs/03-unsupported.md) */"
-            )
-        return "''"
+        # The run lies entirely before position 1 -> empty result (Oracle
+        # cannot store '' apart from NULL -> documented empty-string limit).
+        return _empty_string_result(dialect)
     length = _emit_expression(node.args[2], dialect)
     return f"SUBSTR({s}, 1, GREATEST({length} + ({neg_start - 1}), 0))"
 
@@ -2903,10 +2912,7 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             and _n_arg.operator == UnaryOperator.NEGATIVE
             and isinstance(_n_arg.operand, Literal)
         ):
-            return (
-                "'' /* UNIQUE: Oracle stores an empty string as NULL "
-                "(docs/03-unsupported.md) */"
-            )
+            return _ORACLE_EMPTY
         n = _emit_expression(_n_arg, dialect)
         if _is_nonneg_int_literal(_n_arg):
             return (
