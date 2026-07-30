@@ -41,6 +41,44 @@ __all__ = [
 ]
 
 
+def _rewrite_select_into_identity(sql: str, read: str) -> str | None:
+    """Rewrite a T-SQL ``IDENTITY(type, seed, incr)`` in a SELECT-INTO list to a
+    ``ROW_NUMBER()`` expression reproducing the same id values, returning the
+    re-serialized source SQL (or None when there is no such call).
+
+    ``IDENTITY(_, seed, incr)`` -> ``((ROW_NUMBER() OVER (ORDER BY (SELECT NULL))
+    - 1) * incr + seed)`` (simplified to bare ROW_NUMBER for seed=incr=1). The
+    transform is on the AST, not the text (guardrail 2)."""
+    try:
+        parsed = sqlglot.parse_one(sql, read=read)
+    except Exception:  # noqa: BLE001
+        return None
+    if parsed is None:
+        return None
+    found = False
+    for anon in list(parsed.find_all(exp.Anonymous)):
+        if anon.name.upper() != "IDENTITY":
+            continue
+        args = anon.expressions
+
+        def _lit(idx: int, default: int) -> int:
+            if idx < len(args) and isinstance(args[idx], exp.Literal):
+                try:
+                    return int(args[idx].name)
+                except ValueError:  # pragma: no cover - non-numeric seed/incr
+                    return default
+            return default
+
+        seed, incr = _lit(1, 1), _lit(2, 1)
+        base = "ROW_NUMBER() OVER (ORDER BY (SELECT NULL))"
+        expr_str = (
+            base if (seed, incr) == (1, 1) else f"((({base}) - 1) * {incr} + {seed})"
+        )
+        anon.replace(sqlglot.parse_one(expr_str, read="tsql"))
+        found = True
+    return parsed.sql(dialect=read) if found else None
+
+
 def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     """Re-transpile a passthrough statement to the target dialect.
 
@@ -489,6 +527,50 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         base = re.sub(r"(?i)\bNO(CYCLE|CACHE|MAXVALUE|MINVALUE)\b", r"NO \1", base)
         base = re.sub(r"(?i)\s*\b(?:NOORDER|ORDER)\b", "", base)
         return base.rstrip().rstrip(";") if dialect == "tsql" else base
+
+    # T-SQL ``SELECT IDENTITY(type, seed, incr) … INTO t2`` adds a numbered
+    # identity column to the new table. No engine has an IDENTITY() scalar
+    # function, so it leaked as an invalid call. Reproduce the id VALUES with
+    # ROW_NUMBER() on the AST (guardrail 2: not a text rewrite); the
+    # identity/auto-increment PROPERTY is not portable in a CREATE-TABLE-AS-SELECT,
+    # so warn. Self-contained: emits the CTAS (Oracle/MySQL) or SELECT INTO
+    # (PG) for the rewritten statement.
+    if (
+        node.kind == "SELECT INTO"
+        and dialect != "tsql"
+        and re.search(r"(?i)\bIDENTITY\s*\(", node.sql)
+    ):
+        rewritten = _rewrite_select_into_identity(node.sql, read)
+        if rewritten is not None:
+            node = dataclasses.replace(node, sql=rewritten)
+            _identity_note = (
+                "\n-- UNIQUE: T-SQL IDENTITY() in SELECT INTO reproduced as "
+                "ROW_NUMBER (id values match); the identity/auto-increment column "
+                "property is not portable in a CREATE TABLE AS SELECT "
+                "(docs/03-unsupported.md)"
+            )
+            if dialect in ("oracle", "mysql"):
+                _ident_ctas = re.sub(
+                    r"(?is)^\s*SELECT\s+(.*?)\s+INTO\s+(?:TEMP(?:ORARY)?\s+)?"
+                    r"([\w.\"\[\]#]+)\s+FROM\s+(.*?)\s*;?\s*$",
+                    lambda mo: (
+                        f"CREATE TABLE {mo.group(2).strip('#[]\"')} AS SELECT "
+                        f"{mo.group(1)} FROM {mo.group(3)}"
+                    ),
+                    node.sql,
+                )
+                try:
+                    _r = sqlglot.transpile(_ident_ctas, read=read, write=write)
+                    _out = _r[0] if _r and _r[0].strip() else _ident_ctas
+                except Exception:  # noqa: BLE001
+                    _out = _ident_ctas
+                return _out + _identity_note
+            try:
+                _r = sqlglot.transpile(node.sql, read=read, write=write)
+                _out = _r[0] if _r and _r[0].strip() else node.sql
+            except Exception:  # noqa: BLE001
+                _out = node.sql
+            return _out + _identity_note
 
     # T-SQL / PostgreSQL ``SELECT … INTO [TEMP] newtable FROM …`` CREATES a table;
     # Oracle and MySQL have no SELECT-INTO-table form (INTO there targets

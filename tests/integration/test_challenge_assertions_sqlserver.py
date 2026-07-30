@@ -509,6 +509,25 @@ CASES.update(
                 "absent": ["WITH src"],
             },
         },
+        # invalid: IDENTITY() in SELECT INTO leaked as an invalid function; the
+        # id VALUES are reproduced with ROW_NUMBER (identity property warned).
+        "reda-ts-select-into-identity": {
+            "postgresql": {
+                "present": ["ROW_NUMBER() OVER (", "AS id"],
+                "absent": ["IDENTITY("],
+                "degrade": True,
+            },
+            "mysql": {
+                "present": ["CREATE TABLE t2 AS SELECT ROW_NUMBER() OVER ("],
+                "absent": ["IDENTITY("],
+                "degrade": True,
+            },
+            "oracle": {
+                "present": ["CREATE TABLE t2 AS SELECT ROW_NUMBER() OVER ("],
+                "absent": ["IDENTITY("],
+                "degrade": True,
+            },
+        },
         "reda-ts-pivot": {
             "oracle": {
                 "present": ["PIVOT (SUM(v) FOR dept IN ('A' AS A, 'B' AS B))"],
