@@ -85,21 +85,14 @@ target — MySQL functions can return values, so it is kept as a plain
 `RETURN <value>;`, with no label needed at all
 (`test_return_value_in_function_kept`).
 
-The example above adds an explicit `;` between `RETURN NULL` and the
-following `SELECT @x` — a deliberate deviation from
-`TestReturnValueInProcedure`'s own literal source string, which omits it
-(`"IF @x IS NULL RETURN NULL " "SELECT @x " "END"`, relying on T-SQL's
-optional-semicolon, keyword-boundary statement splitting). Probing that
-exact string surfaced a real gap: without the `;`, the expression capture
-for a value-bearing `RETURN` does not stop at the next statement-starting
-keyword the way the bare (no-value) `RETURN` case does — the following
-`SELECT @x` is swallowed whole into the discarded-value comment
+The example above separates `RETURN NULL` from the following `SELECT @x`
+with an explicit `;`. T-SQL also permits omitting that semicolon there,
+relying on keyword-boundary statement splitting — but for a value-bearing
+`RETURN` (unlike the bare, no-value case above), omitting it means the
+expression capture does not stop at the next statement-starting keyword:
+the following statement is swallowed whole into the discarded-value comment
 (`-- UNIQUE-1177: discarded procedure RETURN value (NULL SELECT v_x)`) and
-never appears as its own statement, a silent loss the pinning test does not
-assert against (unlike the bare-`RETURN` case's
-`test_following_statement_not_absorbed`). This is flagged here rather than
-documented as faithful; see the handoff report for the corpus/test
-reference to hand to a future BLUE pass.
+never appears as its own statement in the output (see Warning).
 
 **Discussion.** MySQL's restriction is structural, not just stylistic — a
 bare `RETURN` inside a `PROCEDURE` body is a parse error, so there is no
@@ -114,7 +107,11 @@ handlers, target the same exit point.
 > **Warning** `[limit]` for `RETURN <value>` inside a procedure — MySQL has
 > no slot to put a procedure's returned status code in, so the value is
 > documented in a comment rather than returned; a caller relying on that
-> status code must be rewritten to use an `OUT` parameter instead.
+> status code must be rewritten to use an `OUT` parameter instead. If the
+> source omits the semicolon after a value-bearing `RETURN`, the statement
+> that follows it on the same line is swallowed into that same discarded-
+> value comment instead of surviving as its own statement — add an explicit
+> `;` after `RETURN <value>` to keep the following statement intact.
 
 **See Also.** [`TestBareReturnInProcedure`, `TestReturnValueInProcedure`](../../../tests/integration/test_procedural.py), [`TestMySqlReturnBecomesLeave`](../../../tests/integration/test_oracle_mysql_tail.py) ·
 [`UNIQUE-1177`](../../reference/warnings.md#unique-1177) — no dedicated

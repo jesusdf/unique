@@ -5,9 +5,8 @@
 # Numeric range `FOR i IN a..b LOOP` (Oracle) → MySQL / T-SQL explicit `WHILE` + counter
 
 **Problem.** `FOR i IN 1..13 LOOP` (optionally `REVERSE`) is Oracle's
-counting loop — no cursor at all, just an integer range. Read at the
-`DECLARE ... CURSOR FOR 1..13`-shaped patch this used to fall through to,
-`1..13` is not a query, so it produced invalid SQL (MySQL error 1064).
+counting loop — no cursor at all, just an integer range. `1..13` is not a
+query, so it cannot be spelled as a cursor declaration on any target.
 MySQL/T-SQL have no native counting-`FOR` construct, so it has to become an
 explicit `WHILE` loop with its own counter.
 

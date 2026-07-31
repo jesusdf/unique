@@ -41,10 +41,8 @@ per-cursor state because T-SQL/MySQL only expose one shared mechanism — the
 implicit flag is already routine-global on every engine: PostgreSQL's
 `FOUND`, Oracle's `SQL%FOUND`, T-SQL's `@@ROWCOUNT`, and MySQL's
 `ROW_COUNT()` all describe "the last statement," so the mapping is a direct
-rename with no per-target state to synthesize. This is why the entry sits
-here, next to the named-cursor-attribute mapping, rather than under "Loop
-and cursor desugaring" below — it is a value-position attribute rename, not
-a control-flow expansion.
+rename with no per-target state to synthesize — a value-position attribute
+rename, not a control-flow expansion.
 
 > **Note** faithful — same "did the last statement touch a row" question,
 > restated in each target's own implicit-state syntax.

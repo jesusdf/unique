@@ -23,15 +23,14 @@ CREATE OR REPLACE PROCEDURE get_totals (...) IS
 BEGIN ...
 ```
 
-**Discussion.** Comments are trivia to the transpiler's semantics, but they
-are the *author's* content — dropping them silently would violate the
-no-silent-loss rule for the one artifact a human reads. Placing them at the
-top of the declaration section is the only position that is safe on every
-target's execution model (Oracle unit splitting, PostgreSQL `$$` bodies,
-MySQL `DELIMITER` blocks).
+**Discussion.** Comments carry no SQL meaning, but they are the *author's*
+content — dropping them silently would lose the one piece of documentation
+a human reads after the migration. Placing them at the top of the
+declaration section is the only position that is safe on every target's
+execution model (Oracle unit splitting, PostgreSQL `$$` bodies, MySQL
+`DELIMITER` blocks).
 
 > **Note** faithful — content preserved verbatim; only the position moves
 > (from before the header to the top of the declaration section).
 
-**See Also.** [`TestLeadingCommentRelocation`](../../../tests/integration/test_procedural.py) ·
-[05-procedural-engine.md](../../05-procedural-engine.md) (lexer: comments as tokens).
+**See Also.** [`TestLeadingCommentRelocation`](../../../tests/integration/test_procedural.py).

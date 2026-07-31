@@ -31,11 +31,8 @@ explicit value in the `INSERT` column list (PostgreSQL 15+ additionally has
 `OVERRIDING SYSTEM VALUE`, unused here).
 
 > **Note** faithful for the `INSERT`'s data. `[limit]`
-> (carrier) for the `ON`/`OFF` bracket itself. The earlier defect handled the
-> two `SET` statements **incoherently**: `ON` degraded correctly, but `OFF`
-> was mangled into `SET IDENTITY_INSERT = t AS OFF` and shipped as **live,
-> invalid** SQL with no warning (PostgreSQL: `syntax error at or near "AS"`)
-> — a real defect this fix closes.
+> (carrier) for the `ON`/`OFF` bracket itself — both statements degrade the
+> same way, so neither ships as live SQL on any target.
 
 **See Also.** [`reda-ts-identity-insert`](../../../tests/fixtures/challenge/challenge_sqlserver.sql) ·
 [`UNIQUE-1002`](../../reference/warnings.md#unique-1002).

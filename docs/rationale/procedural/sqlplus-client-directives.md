@@ -24,18 +24,16 @@ warning, never as executable SQL — and the block that follows it still
 transpiles normally.
 
 **Discussion.** No target engine has a SQL*Plus client
-to configure; the directive has no server-side counterpart at all. Before
-the fix, the lack of a statement terminator made the directive **glue onto
-the following block** during batch splitting and ship as invalid SQL,
-corrupting ~940 statements per direction on a real-world Oracle dump.
+to configure; the directive has no server-side counterpart at all. Because
+the directive carries no statement terminator, it has to be recognized and
+peeled off explicitly during batch splitting — otherwise it would glue onto
+the following block and ship as part of it instead of as its own comment.
 
 > **Warning** `[limit]` for the directive itself (no server-side
 > equivalent exists to warn toward). Faithful for the surrounding SQL, which
-> now survives instead of being corrupted.
+> transpiles normally around the removed directive.
 
-**See Also.** `src/unique/core/procedural/parser/_plsql.py` (SQL*Plus
-directive parsing) · `docs/DONE.md` (M4 bring-up, 2026-07-09) ·
-`tests/integration/test_sqlplus_directives.py` — no dedicated
+**See Also.** [`tests/integration/test_sqlplus_directives.py`](../../../tests/integration/test_sqlplus_directives.py) — no dedicated
 challenge-corpus case exercises this construct directly, so the example
 above is drawn from that dedicated, passing integration test rather than
 from `tests/fixtures/challenge/`.

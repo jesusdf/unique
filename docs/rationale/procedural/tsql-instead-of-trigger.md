@@ -75,8 +75,8 @@ becomes N recursive single-row inserts on PostgreSQL, one per row in the
 batch.
 
 > **Note** faithful in final result — live-verified exactly-once insertion
-> per row and exact `id > 0` filtering on delete (2026-07-24) — but not
-> execution-count faithful for a multi-row batch, per above.
+> per row and exact `id > 0` filtering on delete — but not execution-count
+> faithful for a multi-row batch, per above.
 
 **See Also.** [`ts-trigger-on-view`](../../../tests/fixtures/challenge/challenge_sqlserver.sql), [`ts-instead-of-insert`](../../../tests/fixtures/challenge/challenge_sqlserver.sql), [`ts-trg-instead-delete`](../../../tests/fixtures/challenge/challenge_sqlserver.sql) ·
 [`TestInsteadOfTriggers`](../../../tests/integration/test_challenge.py) ·

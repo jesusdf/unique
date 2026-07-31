@@ -73,22 +73,19 @@ it is the source being read into a more permissive target. The printf splice
 runs the other way for the same structural reason: PostgreSQL's `RAISE`
 already has its own `%`-placeholder substitution mechanism (`RAISE
 EXCEPTION 'value is % today', 42`), and Oracle has none, so Oracle gets the
-substitution folded into an explicit `||` concatenation instead — before
-this was handled, the substitution argument (`42`) was silently **dropped**
-on PostgreSQL/Oracle, with the literal `%d` shipped unexpanded and no
-warning at all (`red2-ts-raiserror-format-arg-drop`, `class=silent-drop`);
-the MySQL leg already warned when the args were dropped, so PG/Oracle were
-the inconsistent legs.
+substitution folded into an explicit `||` concatenation instead. MySQL's
+`SIGNAL` statement has neither a severity/state argument slot nor a printf
+substitution mechanism — only the message text transfers, so the severity,
+state, and substitution arguments are all dropped and named in the carrier
+warning instead (see `UNIQUE-1163`).
 
 > **Note** faithful — the hoisted variable carries the same value the inline
 > expression would have produced; the format splice reproduces the same
-> substituted text (`"value is 42 today"`) on every target. No warning for
-> either direction.
+> substituted text (`"value is 42 today"`) on PostgreSQL and Oracle, with no
+> warning for either. MySQL instead drops the severity/state/substitution
+> arguments with a warning (`UNIQUE-1163`).
 
 **See Also.** [`TestOracleBuiltinsOnTsql`](../../../tests/integration/test_oracle_source_m4_wave.py), [`TestTsqlRaiserrorExpressionHoist`](../../../tests/integration/test_pg_source_wave1.py), [`TestRaiserrorFormatArgs`](../../../tests/integration/test_challenge.py) ·
 Corpus [`red2-ts-raiserror-format-arg-drop`](../../../tests/fixtures/challenge/challenge_sqlserver.sql) ·
-`src/unique/core/procedural/emitter/tsql.py` (the `_emit_raise_error` message-hoist
-branch, docstring) · `src/unique/core/procedural/emitter/postgresql.py`,
-`src/unique/core/procedural/emitter/oracle.py` (`_emit_raise_error`, the
-printf-substitution comment) · [`UNIQUE-1163`](../../reference/warnings.md#unique-1163)
+[`UNIQUE-1163`](../../reference/warnings.md#unique-1163)
 (the MySQL leg's own substitution-args-dropped warning, for contrast).

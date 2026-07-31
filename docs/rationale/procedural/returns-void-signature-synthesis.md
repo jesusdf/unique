@@ -71,16 +71,11 @@ a function whose body is just `return;` transpiles to exactly one `RETURN
 both need *some* scalar type and neither has an obvious sentinel for "no
 value"; Oracle instead picks `NUMBER`/`NULL`, since `NULL` is PL/SQL's own
 honest "no value" answer and, unlike MySQL/T-SQL, it can actually be
-returned from any scalar-typed function
-(`src/unique/core/procedural/transformer/oracle.py:52-58`, `_void_return_type`/
-`_void_return_value`). Detection and the guaranteed trailing `RETURN` live in
-`src/unique/core/procedural/transformer/base.py:1995-2023` (the `is_void`
-check and the "not already ending in a `RETURN`" guard); a bare `RETURN;`
-already present in the body — PG's own idiom for a void function that wants
-to exit without a value — is folded to the same neutral value in
-`_transform_return` (`base.py:3695-3699`: *"A bare `RETURN;` is invalid in a
-MySQL/T-SQL/Oracle function; the void mapping gives it the neutral
-value"*), which is what keeps the count at one `RETURN` instead of two.
+returned from any scalar-typed function. A bare `RETURN;` already present
+in the body — PG's own idiom for a void function that wants to exit without
+a value — is folded to the same neutral value rather than followed by a
+second, synthesized `RETURN`, which is what keeps the count at one `RETURN`
+instead of two.
 
 > **Note** faithful — nothing about the void function's real behavior (it
 > returns nothing meaningful) is lost: callers of a PG void function never
