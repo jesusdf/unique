@@ -2437,6 +2437,16 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         if limit_sql:
             parts.append(limit_sql)
 
+    # T-SQL OPTION (...) query hints (B51) — native only on a T-SQL target;
+    # a cross-dialect target already had them dropped-with-warning by the
+    # transform layer (Transformer._gate_query_hints), so this only ever
+    # fires on the tsql->tsql identity path, where transform() does not run.
+    if dialect in ("tsql",) and node.query_hints:
+        hints_sql = ", ".join(
+            f"{name} {value}" if value else name for name, value in node.query_hints
+        )
+        parts.append(f"OPTION ({hints_sql})")
+
     result = "\n".join(parts)
 
     # MySQL has neither GROUP BY CUBE nor GROUPING SETS; the base grouping above

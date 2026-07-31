@@ -1163,4 +1163,17 @@ DIAGNOSTICS: dict[str, Diagnostic] = {
         "DISTINCT / GROUP BY (ORA-02014); the rows are not lockable, so the row "
         "lock is dropped (docs/03-unsupported.md",
     ),
+    "UNIQUE-1238": _D(
+        "statement",
+        "T-SQL OPTION (MAXRECURSION n) has no portable equivalent — T-SQL raises "
+        "an error once a recursive CTE exceeds n recursions (default 100), while "
+        "PostgreSQL/MySQL/Oracle recursion has no such limit; the hint is dropped "
+        "(see docs/03-unsupported.md)",
+    ),
+    "UNIQUE-1239": _D(
+        "statement",
+        "T-SQL OPTION (...) query hint (e.g. MAXDOP, RECOMPILE, FORCE ORDER) has "
+        "no portable equivalent — a pure optimizer directive with no effect on "
+        "the result set; the hint is dropped (see docs/03-unsupported.md)",
+    ),
 }

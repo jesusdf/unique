@@ -1702,6 +1702,18 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
         rec = bool(with_clause.args.get("recursive"))
         ctes = tuple(_convert_cte(c, recursive=rec) for c in with_clause.expressions)
 
+    # T-SQL ``OPTION (...)`` query hints (B51) — a list of QueryOption nodes,
+    # each ``this`` a Var naming the hint (e.g. "MAXRECURSION", "FORCE ORDER")
+    # and an optional ``expression`` value (a literal/var). No other engine has
+    # the construct; the transform layer decides how to drop each one.
+    query_hints: tuple[tuple[str, str | None], ...] = ()
+    options = expr.args.get("options")
+    if options:
+        query_hints = tuple(
+            (opt.this.name, opt.expression.name if opt.expression else None)
+            for opt in options
+        )
+
     # A set-returning function in the SELECT list with no FROM — PG's
     # ``SELECT generate_series(1, 5)`` returns one row per element. Move the SRF
     # into the FROM clause (a function relation) and project its value column, so
@@ -1759,6 +1771,7 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
             # T-SQL FOR XML/FOR JSON (sqlglot only partially models the clause,
             # so capture its presence — the emitter degrades on non-T-SQL).
             has_for_xml=expr.args.get("for_") is not None,
+            query_hints=query_hints,
         )
     )
 

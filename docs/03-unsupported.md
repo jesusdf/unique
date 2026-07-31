@@ -390,6 +390,15 @@ While all four engines support recursive CTEs (MySQL 8.0+), there are subtle
 differences in recursion depth limits and cycle detection. The transpiler
 translates the syntax but does not add engine-specific cycle guards.
 
+T-SQL's own recursion-depth guard, the trailing `OPTION (MAXRECURSION n)`
+query hint, has no equivalent on any other engine — PostgreSQL/MySQL/Oracle
+recursive queries have no depth limit — so it is dropped with a warning
+(`UNIQUE-1238`) rather than emitted invalid or silently discarded. Every
+other `OPTION (...)` query hint (`MAXDOP`, `RECOMPILE`, `FORCE ORDER`,
+`KEEPFIXED PLAN`, …) is a pure optimizer directive with no effect on the
+result set, and is dropped the same way with a lighter warning
+(`UNIQUE-1239`).
+
 ### 3.9 JSON Operations
 
 JSON function names and path syntax differ between engines. The transpiler

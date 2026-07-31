@@ -589,6 +589,13 @@ class SelectStatement(ASTNode):
     #: equivalent, so a non-T-SQL target degrades the whole scalar subquery to a
     #: carrier + warning rather than shipping the (multi-column) rows raw.
     has_for_xml: bool = False
+    #: T-SQL ``OPTION (...)`` query hints trailing a top-level statement
+    #: (``MAXRECURSION n``, ``MAXDOP n``, ``RECOMPILE``, ``FORCE ORDER``, …).
+    #: No other engine has this construct; each pair is ``(hint_name,
+    #: value_or_none)``. The transform layer drops them with a warning (B51) —
+    #: MAXRECURSION with a dedicated semantic-divergence message, every other
+    #: hint as a plain optimizer-directive drop (no result-correctness effect).
+    query_hints: tuple[tuple[str, str | None], ...] = ()
 
 
 @dataclass(frozen=True)
