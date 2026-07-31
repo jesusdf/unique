@@ -616,7 +616,10 @@ T-SQL has no boolean *value* type: `NOT` requires a predicate, so `NOT NULL` (or
 `NOT <column>`) as an operand of a comparison is error 4145. The correct value is
 kept on the engines that can express it; on T-SQL the operand degrades to a
 documented carrier. (Correct parenthesization of the `NOT` operand — `(NOT x) IS
-NULL`, which binds tighter than `NOT` — is now preserved on every engine.)
+NULL`, which binds tighter than `NOT` — is now preserved on every engine.) See
+[rationale/booleans.md](rationale/booleans.md) for the general value/predicate
+duality mechanism (the tri-state `CASE` wrap and its reverse `<> 0` synthesis)
+this carrier is the residual, unresolved case of.
 
 ### 3.17 Sequence `CURRVAL` → T-SQL
 
