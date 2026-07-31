@@ -95,6 +95,12 @@ routines-unblocked and severity:*
   bare RAISE;/THROW;. `test_procedural.py::TestMySQLSignalSource` (10).
   `DECLARE … CONDITION` still parse-degrades whole+warned (honest,
   pre-existing).
+- **B48** (P3, found during D1-W9, live-probed) — `_gate_column_alias_ref`
+  degrades the derived-table column-alias list (`(SELECT …) AS xx(c1,c2)`)
+  for MySQL claiming "no spelling" — but live MySQL 8 accepts that exact
+  syntax with correct results; the degrade is only genuine for Oracle
+  (ORA-03048, live-confirmed). Un-gate the mysql target (warned degrade →
+  faithful passthrough); docs already note the discrepancy.
 - **B47** (P2, found during D1-W4, live-probed; **maintainer decision**) —
   Oracle bare `NUMBER` → `BIGINT` promotion is **unconditional** (`convert.py
   _convert_create_table` ~2428; the PK/identity logic later in the function is
