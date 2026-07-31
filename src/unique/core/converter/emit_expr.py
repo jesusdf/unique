@@ -2314,6 +2314,50 @@ def _emit_mysql_unix_timestamp_to_postgresql(
     return f"EXTRACT(EPOCH FROM {_emit_expression(node.args[0], dialect)})"
 
 
+#: Oracle source types that are already binary (RAWTOHEX/STANDARD_HASH's
+#: argument arrives on PG as BYTEA — no CONVERT_TO needed, and CONVERT_TO(a
+#: bytea, 'UTF8') is a runtime error there: "function convert_to(bytea, ...)
+#: does not exist").
+_HASH_ARG_RAW_TYPES = frozenset({"RAW", "LONG RAW", "BLOB", "BYTEA"})
+#: Oracle character source types — CONVERT_TO(x, 'UTF8') first (PG's ENCODE
+#: needs bytea; a character value has none until converted).
+_HASH_ARG_CHAR_TYPES = frozenset(
+    {"VARCHAR2", "VARCHAR", "CHAR", "NCHAR", "NVARCHAR2", "CLOB", "NCLOB", "LONG"}
+)
+
+
+def _hash_arg_kind(arg: ASTNode) -> str:
+    """Classify a RAWTOHEX/STANDARD_HASH argument as ``"raw"`` (already
+    binary — emit it directly), ``"char"`` (character data — CONVERT_TO
+    first), or ``"unknown"`` (cannot tell — the caller must decline rather
+    than guess either way: CONVERT_TO on a genuinely binary value and
+    ENCODE/a hash function on a genuinely character value both error at
+    runtime on PostgreSQL).
+
+    A CAST to a known type, or a column whose type was harvested from this
+    script's own CREATE TABLE, resolves positively; anything else (a
+    concatenation, a CASE expression, a procedural parameter — the dominant
+    real-world shape, e.g. hashing ``payload || secret``) defaults to
+    ``"char"``, matching the live-verified CONVERT_TO form this mapping
+    already shipped with. Only an *unresolvable* column — no harvested DDL,
+    or a name that clashes across tables of different types — is "unknown";
+    that is the one shape that silently broke (a RAW column read bare).
+    """
+    if isinstance(arg, CastExpression):
+        base = arg.target_type.name.split("(")[0].strip().upper()
+        if base in _HASH_ARG_RAW_TYPES:
+            return "raw"
+        if base in _HASH_ARG_CHAR_TYPES:
+            return "char"
+    if isinstance(arg, ColumnRef):
+        resolved = _resolve_column_source_type(arg)
+        if resolved in _HASH_ARG_RAW_TYPES:
+            return "raw"
+        if resolved is None or resolved not in _HASH_ARG_CHAR_TYPES:
+            return "unknown"
+    return "char"
+
+
 def _emit_oracle_hash_to_postgresql(
     node: FunctionCall, fn_name: str, dialect: str
 ) -> str | None:
@@ -2326,8 +2370,16 @@ def _emit_oracle_hash_to_postgresql(
     SHA256, SHA384 and SHA512 all match to the byte, both as raw bytes and as
     the RAWTOHEX hex string). SHA1 — Oracle's own default — has no core-PG
     equivalent (needs pgcrypto), so it degrades honestly (UNIQUE-1235) rather
-    than fake a different digest. Returns ``None`` for any other target or
-    call shape (the existing degrade stands there).
+    than fake a different digest.
+
+    The argument may already be RAW (a RAW/BLOB-typed column, or a value CAST
+    to one) — PG's ENCODE/hash functions want that as bytea directly, so no
+    CONVERT_TO wrapper is added there (``_hash_arg_kind``); wrapping a bytea
+    in CONVERT_TO(x, 'UTF8') is a PostgreSQL runtime error, not merely a
+    wrong value. An argument whose type cannot be determined at all declines
+    (returns ``None``) rather than guess, so the pre-existing validity-gate
+    degrade takes over. Returns ``None`` for any other target or call shape
+    too (the existing degrade stands there).
     """
     if dialect != "postgresql":
         return None
@@ -2350,7 +2402,6 @@ def _emit_oracle_hash_to_postgresql(
             if len(hash_call.args) >= 2
             else "SHA1"
         )
-        hashed = f"CONVERT_TO({_emit_expression(hash_call.args[0], dialect)}, 'UTF8')"
         if alg not in ("MD5", "SHA256", "SHA384", "SHA512"):
             return (
                 "NULL /* UNIQUE-1235: Oracle STANDARD_HASH(x, 'SHA1') (the "
@@ -2358,6 +2409,11 @@ def _emit_oracle_hash_to_postgresql(
                 "equivalent (needs the pgcrypto extension) — see "
                 "docs/03-unsupported.md */"
             )
+        kind = _hash_arg_kind(hash_call.args[0])
+        if kind == "unknown":
+            return None
+        _val = _emit_expression(hash_call.args[0], dialect)
+        hashed = _val if kind == "raw" else f"CONVERT_TO({_val}, 'UTF8')"
         if wrapped_hash:
             # RAWTOHEX wraps the digest as an uppercase hex STRING. PG's md5()
             # already returns lowercase hex text; sha256/384/512() return
@@ -2374,9 +2430,15 @@ def _emit_oracle_hash_to_postgresql(
     if fn_name == "RAWTOHEX" and node.args:
         # Bare RAWTOHEX(x): the common case is a character argument implicitly
         # converted to RAW through the database charset (UTF8 here, matching
-        # PostgreSQL's). No single PG builtin does this — ENCODE(bytea,'hex')
-        # plus UPPER (Oracle always uppercases; PG's encode() is lowercase).
-        arg = f"CONVERT_TO({_emit_expression(node.args[0], dialect)}, 'UTF8')"
+        # PostgreSQL's) — unless x is already RAW (a RAW-typed column: no
+        # PG builtin does the RAW-to-hex-string step in one call, so ENCODE
+        # (bytea) + UPPER (Oracle always uppercases; PG's encode() is
+        # lowercase) either way, CONVERT_TO first only for character input.
+        kind = _hash_arg_kind(node.args[0])
+        if kind == "unknown":
+            return None
+        _val = _emit_expression(node.args[0], dialect)
+        arg = _val if kind == "raw" else f"CONVERT_TO({_val}, 'UTF8')"
         return f"UPPER(ENCODE({arg}, 'hex'))"
     return None
 

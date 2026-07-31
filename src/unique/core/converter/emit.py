@@ -2213,18 +2213,19 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         # invalid without FROM and changes the shape with one (wave 124).
         parts.append(f"SELECT {distinct}".rstrip())
     else:
-        _col_parts = []
-        for c in node.columns:
-            _cstr = _emit_value_expression(c, dialect)
-            if (
-                _dstr
-                and isinstance(c, ColumnRef)
-                and c.table is None
-                and c.name.lower() in _dstr
-            ):
-                _cstr = f"{_cstr} COLLATE {_dcoll}"
-            _col_parts.append(_cstr)
-        cols = ", ".join(_col_parts) or "*"
+        with _current_select_table(node):  # see _base.py (RAWTOHEX/etc.)
+            _col_parts = []
+            for c in node.columns:
+                _cstr = _emit_value_expression(c, dialect)
+                if (
+                    _dstr
+                    and isinstance(c, ColumnRef)
+                    and c.table is None
+                    and c.name.lower() in _dstr
+                ):
+                    _cstr = f"{_cstr} COLLATE {_dcoll}"
+                _col_parts.append(_cstr)
+            cols = ", ".join(_col_parts) or "*"
         parts.append(f"SELECT {distinct}{top}{cols}")
 
     if into:
