@@ -935,6 +935,34 @@ def _emit_mysql_dayofweek(node: FunctionCall, dialect: str) -> str:
     }.get(dialect, f"DAYOFWEEK({v})")
 
 
+def _emit_oracle_replace_null_guard(
+    node: FunctionCall, fn_name: str, dialect: str
+) -> str | None:
+    """MySQL REPLACE with a nullable search/replace arg -> Oracle guard, or None.
+
+    A NON-literal search/replace argument may be NULL at runtime (a nullable
+    column, CAST(NULL AS …)): MySQL then returns NULL, but Oracle ignores a NULL
+    search/replace and returns the subject (docs/rationale/…/replace-and-null.md).
+    PG/T-SQL propagate NULL natively; only Oracle needs a ``CASE WHEN <arg> IS
+    NULL THEN NULL`` guard, mirroring CONCAT's NULL handling. The subject (arg 0)
+    is NULL-safe on both engines; a literal non-NULL cannot be NULL (a literal
+    NULL is folded by the caller).
+    """
+    if (
+        fn_name != "REPLACE"
+        or SOURCE_DIALECT.get() != "mysql"
+        or dialect != "oracle"
+        or len(node.args) != 3
+    ):
+        return None
+    _nullable = [a for a in node.args[1:] if not isinstance(a, Literal)]
+    if not _nullable:
+        return None
+    _all = ", ".join(_emit_expression(a, dialect) for a in node.args)
+    _guard = " OR ".join(f"{_emit_expression(a, dialect)} IS NULL" for a in _nullable)
+    return f"CASE WHEN {_guard} THEN NULL ELSE REPLACE({_all}) END"
+
+
 def _emit_compress_degrade(
     node: FunctionCall, fn_name: str, dialect: str
 ) -> str | None:
@@ -1854,6 +1882,10 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         and any(isinstance(a, Literal) and a.value is None for a in node.args)
     ):
         return "NULL"
+
+    _rng = _emit_oracle_replace_null_guard(node, fn_name, dialect)
+    if _rng is not None:
+        return _rng
 
     # MySQL/Oracle/PostgreSQL REPLACE matches case-sensitively; T-SQL uses the
     # subject's collation (case-insensitive by default), so REPLACE('AbC','a','X')
