@@ -93,7 +93,14 @@ from tests.helpers.corpus_diff import is_comparable
 # psycopg's timedelta flattening are not comparable across drivers). New count:
 # 2 defect-pending-fix (my-agg-boolean, pg-baseconv), 9 documented-inherent, 2
 # session-dependent = 13.
-LEDGER_SIZE_FLOOR = 13
+#
+# 2026-07-31 (brief T4-B cont.): PG base-conversion to MySQL — x::bit(n)::text
+# (an n-digit binary string) now emits RIGHT(LPAD(CONV(x,10,2),n,'0'),n) via the
+# transformer (pre-order, before the inner BIT->BOOLEAN remap), and PG to_hex()
+# (lowercase) becomes LOWER(HEX(x)) (MySQL HEX is uppercase). 1 removed: 1
+# defect-pending-fix (my-agg-boolean), 9 documented-inherent, 2 session-dependent
+# = 12.
+LEDGER_SIZE_FLOOR = 12
 
 
 def _eligible_cases() -> list[CorpusEntry]:

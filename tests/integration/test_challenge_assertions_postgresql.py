@@ -192,13 +192,21 @@ CASES.update(
                 "mysql": Expect(("AVG(x)", "UNION ALL"), ("VALUES (1)",)),
             },
         ),
+        # PG x::bit(n)::text is the n-digit binary string (255::bit(8)::text =
+        # '11111111') -> MySQL RIGHT(LPAD(CONV(x,10,2),n,'0'),n); PG to_hex()
+        # is LOWERCASE hex -> LOWER(HEX(x)) (MySQL HEX is uppercase). tsql/oracle
+        # have no bit-string type -> whole-statement warned degrade.
         "pg-baseconv": Case(
             "pg-baseconv ",
             {
                 "tsql": Expect(warn=True),
                 "oracle": Expect(warn=True),
                 "mysql": Expect(
-                    ("HEX(255)", "CAST(CAST(255 AS SIGNED) AS CHAR)"), ("to_hex(255)",)
+                    (
+                        "RIGHT(LPAD(CONV(255, 10, 2), 8, '0'), 8)",
+                        "LOWER(HEX(255))",
+                    ),
+                    ("CAST(CAST(255 AS SIGNED) AS CHAR)", "to_hex(255)"),
                 ),
             },
         ),

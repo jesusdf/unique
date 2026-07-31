@@ -1747,6 +1747,16 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     ):
         return f"ORD(CONVERT({_emit_expression(node.args[0], dialect)} USING utf32))"
 
+    # PG to_hex() renders lowercase hex digits ('ff'); MySQL HEX() renders
+    # uppercase ('FF'). Fold to lowercase to match the source value.
+    if (
+        fn_name == "HEX"
+        and SOURCE_DIALECT.get() == "postgresql"
+        and len(node.args) == 1
+        and dialect == "mysql"
+    ):
+        return f"LOWER(HEX({_emit_expression(node.args[0], dialect)}))"
+
     # MySQL CONCAT returns NULL if ANY argument is NULL (it propagates NULL);
     # PG/Oracle/T-SQL CONCAT ignore NULL. When a MySQL CONCAT has a literal NULL
     # argument, the whole result is NULL — fold it (MySQL target keeps native

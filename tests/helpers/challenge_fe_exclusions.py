@@ -158,12 +158,6 @@ LEDGER: tuple[Excluded, ...] = (
         sql="SELECT NUMTODSINTERVAL(1.5,'DAY'), NUMTOYMINTERVAL(18,'MONTH') FROM DUAL",
     ),
     Excluded(
-        id="pg-baseconv",
-        tag="defect-pending-fix",
-        reason="base-conversion argument mapping wrong on MySQL",
-        sql="SELECT 255::bit(8)::text,to_hex(255),255::text",
-    ),
-    Excluded(
         id="ts-frac-seconds",
         tag="documented-inherent",
         reason=(

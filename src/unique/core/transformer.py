@@ -241,6 +241,44 @@ class TypeMapper(TransformPass):
             return node
 
         if isinstance(node, CastExpression):
+            # PG ``x::bit(n)::text`` renders the value as its n-digit binary
+            # string (255::bit(8)::text = '11111111'); MySQL has no bit-string
+            # type, so the cast chain otherwise lands on the decimal '255'.
+            # Reproduce the binary string with CONV(x,10,2) zero-padded to n
+            # (RIGHT keeps the low n bits, matching PG's truncation). Done here,
+            # pre-order, before the inner BIT->BOOLEAN type remap erases the BIT.
+            _inner = node.expression
+            if (
+                ctx.source == "postgresql"
+                and ctx.target == "mysql"
+                and node.target_type.name.split("(")[0].strip().upper()
+                in ("TEXT", "CHAR", "VARCHAR", "NCHAR", "NVARCHAR")
+                and isinstance(_inner, CastExpression)
+                and _inner.target_type.name.split("(")[0].strip().upper() == "BIT"
+                and _inner.target_type.params
+                and str(_inner.target_type.params[0]).isdigit()
+            ):
+                _bn = int(_inner.target_type.params[0])
+                _conv = FunctionCall(
+                    name="CONV",
+                    args=(
+                        _inner.expression,
+                        Literal(value=10, dtype="integer"),
+                        Literal(value=2, dtype="integer"),
+                    ),
+                )
+                _lpad = FunctionCall(
+                    name="LPAD",
+                    args=(
+                        _conv,
+                        Literal(value=_bn, dtype="integer"),
+                        Literal(value="0", dtype="string"),
+                    ),
+                )
+                return FunctionCall(
+                    name="RIGHT",
+                    args=(_lpad, Literal(value=_bn, dtype="integer")),
+                )
             # PostgreSQL string-literal -> boolean cast accepts many spellings
             # ('t'/'true'/'yes'/'y'/'on'/'1' -> true; 'f'/'false'/'no'/'n'/
             # 'off'/'0' -> false). Other engines can't cast 'yes'/'t' to a
