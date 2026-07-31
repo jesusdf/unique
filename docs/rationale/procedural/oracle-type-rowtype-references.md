@@ -38,9 +38,7 @@ know what `employees.id`'s type is.
 > `--db-url`, and faithful on the Oracle-to-Oracle round trip either way.
 
 **See Also.** [§6](../../03-unsupported.md) ("Oracle → T-SQL specifics") ·
-`src/unique/core/procedural/transformer/base.py` (`_transform_data_type`,
-the `%TYPE`/`%ROWTYPE` branch) · `tests/integration/test_procedural.py`
-(`TestUniqueCommentRestore::test_type_reference_documented_then_restored`) —
+[`TestUniqueCommentRestore::test_type_reference_documented_then_restored`](../../../tests/integration/test_procedural.py) —
 no dedicated challenge-corpus case exercises `%TYPE` directly, so the
 example above is drawn from that integration test ·
 [`UNIQUE-1152`](../../reference/warnings.md#unique-1152).

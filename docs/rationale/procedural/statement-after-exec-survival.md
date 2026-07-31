@@ -21,16 +21,14 @@ Statements are split on `;` **before** degrading, so
 only the `sp_rename` call becomes a carrier and the `UPDATE` still
 transpiles normally on every target.
 
-**Discussion.** *Why there is no direct mapping.* N/A — this is not a
-cross-engine gap but a real defect: the `;`-split path that isolates the
-degraded `EXEC` into its own carrier used to fold the **following** statement
-into that same carrier, so `sp_rename`'s degrade silently swallowed the valid
-`UPDATE` too (the warning named only `sp_rename`). With `GO`-separated
-batches the `UPDATE` correctly survived — only the `;`-separated case was
-affected.
+**Discussion.** Not a cross-engine gap — `sp_rename` and the following
+`UPDATE` are two independent statements that happen to share one line,
+separated by `;` rather than a batch-separating `GO`. Splitting on `;`
+before degrading keeps the two statements independent, so the unmapped
+`sp_rename` call's carrier never absorbs the `UPDATE` that follows it.
 
-> **Note** faithful for the `UPDATE` — no-silent-loss
-> restored. `[limit]` for the `sp_rename` call itself, as above.
+> **Note** faithful for the `UPDATE` — it survives untouched. `[limit]` for
+> the `sp_rename` call itself, as above.
 
 **See Also.** [`reda-ts-exec-swallow-next`](../../../tests/fixtures/challenge/challenge_sqlserver.sql) ·
 [`UNIQUE-1211`](../../reference/warnings.md#unique-1211).

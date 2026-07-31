@@ -38,11 +38,10 @@ the parsed identifier reference, not a text search-and-replace. PostgreSQL
 itself keeps the native `REFERENCING` clause unchanged
 (`TestTransitionTableAliases::test_pg_keeps_referencing`).
 
-**Discussion.** This runs the opposite direction from the one case this
-Triggers section's own opening paragraph already covers
-([§6](../../03-unsupported.md), "Set-based trigger pseudo-tables": a T-SQL
-trigger's fixed `inserted`/`deleted` become **named** PostgreSQL transition
-tables going PG-ward). Here the traffic runs the other way — a
+**Discussion.** The reverse direction also occurs: a T-SQL trigger's fixed
+`inserted`/`deleted` become **named** PostgreSQL transition tables when
+translating PG-ward ([§6](../../03-unsupported.md), "Set-based trigger
+pseudo-tables"). Here the traffic runs the other way — a
 PostgreSQL-authored **custom** alias collapses back down to T-SQL's two
 fixed pseudo-table names, which is why every reference to that alias
 throughout the inlined body has to be renamed rather than simply carried
