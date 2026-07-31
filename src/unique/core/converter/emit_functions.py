@@ -2814,9 +2814,23 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         and str(node.args[1].value) in ("256", "384", "512")
     ):
         arg = _emit_expression(node.args[0], dialect)
+        n = node.args[1].value
         if dialect == "postgresql":
-            return f"SHA{node.args[1].value}({arg})"
-        return f"RAWTOHEX(STANDARD_HASH({arg}, 'SHA{node.args[1].value}'))"
+            # PG's sha256/384/512 take a *bytea* and return bytea: a character
+            # argument needs CONVERT_TO(x, 'UTF8') (else "function sha256(text)
+            # does not exist" at runtime, B57 — a defect the compile-only gate
+            # passed), and ENCODE(..., 'hex') + UPPER renders the uppercase hex
+            # STRING Oracle's RAWTOHEX(STANDARD_HASH(...)) yields, byte-for-byte
+            # (same CONVERT_TO/UTF8 wrapper as the Oracle-source hash path, B36b).
+            from unique.core.converter.emit_expr import _hash_arg_kind
+
+            hashed = (
+                arg
+                if _hash_arg_kind(node.args[0]) == "raw"
+                else f"CONVERT_TO({arg}, 'UTF8')"
+            )
+            return f"UPPER(ENCODE(SHA{n}({hashed}), 'hex'))"
+        return f"RAWTOHEX(STANDARD_HASH({arg}, 'SHA{n}'))"
 
     # T-SQL CONVERT(type, expr): sqlglot keeps the type as raw SQL in arg 0.
     # Everywhere else this is a plain CAST.

@@ -20,6 +20,7 @@ To run locally::
 
 from __future__ import annotations
 
+import contextlib
 import os
 
 import pytest
@@ -186,6 +187,121 @@ def test_procedures_fixture_is_valid_live(target: str) -> None:
         )
     finally:
         validator.close()
+
+
+def test_pg_result_set_proc_call_returns_rows_live() -> None:
+    """B56: a T-SQL result-set procedure (bare ``SELECT``) transpiled to
+    PostgreSQL must be *callable*, not merely compilable — the bare ``SELECT``
+    becomes an ``INOUT refcursor`` the caller ``FETCH``es. The compile-only
+    gate passes the old bare-SELECT form, which throws SQLSTATE 42601 ("query
+    has no destination for result data") at CALL. So this test CALLs the
+    procedure with a bound cursor portal and reads the rows back, comparing
+    them against the source's result set."""
+    url = _URLS.get("postgresql")
+    if not url:
+        pytest.skip("postgresql validator not configured (set the env var)")
+    try:
+        import psycopg
+    except ImportError as e:  # pragma: no cover - driver not installed
+        pytest.skip(f"psycopg not installed: {e}")
+
+    tsql = (
+        "CREATE PROCEDURE dbo.unq_b56 @a INT AS BEGIN "
+        "SELECT @a AS x, @a + 1 AS y; END"
+    )
+    out = transpile(tsql, "tsql", "postgresql").sql
+    assert "INOUT result_cursor refcursor" in out, out
+    assert "OPEN result_cursor FOR" in out, out
+    drop = "DROP PROCEDURE IF EXISTS unq_b56(int, refcursor)"
+    try:
+        conn = psycopg.connect(url, autocommit=True)
+    except Exception as e:  # pragma: no cover - engine not reachable
+        pytest.skip(f"could not connect to postgresql engine: {e}")
+    try:
+        with conn.cursor() as cur:
+            cur.execute(drop)  # clear a prior crash's leftover
+        conn.autocommit = False
+        with conn.cursor() as cur:
+            cur.execute(out)
+            # A refcursor portal lives only inside its transaction; bind a name
+            # in and FETCH the rows the procedure OPENed.
+            cur.execute("CALL unq_b56(5, 'unq_b56_rc')")
+            cur.execute("FETCH ALL FROM unq_b56_rc")
+            rows = cur.fetchall()
+        conn.rollback()
+        assert rows == [(5, 6)], f"expected [(5, 6)], got {rows}\n{out}"
+    finally:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute(drop)
+        conn.close()
+
+
+def test_pg_hashbytes_function_digest_matches_oracle_live() -> None:
+    """B57: T-SQL ``HASHBYTES('SHA2_256', x)`` transpiled to PostgreSQL emitted
+    a bare ``sha256(text)`` — "function does not exist" at CALL (the compile
+    gate passed it). The fix wraps the character argument in
+    ``CONVERT_TO(x, 'UTF8')`` and renders the uppercase hex string. For a
+    non-unicode (VARCHAR) argument the digest matches Oracle byte-for-byte
+    (both hash the UTF-8 bytes); an NVARCHAR argument is encoding-inherent
+    divergent (Oracle NVARCHAR2 hashes UTF-16), so this pins the matchable leg.
+    """
+    pg_url, ora_url = _URLS.get("postgresql"), _URLS.get("oracle")
+    if not pg_url or not ora_url:
+        pytest.skip("postgresql + oracle validators must both be configured")
+    try:
+        import oracledb
+        import psycopg
+    except ImportError as e:  # pragma: no cover - driver not installed
+        pytest.skip(f"driver not installed: {e}")
+
+    tsql = (
+        "CREATE FUNCTION dbo.unq_b57(@payload varchar(max), @secret varchar(400))\n"
+        "RETURNS varchar(max) AS BEGIN\n"
+        "  RETURN CONVERT(varchar(max), HASHBYTES('SHA2_256', @payload + @secret), 2)\n"
+        "END"
+    )
+    pg_sql = transpile(tsql, "tsql", "postgresql").sql
+    ora_sql = transpile(tsql, "tsql", "oracle").sql.rstrip().rstrip("/").rstrip()
+    assert "SHA256(CONVERT_TO(" in pg_sql, pg_sql
+
+    user, password, dsn = _oracle_dsn(ora_url)
+    try:
+        pg = psycopg.connect(pg_url, autocommit=True)
+        ora = oracledb.connect(user=user, password=password, dsn=dsn)
+    except Exception as e:  # pragma: no cover - engine not reachable
+        pytest.skip(f"could not connect: {e}")
+    try:
+        pg.execute("DROP FUNCTION IF EXISTS unq_b57(text, varchar)")
+        pg.execute(pg_sql)
+        pg_val = pg.execute("SELECT unq_b57('abc', 'def')").fetchone()[0]
+        ocur = ora.cursor()
+        with contextlib.suppress(Exception):  # not present yet on a clean run
+            ocur.execute("DROP FUNCTION unq_b57")
+        ocur.execute(ora_sql)
+        ocur.execute("SELECT unq_b57('abc', 'def') FROM DUAL")
+        ora_val = ocur.fetchone()[0]
+        assert pg_val == ora_val, f"PG {pg_val} != Oracle {ora_val}\n{pg_sql}"
+    finally:
+        try:
+            pg.execute("DROP FUNCTION IF EXISTS unq_b57(text, varchar)")
+        finally:
+            pg.close()
+        with contextlib.suppress(Exception):
+            ora.cursor().execute("DROP FUNCTION unq_b57")
+        ora.close()
+
+
+def _oracle_dsn(url: str) -> tuple[str, str, str]:
+    """Split ``oracle://user:pw@host:port/service`` into oracledb.connect args."""
+    from urllib.parse import urlparse
+
+    p = urlparse(url)
+    return (
+        p.username or "system",
+        p.password or "oracle",
+        f"{p.hostname}:{p.port}/{p.path.lstrip('/')}",
+    )
 
 
 def test_oracle_validator_catches_lazy_invalid_procedure() -> None:

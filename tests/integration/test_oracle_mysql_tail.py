@@ -608,10 +608,9 @@ class TestPackageRefCursorType:
 
     def test_postgresql_uses_refcursor(self) -> None:
         out = _t(self._SRC, "postgresql")
-        assert re.search(r"(?i)v_cur\s+(?:IN)?OUT\s+REFCURSOR", out) or re.search(
-            r"(?i)OUT\s+REFCURSOR", out
-        ), out
-        assert "OUT TEXT" not in out, out
+        # PostgreSQL spells the argmode first: ``OUT v_cur REFCURSOR``.
+        assert re.search(r"(?i)(?:IN\s*)?OUT\s+v_cur\s+REFCURSOR", out), out
+        assert not re.search(r"(?i)OUT\s+v_cur\s+TEXT", out), out
 
     def test_oracle_identity_keeps_package_type(self) -> None:
         out = _t(self._SRC, "oracle")

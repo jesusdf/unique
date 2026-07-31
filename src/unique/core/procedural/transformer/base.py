@@ -679,6 +679,121 @@ class ProceduralTransformer:
         return tuple(result)
 
     # ---------------------------------------------------------------
+    # Bare result SELECT -> ref-cursor OUT/INOUT parameter
+    # ---------------------------------------------------------------
+    #
+    # A T-SQL/MySQL procedure hands back a result set by running a ``SELECT``
+    # with no ``INTO`` partway through the body. Oracle PL/SQL and PostgreSQL
+    # PL/pgSQL both forbid that inside a procedure (Oracle: PLS-00428; PG: the
+    # body compiles but ``CALL`` raises 42601 "query has no destination for
+    # result data") — the procedure must gain an explicit ref-cursor parameter
+    # (Oracle ``SYS_REFCURSOR OUT``, PostgreSQL ``refcursor INOUT``) that the
+    # body ``OPEN``s ``FOR`` the query, and only the *call sites* then need
+    # adapting. T-SQL and MySQL return result sets directly, so the hook returns
+    # None there and the whole rewrite is a no-op.
+
+    def _result_refcursor_param(self, name: str) -> ParameterDefinition | None:
+        """The ref-cursor OUT/INOUT parameter appended to a procedure's
+        signature per bare result ``SELECT`` it carries, or None when the
+        target returns result sets directly (T-SQL, MySQL). Oracle and
+        PostgreSQL override."""
+        return None
+
+    def _result_cursor_name(self, index: int) -> str:
+        """The synthesized cursor/parameter name for the *index*-th (0-based)
+        result ``SELECT`` (PostgreSQL folds identifiers to lowercase and
+        overrides)."""
+        return "RESULT_CURSOR" if index == 0 else f"RESULT_CURSOR_{index + 1}"
+
+    def _result_selects_to_refcursors(
+        self, proc: CreateProcedureStatement
+    ) -> CreateProcedureStatement:
+        """Append a ref-cursor parameter per bare result ``SELECT`` in *proc*'s
+        body, rewrite each such ``SELECT`` to ``OPEN <cursor> FOR …``, and
+        register the arity so same-script CALL sites can be adapted. A no-op on
+        targets that return result sets directly."""
+        if self._result_refcursor_param("RESULT_CURSOR") is None:
+            return proc
+        cursors: list[str] = []
+        new_body = self._rewrite_result_selects(proc.body, cursors)
+        if not cursors:
+            return proc
+        cursor_params = tuple(
+            cast(ParameterDefinition, self._result_refcursor_param(c)) for c in cursors
+        )
+        from unique.core.converter import REFCURSOR_PROCS
+
+        registry = REFCURSOR_PROCS.get()
+        if registry is not None:
+            registry[proc.name.split(".")[-1].strip('`"[]').lower()] = len(cursors)
+        return dataclasses.replace(
+            proc, parameters=proc.parameters + cursor_params, body=new_body
+        )
+
+    def _rewrite_result_selects(
+        self, stmts: tuple[ASTNode, ...], cursors: list[str]
+    ) -> tuple[ASTNode, ...]:
+        """Replace each bare result ``SELECT`` with ``OPEN <cursor> FOR …``,
+        recursing into control-flow blocks; append allocated cursor names."""
+        out: list[ASTNode] = []
+        for stmt in stmts:
+            # Match on the code, not the trivia: a leading comment must not
+            # hide a result SELECT (audit doc 04, P2).
+            trivia, code = (
+                split_leading_trivia(stmt.sql)
+                if isinstance(stmt, EmbeddedDML)
+                else ("", "")
+            )
+            if isinstance(stmt, EmbeddedDML) and self._is_result_select(code):
+                name = self._result_cursor_name(len(cursors))
+                cursors.append(name)
+                query = code.rstrip(";").strip()
+                prefix = f"{trivia.rstrip()}\n" if trivia.strip() else ""
+                out.append(RawSQL(sql=f"{prefix}OPEN {name} FOR {query};"))
+            elif isinstance(stmt, IfStatement):
+                out.append(
+                    dataclasses.replace(
+                        stmt,
+                        then_body=self._rewrite_result_selects(stmt.then_body, cursors),
+                        else_body=self._rewrite_result_selects(stmt.else_body, cursors),
+                    )
+                )
+            elif isinstance(stmt, (WhileStatement, ForLoopStatement, LoopStatement)):
+                out.append(
+                    dataclasses.replace(
+                        stmt, body=self._rewrite_result_selects(stmt.body, cursors)
+                    )
+                )
+            elif isinstance(stmt, (BeginEndBlock, StatementList)):
+                out.append(
+                    dataclasses.replace(
+                        stmt,
+                        statements=self._rewrite_result_selects(
+                            stmt.statements, cursors
+                        ),
+                    )
+                )
+            elif isinstance(stmt, TryCatchBlock):
+                out.append(
+                    dataclasses.replace(
+                        stmt,
+                        try_body=self._rewrite_result_selects(stmt.try_body, cursors),
+                        catch_body=self._rewrite_result_selects(
+                            stmt.catch_body, cursors
+                        ),
+                    )
+                )
+            else:
+                out.append(stmt)
+        return tuple(out)
+
+    @staticmethod
+    def _is_result_select(sql: str) -> bool:
+        """A top-level result-set SELECT (returns rows, no INTO target)."""
+        s = sql.strip()
+        return bool(re.match(r"(?i)^SELECT\b", s)) and not re.search(r"(?i)\bINTO\b", s)
+
+    # ---------------------------------------------------------------
     # Variable name transformations
     # ---------------------------------------------------------------
 
@@ -3341,6 +3456,27 @@ class ProceduralTransformer:
                 sql=(
                     f"DECLARE\n{decls}\nBEGIN\n" f"    {node.name}({all_args});\nEND;"
                 ),
+                reason="refcursor call-site adapter",
+            )
+        if self._target == "postgresql" and callee in rc_procs:
+            # The converted signature gained INOUT refcursor params; pass a
+            # named portal literal per cursor so the arity matches, then FETCH
+            # the rows the callee OPENed. Runs inside a transaction (a refcursor
+            # portal does not outlive its transaction) — flagged, not silent.
+            n = rc_procs[callee]
+            portals = [f"{callee}_rc{i + 1}" for i in range(n)]
+            args = node.args.strip()
+            all_args = ", ".join(
+                filter(None, [args, ", ".join(f"'{p}'" for p in portals)])
+            )
+            fetches = "\n".join(f"FETCH ALL FROM {p};" for p in portals)
+            self._warnings.append(
+                f"CALL of {node.name} gained {n} refcursor argument(s): the "
+                "callee returns its result set(s) through a cursor the caller "
+                "FETCHes; run inside a transaction block"
+            )
+            return RawSQL(
+                sql=f"CALL {node.name}({all_args});\n{fetches}",
                 reason="refcursor call-site adapter",
             )
         if callee in registry:

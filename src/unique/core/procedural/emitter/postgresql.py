@@ -59,6 +59,29 @@ class PostgresEmitter(ProceduralEmitter):
             start, end = end, start
         return super()._emit_numeric_for_loop(variable, start, end, reverse, body_lines)
 
+    def _emit_param(
+        self,
+        p: ParameterDefinition,
+        idx: int,
+        params: tuple[ParameterDefinition, ...],
+        is_function: bool,
+    ) -> str:
+        # PostgreSQL's canonical parameter form leads with the argmode:
+        # ``[ argmode ] name type [ DEFAULT v ]``. The engine also accepts
+        # ``name OUT type``, but not ``name INOUT type`` in sqlglot's PG parser
+        # (used as a cheap validity gate) — and argmode-first is the idiomatic
+        # spelling for OUT/INOUT/VARIADIC params, so emit it consistently.
+        dt = self._emit_data_type(p.data_type)
+        default_str = ""
+        if self._keep_default(p, idx, params) and p.default:
+            default_str = f" DEFAULT {self._emit_node(p.default)}"
+        mode = (
+            "VARIADIC "
+            if p.variadic
+            else f"{p.direction} " if p.direction != "IN" else ""
+        )
+        return f"{mode}{p.name} {dt}{default_str}".strip()
+
     def _keep_default(
         self,
         p: ParameterDefinition,

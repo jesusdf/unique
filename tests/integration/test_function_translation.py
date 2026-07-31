@@ -391,6 +391,63 @@ class TestOracleHashFunctionsToPostgresql:
         assert "RAWTOHEX" not in out.upper() and "STANDARD_HASH" not in out.upper()
 
 
+class TestTsqlHashBytesToPostgresql:
+    """B57: T-SQL ``HASHBYTES('SHA2_256', x)`` reaches PostgreSQL (via sqlglot's
+    SHA2 canonicalization) as a bare ``SHA256(x)`` — but PG's ``sha256`` takes a
+    *bytea*, so ``sha256(text)`` is "function does not exist" at runtime (the
+    compile-only gate passed this non-runnable output). The character argument
+    needs the same ``CONVERT_TO(x, 'UTF8')`` wrapper the Oracle-source hash path
+    uses (B36b), and ``UPPER(ENCODE(..., 'hex'))`` renders the uppercase hex
+    string — live-verified byte-for-byte against Oracle AND T-SQL for a
+    non-unicode (VARCHAR) argument.
+    """
+
+    _T_X = "CREATE TABLE t (x VARCHAR(50));\n"
+
+    def test_hashbytes_sha256_stringified_translates(self) -> None:
+        out = _t(
+            self._T_X
+            + "SELECT CONVERT(VARCHAR(MAX), HASHBYTES('SHA2_256', x), 2) FROM t",
+            "postgresql",
+        )
+        assert_translated(
+            out,
+            "postgresql",
+            present=("UPPER(ENCODE(SHA256(CONVERT_TO(x, 'UTF8')), 'hex'))",),
+            absent=("HASHBYTES",),
+        )
+
+    def test_bare_hashbytes_sha256_translates(self) -> None:
+        out = _t(self._T_X + "SELECT HASHBYTES('SHA2_256', x) FROM t", "postgresql")
+        assert_translated(
+            out,
+            "postgresql",
+            present=("UPPER(ENCODE(SHA256(CONVERT_TO(x, 'UTF8')), 'hex'))",),
+            absent=("HASHBYTES",),
+        )
+
+    def test_procedural_function_body_translates(self) -> None:
+        # The exact func4 shape from the procedures fixture (dual-pipeline
+        # symmetry): a RETURN whose expression stringifies a HASHBYTES digest.
+        # The NVARCHAR argument's digest is encoding-inherent-divergent across
+        # engines (Oracle NVARCHAR2 hashes UTF-16, PG text hashes UTF-8), so the
+        # test pins only the runnable SQL shape — not a cross-engine value.
+        sql = (
+            "CREATE FUNCTION dbo.func4(@payload nvarchar(max), @secret nvarchar(400))\n"
+            "RETURNS nvarchar(max) AS BEGIN\n"
+            "    RETURN CONVERT(nvarchar(max), HASHBYTES('SHA2_256', "
+            "@payload + @secret), 2)\n"
+            "END"
+        )
+        out = Transpiler().transpile(sql, "tsql", "postgresql").sql
+        assert (
+            "UPPER(ENCODE(SHA256(CONVERT_TO(v_payload || v_secret, 'UTF8')), 'hex'))"
+            in out
+        ), out
+        # The runtime-invalid bare sha256(text) form must be gone.
+        assert "SHA256(v_payload || v_secret)" not in out, out
+
+
 class TestOracleHashArgumentTypeAwareness:
     """B36b follow-up (architect review): a bare RAW-typed column shipped
     ``CONVERT_TO(bytea, 'UTF8')`` with zero warnings — a PostgreSQL runtime

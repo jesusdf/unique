@@ -1089,9 +1089,13 @@ class TestPostgreSQLProcedureFixes:
             "END"
         )
         out = _transpile(src, "tsql", "postgresql")
-        assert "SHA256" in out.upper()
+        # PG's sha256 takes bytea: the char arg is wrapped CONVERT_TO(x,'UTF8')
+        # and the digest rendered as an uppercase hex string (B57) — a bare
+        # sha256(text) is a runtime error the compile gate passed. The T-SQL
+        # CONVERT(type, …, style) stringify wrapper is gone (only CONVERT_TO,
+        # PG's encoding builtin, remains).
+        assert "UPPER(ENCODE(SHA256(CONVERT_TO(v_p, 'UTF8')), 'hex'))" in out, out
         assert "HASHBYTES" not in out.upper()
-        assert "CONVERT" not in out.upper()
 
     def test_output_into_maps_to_returning(self) -> None:
         src = (
@@ -1178,7 +1182,10 @@ class TestParameterlessRoutineParens:
     routine takes no parameters; Oracle allows them to be omitted."""
 
     FUNC = "CREATE FUNCTION dbo.f() RETURNS INT AS BEGIN RETURN 1 END"
-    PROC = "CREATE PROCEDURE dbo.p AS BEGIN SELECT 1 END"
+    # A non-result-set body: a bare ``SELECT`` would (correctly) gain an
+    # INOUT refcursor / SYS_REFCURSOR parameter on PG/Oracle (B56), which is
+    # orthogonal to the empty-parens property under test here.
+    PROC = "CREATE PROCEDURE dbo.p AS BEGIN DECLARE @x INT SET @x = 1 END"
 
     def test_mysql_function_has_empty_parens(self) -> None:
         out = _transpile(self.FUNC, "tsql", "mysql")

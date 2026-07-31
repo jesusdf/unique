@@ -26,6 +26,7 @@ from unique.core.ast_nodes import (
     ForLoopStatement,
     GetDiagnosticsStatement,
     LoopStatement,
+    ParameterDefinition,
     RawSQL,
     StatementList,
     TransactionAction,
@@ -105,14 +106,41 @@ class PostgresTransformer(ProceduralTransformer):
     )
 
     def _transform_procedure(self, node: CreateProcedureStatement) -> ASTNode:
-        return self._hoist_implicit_rowcount(super()._transform_procedure(node))
+        return self._hoist_implicit_rowcount(
+            self._refcursor_rewrite(super()._transform_procedure(node))
+        )
 
     def _transform_alter_procedure(self, node: AlterProcedureStatement) -> ASTNode:
         # T-SQL's idempotent ``EXEC('CREATE PROCEDURE … AS SELECT 1') … ALTER
         # PROCEDURE`` stub pattern lands the real body on an ALTER node, so the
         # hoist must cover it too (else ``@@ROWCOUNT`` ships an invalid inline
         # ``ROW_COUNT()``).
-        return self._hoist_implicit_rowcount(super()._transform_alter_procedure(node))
+        return self._hoist_implicit_rowcount(
+            self._refcursor_rewrite(super()._transform_alter_procedure(node))
+        )
+
+    def _refcursor_rewrite(self, node: ASTNode) -> ASTNode:
+        """A T-SQL/MySQL procedure returns a result set with a bare ``SELECT``;
+        a bare ``SELECT`` inside a plpgsql procedure compiles but throws 42601
+        at CALL. Give the procedure an ``INOUT refcursor`` parameter per result
+        set and ``OPEN`` it FOR that query (base rewrite), same treatment as
+        Oracle's ``SYS_REFCURSOR``."""
+        if isinstance(node, CreateProcedureStatement):
+            return self._result_selects_to_refcursors(node)
+        return node
+
+    def _result_refcursor_param(self, name: str) -> ParameterDefinition:
+        # A bare result SELECT returns rows only through a refcursor the caller
+        # OPENs a portal on and FETCHes; INOUT lets the caller pass the portal
+        # name in and read it back.
+        return ParameterDefinition(
+            name=name, data_type=DataType(name="refcursor"), direction="INOUT"
+        )
+
+    def _result_cursor_name(self, index: int) -> str:
+        # PostgreSQL folds unquoted identifiers to lowercase; keep the parameter
+        # and its OPEN in the file's lowercase convention.
+        return "result_cursor" if index == 0 else f"result_cursor_{index + 1}"
 
     def _transform_function(self, node: CreateFunctionStatement) -> ASTNode:
         return self._hoist_implicit_rowcount(super()._transform_function(node))
