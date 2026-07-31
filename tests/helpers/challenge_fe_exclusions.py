@@ -16,7 +16,14 @@ excluded one and keeps its clean twin enrolled).
 Tags (seeded from the A10 taxonomy, re-derived by the live sweep, not the prose):
 
 - ``precision-policy-pending`` (T2): same mathematical value at a different
-  scale/precision. Awaiting the maintainer's numeric-tolerance policy decision.
+  scale/precision. **Resolved 2026-07-31 (brief A10-T2)** — the comparator
+  (``tests/helpers/corpus_diff.py``, see its module docstring) now applies a
+  coarser-operand-precision numeric tolerance, which cleared 11 of the 12
+  cases seeded under this tag; kept in ``VALID_TAGS`` for any future case that
+  needs a policy call the comparator doesn't already cover, currently unused
+  (0 entries) — the one survivor (``my-num-to-str``) moved to
+  ``documented-inherent`` because its numbers are embedded in text, outside
+  the comparator's deliberately narrow scope, not awaiting a decision.
 - ``documented-inherent`` (T3): a known, already-documented cross-engine
   divergence (Oracle ``'' == NULL``, nondeterministic ``GROUP_CONCAT`` order,
   supplementary-plane NCHAR, boolean text rendering) that is missing its warning.
@@ -56,76 +63,17 @@ class Excluded:
 
 LEDGER: tuple[Excluded, ...] = (
     Excluded(
-        id="my-avg-precision2",
-        tag="precision-policy-pending",
-        reason="AVG display scale differs across engines (same value)",
-        sql="SELECT AVG(x) FROM (SELECT 1 x UNION ALL SELECT 2 UNION ALL SELECT 2) t",
-    ),
-    Excluded(
-        id="my-decimal-scale",
-        tag="precision-policy-pending",
-        reason="division/decimal result scale differs (same value)",
-        sql="SELECT 10.00/3, 10/3.0, CAST(10 AS DECIMAL(10,4))/3, 1.5*1.5, 0.1*0.1",
-    ),
-    Excluded(
-        id="my-div-mult2",
-        tag="precision-policy-pending",
-        reason="1/3*3 rounds to 1.0 vs 0.999999 (precision)",
-        sql="SELECT 1/3*3 AS r",
-    ),
-    Excluded(
-        id="my-div-precision",
-        tag="precision-policy-pending",
-        reason="division result scale differs (same value)",
-        sql="SELECT 1.0 / 3 AS r",
-    ),
-    Excluded(
-        id="my-float-precision",
-        tag="precision-policy-pending",
-        reason="float/division display precision differs",
-        sql="SELECT 0.1+0.2, CAST(0.1 AS DOUBLE)+CAST(0.2 AS DOUBLE), 1.0/3, 2/3",
-    ),
-    Excluded(
         id="my-num-to-str",
-        tag="precision-policy-pending",
-        reason="numeric->string default scale differs across engines",
+        tag="documented-inherent",
+        reason=(
+            "numeric->string default precision differs across engines, but the "
+            "numbers are embedded in text ('d=0.33333' vs 'd=0.333333'), not a "
+            "bare numeric cell — out of the numeric-tolerance comparator's scope "
+            "by design (2026-07-31: never touch a substring of longer text; "
+            "live-checked, the other 11 precision-policy cases now match and "
+            "were removed from this ledger)"
+        ),
         sql="SELECT CONCAT('n=',5), CONCAT('x=',5.50), CONCAT('d=',1.0/3), CONCAT('b=',TRUE), 5.50+0",
-    ),
-    Excluded(
-        id="ora-decimal-scale",
-        tag="precision-policy-pending",
-        reason="division/decimal result scale differs (same value)",
-        sql="SELECT 10.00/3, 10/3.0, CAST(10 AS NUMBER(10,4))/3, 1.5*1.5 FROM DUAL",
-    ),
-    Excluded(
-        id="ora-div-mult2",
-        tag="precision-policy-pending",
-        reason="1/3*3 rounds to 1.0 vs 0.999999 (precision)",
-        sql="SELECT 1/3*3 AS r FROM DUAL",
-    ),
-    Excluded(
-        id="ora-div-precision",
-        tag="precision-policy-pending",
-        reason="division result scale differs (same value)",
-        sql="SELECT 1 / 3 AS r FROM DUAL",
-    ),
-    Excluded(
-        id="ora-float-precision",
-        tag="precision-policy-pending",
-        reason="float/division display precision differs",
-        sql="SELECT 0.1+0.2, CAST(0.1 AS BINARY_DOUBLE)+CAST(0.2 AS BINARY_DOUBLE), 1.0/3 FROM DUAL",
-    ),
-    Excluded(
-        id="pg-avg-null",
-        tag="precision-policy-pending",
-        reason="AVG display scale differs across engines (same value)",
-        sql="SELECT AVG(x) FROM (VALUES (1),(2),(NULL),(4)) v(x)",
-    ),
-    Excluded(
-        id="pg-scientific",
-        tag="precision-policy-pending",
-        reason="float scientific vs exact numeric precision",
-        sql="SELECT 1e20::float, 1e-20::float, 123456789012345678901234567890::numeric",
     ),
     Excluded(
         id="my-gc-order",

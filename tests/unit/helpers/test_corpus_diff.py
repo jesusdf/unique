@@ -13,6 +13,7 @@ carries a negative test proving it does not over-normalize.
 from __future__ import annotations
 
 import datetime as dt
+from decimal import Decimal
 
 from helpers.corpus_diff import normalize_cell, normalize_rows
 
@@ -128,3 +129,100 @@ class TestNoOverNormalization:
 
     def test_rows_still_order_insensitive(self) -> None:
         assert normalize_rows([(2,), (1,)]) == normalize_rows([(1,), (2,)])
+
+
+class TestNumericTolerance:
+    """Brief A10-T2 (maintainer decision 2026-07-31): same value + precision
+    diff = match, via rounding to the COARSER operand's own precision. See the
+    ``corpus_diff`` module docstring for the full rule and its justification."""
+
+    # -- positive pairs: same value, different display precision -> MATCH --
+
+    def test_avg_style_repeating_decimal_matches_shorter_display(self) -> None:
+        assert normalize_cell(0.333333) == normalize_cell(0.3333)
+
+    def test_more_decimals_matches_fewer(self) -> None:
+        assert normalize_cell(1.6667) == normalize_cell(1.666666)
+
+    def test_trailing_zero_scale_matches(self) -> None:
+        assert normalize_cell(Decimal("5.5")) == normalize_cell(Decimal("5.50"))
+
+    def test_float_chain_rounding_matches_via_the_coarser_side(self) -> None:
+        # Caught by coarser-precision rounding alone, no relative-epsilon
+        # fallback needed here: 1.0 has 1 decimal digit, which already forces
+        # 0.999999 down to the same 1-decimal-place value.
+        assert normalize_cell(1.0) == normalize_cell(0.999999)
+
+    def test_int_and_equal_float_match(self) -> None:
+        assert normalize_cell(2.0) == normalize_cell(2)
+
+    def test_reversed_repeating_decimal_matches(self) -> None:
+        assert normalize_cell(0.6667) == normalize_cell(0.666667)
+
+    def test_transcendental_float_noise_matches_via_relative_epsilon(self) -> None:
+        # Live regression (ts-trig / my-trig-suite, caught by the FE gate):
+        # Oracle's TAN vs SQL Server's TAN/COT agree to ~15 significant
+        # digits, not bit-for-bit — both operands report full float
+        # precision, so coarser-precision rounding alone is a no-op here;
+        # only the relative-epsilon fallback bridges it.
+        assert normalize_cell(0.6420926159343306) == normalize_cell(0.6420926159343308)
+
+    def test_relative_epsilon_does_not_mask_a_real_difference(self) -> None:
+        # A ~3% relative gap must stay a mismatch even though both operands
+        # are "full precision" floats — the fallback is bound far tighter.
+        assert normalize_cell(0.3333333333333) != normalize_cell(0.3433333333333)
+
+    # -- negative pairs: must stay a mismatch --
+
+    def test_different_ints_stay_different(self) -> None:
+        assert normalize_cell(1) != normalize_cell(2)
+
+    def test_same_precision_different_value_stays_different(self) -> None:
+        assert normalize_cell(0.3333) != normalize_cell(0.3433)
+
+    def test_date_looking_int_never_matches_a_date_string(self) -> None:
+        assert normalize_cell(19000102) != normalize_cell("2020-01-01")
+
+    def test_int_vs_half_unit_float_stays_different(self) -> None:
+        # 123 vs 123.5 is a real value difference, not a precision artifact —
+        # coarsening 123.5 to 0 decimal places rounds it to 124, not 123.
+        assert normalize_cell(123) != normalize_cell(123.5)
+
+    def test_datetime_fractional_seconds_untouched_by_numeric_tolerance(self) -> None:
+        # A different normalizer (temporal strings are matched before numeric
+        # tolerance ever runs) — .123456 vs .123457 must stay a mismatch.
+        assert normalize_cell("2020-01-01T10:20:30.123456") != normalize_cell(
+            "2020-01-01T10:20:30.123457"
+        )
+
+    # -- zero-adjacent guard --
+
+    def test_zero_matches_pure_float_noise(self) -> None:
+        assert normalize_cell(0.0) == normalize_cell(1e-12)
+
+    def test_zero_does_not_match_a_real_small_value(self) -> None:
+        # Without the guard, coarsening to 0 int decimal places would round
+        # 0.4 down to 0 and falsely match — the guard forces an absolute
+        # epsilon instead whenever either side is exactly zero.
+        assert normalize_cell(0) != normalize_cell(0.4)
+
+    def test_zero_does_not_match_a_small_but_real_decimal(self) -> None:
+        assert normalize_cell(0.0) != normalize_cell(0.0004)
+
+    # -- string scope: entirely-numeric text gets the same tolerance --
+
+    def test_pure_fractional_string_gets_numeric_tolerance(self) -> None:
+        assert normalize_cell("5.50") == normalize_cell("5.5")
+        assert normalize_cell("0.333333") == normalize_cell("0.3333")
+
+    def test_number_embedded_in_longer_text_is_not_touched(self) -> None:
+        # Never a substring of longer text — 'd=0.333333' stays a plain,
+        # distinct string even though the embedded numbers would tolerate.
+        assert normalize_cell("d=0.333333") != normalize_cell("d=0.3333")
+        assert isinstance(normalize_cell("d=0.333333"), str)
+
+    def test_bare_integer_string_stays_a_plain_string(self) -> None:
+        # No decimal point -> out of scope, left exactly as before (no need
+        # for tolerance on an exact integer string).
+        assert normalize_cell("12") == "12"
+        assert isinstance(normalize_cell("12"), str)
