@@ -53,6 +53,17 @@ routines-unblocked and severity:*
 
 ---
 
+### D1 — rationale wave from the docs-gap sweep (P2; feeds A10's "docs finished" gate)
+
+*Source: [`audit/2026-07-31-docs-gap-sweep.md`](../audit/2026-07-31-docs-gap-sweep.md)
+— 179 raw gaps deduplicated into 18 mechanism clusters, 10 HIGH. Work as
+themed worker waves (the R1/R2 method: every claim sourced from the pinning
+test, live-probe uncertain bindings): (1) boolean/predicate duality — the
+most pervasive; (2) a NEW triggers page; (3) loop/cursor desugaring;
+(4) schema-state coercion; (5) DDL guards; then the rest. Includes the
+flagged ADD_MONTHS doc CORRECTION. Residual recall debt: test_pg_source_wave1.py
+was only keyword-swept (32/261 classes) — one follow-up pass there.*
+
 ### A10 — functional-equivalence coverage audit (P2; after the docs-gap wave)
 
 *Maintainer suspicion (2026-07-31, shared by the architect): the FE
