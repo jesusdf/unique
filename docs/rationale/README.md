@@ -21,13 +21,13 @@ This is the narrative companion to two machine-checked sources of truth:
 
 | Topic | Covers | Articles |
 |---|---|---|
-| [Date/time arithmetic and formatting](datetime/README.md) | date/time arithmetic, truncation, unit maps, month-end semantics, epoch rebasing | 10 |
+| [Date/time arithmetic and formatting](datetime/README.md) | date/time arithmetic, truncation, unit maps, month-end semantics, epoch rebasing | 11 |
 | [Strings, concatenation and collation](strings-collation/README.md) | concatenation & NULL, LIKE/ESCAPE, character classes, collation/order, Oracle `''` ≡ NULL, byte vs char lengths | 18 |
 | [Aggregates and window functions](aggregates-windows/README.md) | window frames, ordered aggregates, string aggregation, DISTINCT ON, boolean aggregates | 13 |
 | [Booleans: the value/predicate duality](booleans/README.md) | tri-state `CASE` wrap for value position, `<> 0` synthesis for predicate position, boolean-column `IS TRUE`/`IS FALSE` re-spelling | 8 |
 | [DML: PIVOT/UNPIVOT, MERGE, DELETE, row values](dml/README.md) | PIVOT/UNPIVOT, MERGE/upsert lowering, multi-table DELETE, row caps, row-value comparisons | 23 |
 | [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md) | identity/SERIAL, temp tables, FK actions, sequences, storage options | 18 |
-| [Procedural: cursors, dynamic SQL, system procedures, session directives](procedural/README.md) | cursors, error handling, dynamic SQL, system procedures, session directives | 33 |
+| [Procedural: cursors, dynamic SQL, system procedures, session directives](procedural/README.md) | cursors, error handling, dynamic SQL, system procedures, session directives | 35 |
 
 ## By engine
 
@@ -102,6 +102,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [T-SQL loop control (`BREAK`/`CONTINUE`, compound assignment) → MySQL labeled `LEAVE`/`ITERATE`](procedural/tsql-loop-control-to-mysql-labels.md) | T-SQL's `BREAK`/`CONTINUE` act on the *nearest enclosing* loop with no name required. |
 | [A row-by-row dynamic-SQL string build (T-SQL) → a single Oracle `LISTAGG` + `EXECUTE IMMEDIATE`](procedural/dynamic-sql-loop-to-listagg.md) | A common T-SQL pattern builds a dynamic-SQL string by looping over a result set implicitly, appending to the same variable on every row: `SELECT @sql = @sql + expr FROM t`. |
 | [A lengthless character `CAST` reaching Oracle: valid inside a PL/SQL body, invalid as a bare top-level statement](procedural/oracle-cast-length-plsql-body-vs-sql-statement.md) | A T-SQL cast to a character type with **no length given at all** (a bare `CAST(x AS VARCHAR)`, as opposed to `VARCHAR(n)`) needs opposite treatment depending on where it lands on Oracle. |
+| [T-SQL subquery-in-expression assignment → Oracle `SELECT ... INTO ... FROM DUAL`](procedural/tsql-subquery-assignment-to-oracle-select-into.md) | T-SQL lets a variable assignment's right-hand side embed a subquery directly, either as the whole expression or nested inside another call: `SET @x = (SELECT MAX(a) FROM t)`, or `DECLARE @x INT = (SELECT MAX(a) FROM t)` as an initializer. |
+| [T-SQL `@@FETCH_STATUS` → Oracle / PostgreSQL / MySQL](procedural/tsql-fetch-status-to-oracle-postgresql-mysql.md) | T-SQL exposes cursor state through a single global variable, `@@FETCH_STATUS`, checked right after a `FETCH` (`0` = a row was returned, `-1` = no more rows, `-2` = the fetched row is missing). |
 
 ### T-SQL as target
 
@@ -206,6 +208,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|
 | [ADD_MONTHS (Oracle) → DATEADD/DATE_ADD/interval-add (T-SQL/MySQL/PostgreSQL)](datetime/oracle-add-months-to-dateadd.md) | Oracle's `ADD_MONTHS` sticks to the *target* month's last day whenever the operand is its own month's last day — `ADD_MONTHS('2020-02-29', 1)` = `2020-03-31`. |
 | [Oracle `MONTHS_BETWEEN` fractional value → T-SQL exact `CASE` formula](datetime/months-between-fractional.md) | Oracle's `MONTHS_BETWEEN(date1, date2)` returns a **fractional** number of months: whole months plus `(day1 - day2) / 31` for the remainder, collapsing to a whole number only when both dates are the last day of their month or share the same day-of-month. |
+| [Oracle `NUMTODSINTERVAL` / `NUMTOYMINTERVAL` → PostgreSQL `INTERVAL`](datetime/numtointerval-oracle-to-postgresql.md) | Oracle's `NUMTODSINTERVAL(n, 'unit')` and `NUMTOYMINTERVAL(n, 'unit')` build a standalone day-to-second or year-to-month `INTERVAL` value from a number and a unit name (`NUMTODSINTERVAL(-3, 'DAY')` is "an interval of minus three days"). |
 
 #### [Strings, concatenation and collation](strings-collation/README.md)
 
@@ -351,6 +354,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [T-SQL cursor-variable binding (`SET @cur = CURSOR ... FOR q; OPEN @cur;`) → PostgreSQL / Oracle / MySQL](procedural/tsql-cursor-variable-binding.md) | T-SQL lets a cursor be bound to a *variable* in two steps: a bare `DECLARE @cur CURSOR;` (no query yet), then `SET @cur = CURSOR ... |
 | [A row-by-row dynamic-SQL string build (T-SQL) → a single Oracle `LISTAGG` + `EXECUTE IMMEDIATE`](procedural/dynamic-sql-loop-to-listagg.md) | A common T-SQL pattern builds a dynamic-SQL string by looping over a result set implicitly, appending to the same variable on every row: `SELECT @sql = @sql + expr FROM t`. |
 | [A lengthless character `CAST` reaching Oracle: valid inside a PL/SQL body, invalid as a bare top-level statement](procedural/oracle-cast-length-plsql-body-vs-sql-statement.md) | A T-SQL cast to a character type with **no length given at all** (a bare `CAST(x AS VARCHAR)`, as opposed to `VARCHAR(n)`) needs opposite treatment depending on where it lands on Oracle. |
+| [T-SQL subquery-in-expression assignment → Oracle `SELECT ... INTO ... FROM DUAL`](procedural/tsql-subquery-assignment-to-oracle-select-into.md) | T-SQL lets a variable assignment's right-hand side embed a subquery directly, either as the whole expression or nested inside another call: `SET @x = (SELECT MAX(a) FROM t)`, or `DECLARE @x INT = (SELECT MAX(a) FROM t)` as an initializer. |
+| [T-SQL `@@FETCH_STATUS` → Oracle / PostgreSQL / MySQL](procedural/tsql-fetch-status-to-oracle-postgresql-mysql.md) | T-SQL exposes cursor state through a single global variable, `@@FETCH_STATUS`, checked right after a `FETCH` (`0` = a row was returned, `-1` = no more rows, `-2` = the fetched row is missing). |
 
 ### PostgreSQL as source
 
@@ -441,6 +446,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [MySQL TO_DAYS year-0000 epoch rebase](datetime/mysql-to-days-epoch-rebase.md) | MySQL `TO_DAYS(d)` returns the count of days since a notional `0000-01-01`. |
 | [Multi-field PostgreSQL INTERVAL decomposition](datetime/postgresql-interval-decomposition.md) | PostgreSQL accepts a verbose, multi-unit interval literal in one string: `INTERVAL '1 year 2 months 3 days'`. |
 | [MySQL compound `EXTRACT` units (`YEAR_MONTH`, `DAY_HOUR`, …) → all targets](datetime/mysql-compound-extract-units.md) | MySQL's `EXTRACT` accepts several **compound** units — `YEAR_MONTH`, `DAY_HOUR`, `DAY_MINUTE`, `DAY_SECOND`, and others — that pack two or more calendar fields into a single decimal-weighted number in one call. |
+| [Oracle `NUMTODSINTERVAL` / `NUMTOYMINTERVAL` → PostgreSQL `INTERVAL`](datetime/numtointerval-oracle-to-postgresql.md) | Oracle's `NUMTODSINTERVAL(n, 'unit')` and `NUMTOYMINTERVAL(n, 'unit')` build a standalone day-to-second or year-to-month `INTERVAL` value from a number and a unit name (`NUMTODSINTERVAL(-3, 'DAY')` is "an interval of minus three days"). |
 
 #### [Strings, concatenation and collation](strings-collation/README.md)
 
@@ -509,6 +515,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Row-level trigger re-reading its own table (MySQL/PostgreSQL) ↔ Oracle `COMPOUND TRIGGER`](procedural/trigger-reading-own-table.md) | A row-level trigger that aggregates a parent row from its children (`UPDATE invoice SET total = (SELECT SUM(...) FROM invoice_line WHERE invoice_id = NEW.invoice_id) WHERE id = NEW.invoice_id`) re-reads the table it's attached to. |
 | [T-SQL `INSTEAD OF` trigger → PostgreSQL (native on views, emulated on tables)](procedural/tsql-instead-of-trigger.md) | T-SQL allows `INSTEAD OF` on both views *and* base tables — the trigger body runs **instead of** the attempted INSERT/UPDATE/DELETE, which is never applied on its own. |
 | [T-SQL cursor-variable binding (`SET @cur = CURSOR ... FOR q; OPEN @cur;`) → PostgreSQL / Oracle / MySQL](procedural/tsql-cursor-variable-binding.md) | T-SQL lets a cursor be bound to a *variable* in two steps: a bare `DECLARE @cur CURSOR;` (no query yet), then `SET @cur = CURSOR ... |
+| [T-SQL `@@FETCH_STATUS` → Oracle / PostgreSQL / MySQL](procedural/tsql-fetch-status-to-oracle-postgresql-mysql.md) | T-SQL exposes cursor state through a single global variable, `@@FETCH_STATUS`, checked right after a `FETCH` (`0` = a row was returned, `-1` = no more rows, `-2` = the fetched row is missing). |
 
 ### MySQL as source
 
@@ -658,6 +665,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [PL/SQL cursor `FOR` loop (Oracle) → MySQL explicit cursor scaffold](procedural/cursor-for-loop-to-mysql.md) | The same implicit fetch-and-bind PL/SQL construct as above, but onto MySQL, whose procedural dialect additionally requires every `DECLARE` to sit at the very top of its enclosing `BEGIN` block (MySQL error 1337) and has no `WHILE @@FETCH_STATUS` equivalent — loop termination is driven by a `CONTINUE HANDLER FOR NOT FOUND`. |
 | [Numeric range `FOR i IN a..b LOOP` (Oracle) → MySQL / T-SQL explicit `WHILE` + counter](procedural/numeric-range-for-loop.md) | `FOR i IN 1..13 LOOP` (optionally `REVERSE`) is Oracle's counting loop — no cursor at all, just an integer range. |
 | [T-SQL loop control (`BREAK`/`CONTINUE`, compound assignment) → MySQL labeled `LEAVE`/`ITERATE`](procedural/tsql-loop-control-to-mysql-labels.md) | T-SQL's `BREAK`/`CONTINUE` act on the *nearest enclosing* loop with no name required. |
+| [T-SQL `@@FETCH_STATUS` → Oracle / PostgreSQL / MySQL](procedural/tsql-fetch-status-to-oracle-postgresql-mysql.md) | T-SQL exposes cursor state through a single global variable, `@@FETCH_STATUS`, checked right after a `FETCH` (`0` = a row was returned, `-1` = no more rows, `-2` = the fetched row is missing). |
 
 ### Cross-engine / multi-directional
 

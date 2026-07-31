@@ -40,6 +40,7 @@ and sourcing rules.
 |---|---|---|
 | [Oracle `%FOUND`/`%NOTFOUND`/`%ISOPEN`/`%ROWCOUNT` → T-SQL / MySQL](oracle-cursor-attributes.md) | oracle → tsql/mysql | Oracle attaches state to each named cursor: `c%FOUND`/`c%NOTFOUND` (did the last `FETCH` return a row), `c%ISOPEN`, and `c%ROWCOUNT` (rows fetched so far on that cursor). |
 | [PL/pgSQL implicit `FOUND` / Oracle implicit `SQL%FOUND` → T-SQL `@@ROWCOUNT` / MySQL `ROW_COUNT()`](implicit-found-flag.md) | oracle/postgresql → tsql/mysql | PL/pgSQL keeps one implicit boolean, `FOUND`, updated by the *last* `SELECT INTO`, `UPDATE`, `DELETE`, `INSERT`, or `FETCH` in the routine — it answers "did that last statement affect/return a row?" for the routine as a whole, not for one named cursor. |
+| [T-SQL `@@FETCH_STATUS` → Oracle / PostgreSQL / MySQL](tsql-fetch-status-to-oracle-postgresql-mysql.md) | tsql → oracle/postgresql/mysql | T-SQL exposes cursor state through a single global variable, `@@FETCH_STATUS`, checked right after a `FETCH` (`0` = a row was returned, `-1` = no more rows, `-2` = the fetched row is missing). |
 
 ## Error handling
 
@@ -126,3 +127,9 @@ and sourcing rules.
 | Article | Direction | Description |
 |---|---|---|
 | [A lengthless character `CAST` reaching Oracle: valid inside a PL/SQL body, invalid as a bare top-level statement](oracle-cast-length-plsql-body-vs-sql-statement.md) | tsql → oracle | A T-SQL cast to a character type with **no length given at all** (a bare `CAST(x AS VARCHAR)`, as opposed to `VARCHAR(n)`) needs opposite treatment depending on where it lands on Oracle. |
+
+## Subquery-in-expression assignment restructuring
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL subquery-in-expression assignment → Oracle `SELECT ... INTO ... FROM DUAL`](tsql-subquery-assignment-to-oracle-select-into.md) | tsql → oracle | T-SQL lets a variable assignment's right-hand side embed a subquery directly, either as the whole expression or nested inside another call: `SET @x = (SELECT MAX(a) FROM t)`, or `DECLARE @x INT = (SELECT MAX(a) FROM t)` as an initializer. |

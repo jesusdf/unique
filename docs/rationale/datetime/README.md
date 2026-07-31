@@ -30,6 +30,7 @@ built and its entry format.
 |---|---|---|
 | [Temporal +/− arithmetic: date ± int, MySQL numeric coercion, timestamp − timestamp](temporal-plus-minus-arithmetic.md) | cross-engine | PostgreSQL/Oracle `date_col + n` / `date_col - n` is day arithmetic; T-SQL `datetime_col + n` likewise adds days. |
 | [Multi-field PostgreSQL INTERVAL decomposition](postgresql-interval-decomposition.md) | postgresql → all | PostgreSQL accepts a verbose, multi-unit interval literal in one string: `INTERVAL '1 year 2 months 3 days'`. |
+| [Oracle `NUMTODSINTERVAL` / `NUMTOYMINTERVAL` → PostgreSQL `INTERVAL`](numtointerval-oracle-to-postgresql.md) | oracle → postgresql | Oracle's `NUMTODSINTERVAL(n, 'unit')` and `NUMTOYMINTERVAL(n, 'unit')` build a standalone day-to-second or year-to-month `INTERVAL` value from a number and a unit name (`NUMTODSINTERVAL(-3, 'DAY')` is "an interval of minus three days"). |
 
 ## Epoch rebasing
 

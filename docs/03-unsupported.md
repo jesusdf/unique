@@ -254,9 +254,10 @@ handling for the forms below):
   `LOWER`, `REPLACE`, `CEILING`/`CEIL`, and others.
 
 Functions that require argument reordering (e.g. `CHARINDEX`↔`INSTR`↔
-`LOCATE`, `DECODE`→`CASE`) are emitted with an inline review comment rather
-than a guessed conversion. Unknown date parts or non-standard call shapes are
-left intact for manual handling.
+`LOCATE`) or decomposition (`DECODE`→`CASE`) convert faithfully — arguments
+are re-slotted / the expression is rebuilt on the AST, with no comment or
+warning needed. Unknown date parts or non-standard call shapes degrade to a
+carrier + warning for manual handling.
 
 **Non-reproducible date/number masks (⚠️ degrade to a carrier + warning).** A
 **reproducible** mask — standard date fields, or a plain grouping/decimal number
