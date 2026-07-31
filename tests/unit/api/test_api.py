@@ -913,6 +913,44 @@ class TestCompareUI:
                 token in static
             ), f"template/static drift on {token!r} — rerun web/build.py"
 
+    def test_destination_editor_is_not_readonly(self) -> None:
+        # WEB-1: the destination box must accept typing/pasting so a user can
+        # Compare an arbitrary pair of scripts, not just source-vs-transpiled.
+        page = self._page()
+        assert '<textarea id="output" readonly' not in page
+        assert 'id="output" placeholder="Translation will appear here…"' in page
+        # The CodeMirror instance wrapping it must not re-impose read-only.
+        assert "readOnly: true" not in page
+
+    def test_compare_reads_the_live_editors_not_the_last_response(self) -> None:
+        # getInput()/getOutput() read straight from the CodeMirror instances
+        # (cmInput.getValue()/cmOutput.getValue()), so a hand-edit of either
+        # side is what Compare sends — it never re-derives the target from
+        # the last /api/v1/transpile response.
+        page = self._page()
+        assert "const sqlA = getInput(), sqlB = getOutput();" in page
+        assert (
+            "function getOutput() { return cmOutput ? cmOutput.getValue() "
+            ': el("output").value; }' in page
+        )
+
+    def test_compare_dialects_come_from_the_visible_selectors(self) -> None:
+        # The destination dialect Compare sends must be whatever the target
+        # selector shows — it never carries "auto" (only #source does).
+        page = self._page()
+        assert 'dialect_a: el("source").value, dialect_b: el("target").value' in page
+
+    def test_hand_edit_of_destination_clears_stale_transpile_result(self) -> None:
+        # A hand-edit of the destination editor invalidates the warnings list
+        # from the last transpile (it described the pre-edit content); a
+        # programmatic setValue (fresh transpile output, Clear, Swap) must
+        # not trigger it, since those paths already manage the message panel.
+        page = self._page()
+        assert 'c.dataset.kind = "result";' in page
+        assert 'cmOutput.on("change", (instance, changeObj) => {' in page
+        assert 'if (changeObj.origin === "setValue") return;' in page
+        assert 'if (el("messages").dataset.kind === "result") clearStatus();' in page
+
 
 class TestWarningCodeLinks:
     """F3: every UNIQUE-NNNN diagnostic code shown in the UI (transpile

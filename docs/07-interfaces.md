@@ -149,7 +149,14 @@ Once the API server is running, open the browser-based interface at the root
 URL (e.g. <http://localhost:8000/>). It provides:
 
 - two side-by-side editors with SQL syntax highlighting (CodeMirror, embedded
-  in the page — no external CDN, so it works behind an offline reverse proxy);
+  in the page — no external CDN, so it works behind an offline reverse proxy).
+  **Both editors are freely editable**, including the destination one: Translate
+  overwrites it with fresh output as before, but a user can also type or paste
+  into it directly — e.g. to Compare a hand-migrated script against the source
+  instead of the transpiled one. Hand-editing the destination clears any
+  warnings/unsupported list still shown from the last transpile (that list
+  described the pre-edit content and would otherwise be stale); Compare always
+  reads each editor's current content, never a cached transpile response;
 - automatic source-engine detection as you type (you can still override it),
   which also switches the highlighting dialect;
 - **live source-syntax validation**: while the script has syntax errors the
