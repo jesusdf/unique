@@ -124,6 +124,7 @@ _CURATED_STOPWORDS: tuple[str, ...] = (
     "create_job",
     "dbms_scheduler",
     "dbms_session",
+    "dbms_lob",
     "dbms_output",
     "endpoint",
     "maxvalue",
