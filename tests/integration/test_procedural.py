@@ -1294,6 +1294,15 @@ class TestReturnValueInProcedure:
         code = [ln for ln in out.splitlines() if not ln.strip().startswith("--")]
         # No executable RETURN in the procedure (only LEAVE).
         assert all(not ln.strip().startswith("RETURN") for ln in code)
+        # B46: RETURN NULL has no semicolon before SELECT @x here (this
+        # literal joins the pieces with a plain space, no newline) — the
+        # SELECT must still survive as its own statement, not be absorbed
+        # into the discarded-value carrier.
+        assert "SELECT v_x;" in out
+        warning_line = next(
+            ln for ln in out.splitlines() if "discarded procedure RETURN value" in ln
+        )
+        assert "SELECT" not in warning_line
 
     def test_return_value_in_function_kept(self) -> None:
         src = (
@@ -1306,6 +1315,77 @@ class TestReturnValueInProcedure:
         assert "RETURN 0;" in out
         assert "RETURN v_x;" in out
         assert "LEAVE" not in out
+
+
+class TestReturnValueBoundary:
+    """B46: a T-SQL ``RETURN <value>`` without a trailing ``;`` must not
+    absorb the statement that follows it into the UNIQUE-1177 discarded-value
+    carrier — T-SQL statements do not require a terminator, so two statements
+    can share one source line."""
+
+    @pytest.mark.parametrize("target", ["mysql", "postgresql"])
+    def test_dml_after_value_return_survives(self, target: str) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p @x INT AS BEGIN "
+            "RETURN 1 "
+            "UPDATE t SET a = 1 "
+            "END"
+        )
+        out = _transpile(src, "tsql", target)
+        # The UPDATE is a real, separate statement -- not swallowed.
+        assert "UPDATE t SET a = 1" in out
+        warning_line = next(
+            ln for ln in out.splitlines() if "discarded procedure RETURN value" in ln
+        )
+        assert "UPDATE" not in warning_line
+        assert "(1)" in warning_line
+
+    @pytest.mark.parametrize("target", ["mysql", "postgresql"])
+    def test_multiple_dml_verbs_after_value_return_all_survive(
+        self, target: str
+    ) -> None:
+        # Neighbor: every DML-start keyword the carrier could swallow.
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "RETURN 1 "
+            "INSERT INTO t (a) VALUES (1) "
+            "END"
+        )
+        out = _transpile(src, "tsql", target)
+        assert "INSERT INTO t (a) VALUES (1)" in out
+        warning_line = next(
+            ln for ln in out.splitlines() if "discarded procedure RETURN value" in ln
+        )
+        assert "INSERT" not in warning_line
+
+    def test_value_return_at_end_of_body_unaffected(self) -> None:
+        # Regression guard: RETURN <value> with nothing after it (the common
+        # case) must still parse and carry only the value, no trailing noise.
+        src = "CREATE PROCEDURE dbo.p AS BEGIN RETURN 1 END"
+        out = _transpile(src, "tsql", "mysql")
+        warning_line = next(
+            ln for ln in out.splitlines() if "discarded procedure RETURN value" in ln
+        )
+        assert "(1)" in warning_line
+
+    def test_parenthesized_value_return_boundary(self) -> None:
+        # A parenthesized subquery value (a genuine SELECT at depth > 0) must
+        # stay in the carrier whole, and the following statement still
+        # survives separately.
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "RETURN (SELECT COUNT(*) FROM t) "
+            "SELECT 1 "
+            "END"
+        )
+        out = _transpile(src, "tsql", "mysql")
+        assert "SELECT 1;" in out
+        warning_line = next(
+            ln for ln in out.splitlines() if "discarded procedure RETURN value" in ln
+        )
+        assert "(SELECT COUNT(*) FROM t)" in warning_line
+        # The second SELECT must not have leaked into the carrier text.
+        assert "SELECT 1" not in warning_line.split("--", 1)[1]
 
 
 class TestInlineCommentInCapturedExpression:

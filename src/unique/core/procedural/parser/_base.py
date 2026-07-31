@@ -1749,17 +1749,22 @@ class ParserBase:
     def _parse_expression_until_semicolon(self) -> ASTNode:
         """Capture a scalar assignment value as raw SQL until a boundary.
 
-        Used for ``SET @var = <expr>``. Besides ';'/END and the usual
-        control-flow boundaries, a DML verb (SELECT/INSERT/UPDATE/DELETE/MERGE)
-        beginning a new line ends the value: a scalar assignment cannot contain
-        a bare statement, so the following statement must not be absorbed (a
-        common shape when T-SQL omits the ';' terminator).
+        Used for ``SET @var = <expr>`` and ``RETURN <expr>``. Besides ';'/END
+        and the usual control-flow boundaries, a DML verb
+        (SELECT/INSERT/UPDATE/DELETE/MERGE) at depth 0 ends the value: a
+        scalar expression can never legally contain a bare statement, so the
+        following statement must not be absorbed — regardless of whether it
+        shares a source line with the value, since T-SQL statements do not
+        require a ';' terminator (mirrors ``_DECLARE_DML_BOUNDARY`` in
+        ``_parse_declare_default``). Exception: a DML verb right after ``FOR``
+        (``SET @cur = CURSOR ... FOR SELECT ...``) is the query clause of a
+        cursor-for-query value, not a new statement, and stays in the capture.
         """
         parts: list[str] = []
         paren_depth = 0
         case_depth = 0
         first = True
-        prev_line: int | None = None
+        prev_tok: Token | None = None
         dml_starts = {"SELECT", "INSERT", "UPDATE", "DELETE", "MERGE"}
         while not self._at_end():
             tok = self._current()
@@ -1779,16 +1784,18 @@ class ParserBase:
                 and self._at_tsql_stmt_boundary()
             ):
                 break
-            # A DML verb on a new line ends the scalar value.
+            # A DML verb terminates the scalar value even on the same source
+            # line (T-SQL semicolons are optional, so two statements can
+            # share one line) — unless it directly follows FOR, the
+            # cursor-for-query connector.
             if (
                 not first
                 and paren_depth == 0
                 and case_depth == 0
+                and self._is_tsql_source()
                 and tok.type == TokenType.KEYWORD
                 and tok.upper_value in dml_starts
-                and prev_line is not None
-                and tok.line is not None
-                and tok.line != prev_line
+                and not (prev_tok is not None and prev_tok.upper_value == "FOR")
             ):
                 break
             if tok.type == TokenType.LPAREN:
@@ -1796,7 +1803,7 @@ class ParserBase:
             elif tok.type == TokenType.RPAREN:
                 paren_depth -= 1
             parts.append(self._flat_value(tok))
-            prev_line = tok.line
+            prev_tok = tok
             first = False
             self._advance()
         raw = " ".join(parts).strip()
