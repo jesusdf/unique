@@ -2,7 +2,7 @@
 
 > **Generated — do not edit by hand.** Produced by `python scripts/generate_reference_docs.py` from the `UNIQUE-NNNN` registry (`src/unique/core/diagnostics.py`) and the rationale side-table (`src/unique/core/rationales.py`). The CI freshness gate (`python scripts/generate_reference_docs.py --check`) fails the build if this file drifts from the source data.
 
-One entry per stable diagnostic code the transpiler can emit. `code` is the grep/suppress token (`-- UNIQUE-1234: …`); every code is anchored as `warnings.md#unique-1234`. A code with a rationale entry (182 of 233) renders as a recipe: **Problem** (the triggering construct), **Solution (pointer)** (what Unique does about it — a pointer, not a worked example: the registry carries no SQL sample), **Discussion** (the engine-level reason no direct mapping exists) and **See Also** (the corpus case or test that proves it). The remaining codes render in a compact table marked `_(rationale pending)_` until a rationale is added (the coverage ratchet in `tests/unit/core/test_diagnostics.py` drives that count down).
+One entry per stable diagnostic code the transpiler can emit. `code` is the grep/suppress token (`-- UNIQUE-1234: …`); every code is anchored as `warnings.md#unique-1234`. A code with a rationale entry (183 of 234) renders as a recipe: **Problem** (the triggering construct), **Solution (pointer)** (what Unique does about it — a pointer, not a worked example: the registry carries no SQL sample), **Discussion** (the engine-level reason no direct mapping exists) and **See Also** (the corpus case or test that proves it). The remaining codes render in a compact table marked `_(rationale pending)_` until a rationale is added (the coverage ratchet in `tests/unit/core/test_diagnostics.py` drives that count down).
 
 ## Diagnostics with a rationale
 
@@ -2190,6 +2190,18 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **See Also.** [`TestTransactionOpenerDegradeCoherence::test_orphan_closer_after_failed_opener_degrades`](../../tests/unit/core/test_transpiler.py)
 
+### <a id="unique-1235"></a>`UNIQUE-1235` — Oracle STANDARD_HASH(x, 'SHA1') (→ PostgreSQL)
+
+**Category:** `expression` · **Message:** Oracle STANDARD_HASH(x, 'SHA1') (the default algorithm) has no core-PostgreSQL equivalent (needs the pgcrypto extension) — see docs/03-unsupported.md
+
+**Problem.** Oracle STANDARD_HASH(x, 'SHA1') (→ PostgreSQL)
+
+**Solution (pointer).** Warned limit — degrades to a NULL carrier; MD5/SHA256/SHA384/SHA512 still map faithfully (byte-for-byte, live-verified).
+
+**Discussion.** STANDARD_HASH defaults to SHA1 when no algorithm argument is given. PostgreSQL 11+ has core md5()/sha256()/sha384()/sha512() (live-verified byte-identical to Oracle's RAWTOHEX(STANDARD_HASH(x, ALG)) for those four algorithms), but no sha1 without the pgcrypto extension, which is not assumed to be installed.
+
+**See Also.** [`TestOracleHashFunctionsToPostgresql::test_standard_hash_sha1_degrades_honestly`](../../tests/integration/test_function_translation.py)
+
 ## Diagnostics without a rationale yet
 
 | Code | Category | Message template | Rationale |
@@ -2246,4 +2258,4 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 | <a id="unique-1230"></a>`UNIQUE-1230` | procedural | procedural parse note; the specific reason is carried at runtime | _(rationale pending)_ |
 | <a id="unique-1232"></a>`UNIQUE-1232` | procedural | procedural transpilation failed (internal error); the routine is preserved; the error is carried at<br>runtime | _(rationale pending)_ |
 
-233 codes across 6 categories (182 with a rationale).
+234 codes across 6 categories (183 with a rationale).
