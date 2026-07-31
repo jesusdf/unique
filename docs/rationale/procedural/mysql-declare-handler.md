@@ -99,10 +99,6 @@ carrier rather than guessing a mapping.
 > classes, multiple handlers, and nested-block handlers.
 
 **See Also.** [`TestMysqlDeclareHandler`](../../../tests/integration/test_pg_source_wave1.py) ·
-`src/unique/core/procedural/transformer/base.py` (`_fold_mysql_handlers`,
-docstring) · [05-procedural-engine.md](../../05-procedural-engine.md)
-("4. ProceduralTransformer", the `TRY...CATCH` ↔ `EXCEPTION WHEN OTHERS THEN`
-mapping-table row) ·
 [`UNIQUE-1171`](../../reference/warnings.md#unique-1171) — no dedicated
 challenge-corpus case exercises `DECLARE HANDLER`, so the examples above are
 drawn from that dedicated integration test.

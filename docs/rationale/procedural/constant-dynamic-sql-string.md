@@ -30,10 +30,10 @@ END
 -- live-compiled VALID
 ```
 
-A **constant** dynamic-SQL string is run back through
-the regular transpilation pipeline and the translated text is spliced back
-into the string literal, so the target engine executes its own dialect at
-runtime (nested translation capped at depth 2, warned beyond). A string
+A **constant** dynamic-SQL string is itself translated using the same rules
+as the surrounding script, and the translated text is spliced back into the
+string literal, so the target engine executes its own dialect at runtime
+(nested translation capped at depth 2, warned beyond). A string
 **built at runtime** (concatenation, parameter values, more than one
 assignment) cannot be translated statically: literal fragments still get
 ordinary fragment-level rewrites, and the statement is flagged with a
@@ -54,6 +54,6 @@ unmodified inside the target engine.
 > template.
 
 **See Also.** [`pg-dyn-count`](../../../tests/fixtures/challenge/challenge_postgresql.sql), [`pg-format-func`](../../../tests/fixtures/challenge/challenge_postgresql.sql), [`ts-sp-executesql`](../../../tests/fixtures/challenge/challenge_sqlserver.sql) ·
-[§6](../../03-unsupported.md) (Dynamic SQL, audit N10/B11, 2026-07-25) ·
+[§6](../../03-unsupported.md) (Dynamic SQL) ·
 [`UNIQUE-1161`](../../reference/warnings.md#unique-1161) ·
 [`UNIQUE-1180`](../../reference/warnings.md#unique-1180).

@@ -28,8 +28,7 @@ EXEC PRC_MED_INS @V_ID = 1, @V_modstamp = @uq_now1;
 
 A general (non-`now()`) expression argument hoists the same way, into a
 variable typed from the callee's own declared parameter type where it can be
-resolved (`_hoist_exec_expression_args`), rather than being restricted to
-the date-function case.
+resolved, rather than being restricted to the date-function case.
 
 **Discussion.** T-SQL's `EXEC`/`EXECUTE` call syntax is simply stricter than
 Oracle's named-association call, which accepts any expression directly. As
@@ -41,8 +40,6 @@ there is no argument-position syntax in T-SQL that would accept it inline.
 > inline expression would have evaluated to at the same point in the routine
 > (same evaluation order, immediately before the call). No warning.
 
-**See Also.** [`TestWave12And13Classes`](../../../tests/integration/test_oracle_source_m4_wave.py) ·
-`src/unique/core/procedural/emitter/tsql.py` (`_emit_call`,
-`_hoist_exec_expression_args`, docstrings) — no dedicated challenge-corpus
-case exercises the expression-argument hoist, so the example above is drawn
-from that dedicated integration test.
+**See Also.** [`TestWave12And13Classes`](../../../tests/integration/test_oracle_source_m4_wave.py) —
+no dedicated challenge-corpus case exercises the expression-argument hoist,
+so the example above is drawn from that dedicated integration test.
