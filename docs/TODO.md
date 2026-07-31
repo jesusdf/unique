@@ -52,16 +52,19 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
   `precision-policy-pending` cases removed from the ledger
   (`my-num-to-str` retagged `documented-inherent`); floor 43→32. Policy
   documented in the `corpus_diff.py` module docstring.
-- **A10-P** — *design DONE 2026-07-31:
-  [`audit/2026-07-31-a10p-procedures-fe-design.md`](../audit/2026-07-31-a10p-procedures-fe-design.md)
-  (33-routine inventory, live-probed effect capture per engine incl. the
-  oracledb refcursor-binding hang gotcha, benign-warning allowlist {1193,
-  1196}, enrolled-floor-up ratchet + no-silent-loss invariant, nightly +3-6
-  min).* Architect decisions taken: PG result-set-proc invalidity = defect
-  (B56, fix not degrade); allowlist approved as designed; func1-freeze
-  approved for P3. Implementation briefs: **A10-P1** (scalar/OUT/table-state
-  start set) → **A10-P2** (result sets after B56) → **A10-P3**
-  (func1-freeze, trigger, TVF).
+- ~~A10-P~~ — DONE (P1+P2 2026-07-31/08-01; P3 stopped at a stable point by
+  maintainer decision 2026-08-01): the procedures-FE harness compares **18 of
+  33 routines nightly** (scalar/OUT/table-state + result sets via per-driver
+  refcursor capture + the func1-freeze lever; proc_26 on oracle/pg only —
+  B60), ledger 15 with re-verified reasons (4 clock-inherent, 4 dynamic-sql,
+  3 degrade-output-clause, generated-key, encoding-inherent, TVF, trigger),
+  `ENROLLED_FLOOR = 18` monotonic-up + the `18+15==33` no-silent-loss
+  invariant. Deferred P3 remainder: none actionable — every non-enrolled
+  routine's blocker is re-verified independent of the harness.
+- **B60** (P2, found during A10-P3, live-verified) — proc_26-shape UPDATE
+  with a self-referencing subquery → MySQL error 1093 at runtime (needs the
+  derived-table wrapper), zero warnings at transpile time. The mysql-target
+  leg of proc_26 is excluded from the harness until fixed.
 - ~~B56~~ — DONE 2026-07-31: PG result-set procs get the shared refcursor rewrite (`INOUT refcursor`, argmode-first for sqlglot; Oracle byte-identical); 12 fixture procs now runnable, live-fetched.
 - ~~B57~~ — DONE 2026-07-31: SHA-n over character args wraps CONVERT_TO in the IR path too; runtime error gone; NVARCHAR/UTF-16 divergence documented inherent.
 - The 29 comparable-but-needs-tables cases enroll later via the `FuncCase`
