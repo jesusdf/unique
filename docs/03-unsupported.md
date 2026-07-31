@@ -798,22 +798,21 @@ only partially supported:
 - **`SET ROWCOUNT n`**: removed with a warning (deprecated; use `TOP`/
   `FETCH FIRST` instead).
 - **Dynamic SQL** (T-SQL `EXEC(...)`/`EXEC sp_executesql`, Oracle
-  `EXECUTE IMMEDIATE`, plpgsql `EXECUTE`): a **constant** SQL string — a
-  literal argument, or a variable whose single assignment is a constant string
-  literal — is **translated through the regular transpilation pipeline** and
-  the translated text is spliced back into the string (audit N10/B11,
-  2026-07-25), so the target engine executes its own dialect at runtime. A
-  string **built at runtime** (concatenation, parameter values, more than one
-  assignment) cannot be translated statically: literal fragments still get the
-  existing fragment-level rewrites, and the statement is flagged with a
-  "review the dynamic SQL" warning. A constant string that does not parse as a
-  single source-dialect statement, and dynamic **routine DDL** (a
-  `CREATE PROCEDURE/FUNCTION/TRIGGER` kept inside a string), are likewise
-  flagged. A **parameterized** run (bind values via `USING` / `sp_executesql`
-  bindings) keeps the established placeholder-level handling and its
-  documented binding limits — the placeholder spelling belongs to the target's
-  execution form, so the content is not statically re-translated. Nested
-  embedded translation is capped at depth 2 (warned beyond).
+  `EXECUTE IMMEDIATE`, plpgsql `EXECUTE`): a **constant** SQL string
+  converts through the regular transpilation pipeline — see
+  [the rationale article](rationale/procedural/constant-dynamic-sql-string.md).
+  A string **built at runtime** (concatenation, parameter values, more than
+  one assignment) is a genuine limit: it cannot be translated statically,
+  so literal fragments still get the existing fragment-level rewrites and
+  the statement is flagged with a "review the dynamic SQL" warning. A
+  constant string that does not parse as a single source-dialect
+  statement, and dynamic **routine DDL** (a `CREATE PROCEDURE/FUNCTION/
+  TRIGGER` kept inside a string), are likewise flagged. A **parameterized**
+  run (bind values via `USING` / `sp_executesql` bindings) keeps the
+  established placeholder-level handling and its documented binding
+  limits — the placeholder spelling belongs to the target's execution
+  form, so the content is not statically re-translated. Nested embedded
+  translation is capped at depth 2 (warned beyond).
 - **`IF [NOT] EXISTS(…)` DDL guards** (idempotent migration scripts) and the
   narrower **column-existence guard** (`sys.columns`-gated `ALTER TABLE ...
   ADD`/`ALTER COLUMN`) both convert — the catalog condition drops to the
