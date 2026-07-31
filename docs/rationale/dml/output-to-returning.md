@@ -18,8 +18,8 @@ INSERT INTO t (n) OUTPUT INSERTED.id, INSERTED.n VALUES (10), (20)
 ```
 
 PostgreSQL: `RETURNING` with the `INSERTED`/`DELETED`
-qualifier stripped from each item (`_prefix_tsql_output_items` performs the
-reverse: it re-adds the qualifier when going the other direction). Oracle:
+qualifier stripped from each item (going the other direction, from
+PostgreSQL to T-SQL, the qualifier is re-added). Oracle:
 the `INSERT`/`UPDATE`/`DELETE` itself still runs; the `OUTPUT` result set is
 documented in a carrier + warning rather than attempted.
 

@@ -34,8 +34,7 @@ native `UNPIVOT` re-derives it from the `IN`-list identifier, and Oracle
 folds an unquoted identifier to upper case, so Oracle's native `UNPIVOT`
 yields `'A'` where T-SQL's yields `'a'` for the same source. The `UNION ALL`
 rewrite instead emits an explicit string literal cased exactly as the
-*source* engine would produce it, so the value matches across engines
-(`emit_relations.py::_emit_unpivot_relation` docstring).
+*source* engine would produce it, so the value matches across engines.
 
 > **Note** faithful — values verified equal on
 > Oracle/PostgreSQL/MySQL. `[limit]` (warned carrier) when the source

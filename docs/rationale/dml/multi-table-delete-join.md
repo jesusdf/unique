@@ -19,7 +19,7 @@ DELETE t1 FROM redb_d1 t1 JOIN redb_d2 t2 ON t1.id = t2.id WHERE t2.flag = 1
 ```
 
 PostgreSQL: `DELETE FROM t1 USING t2 WHERE …`. T-SQL:
-`DELETE t1 FROM t1, t2 WHERE …` (comma-joined, per `_emit_delete`). Oracle:
+`DELETE t1 FROM t1, t2 WHERE …` (comma-joined). Oracle:
 `DELETE FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE …)` — exact when the
 `WHERE` clause **is** the join condition (the target's own columns stay
 visible inside the correlated subquery).

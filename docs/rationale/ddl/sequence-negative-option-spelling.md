@@ -27,8 +27,7 @@ with no equivalent on any other engine) is dropped.
 semantic one: Oracle's grammar rejects the two-word form outright
 (`ORA-03049`, "SQL keyword 'NO' is not syntactically valid").
 
-> **Note** faithful (a spelling fix, not a semantic
-> degrade). The earlier defect emitted the two-word form verbatim into Oracle,
-> which failed to parse — a real defect, not an approved limit.
+> **Note** faithful — a spelling fix, not a semantic
+> degrade.
 
 **See Also.** [`reda-ts-sequence-no-cycle`](../../../tests/fixtures/challenge/challenge_sqlserver.sql), [`ora-sequence-options`](../../../tests/fixtures/challenge/challenge_oracle.sql).

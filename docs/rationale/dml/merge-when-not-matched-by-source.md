@@ -24,7 +24,7 @@ Each `WHEN NOT MATCHED BY SOURCE` clause becomes a
 <using> WHERE <on>) [AND (<condition>)]` — run after the `MERGE`. Because the
 follow-up's anti-join addresses exactly the rows the `MERGE` itself cannot
 touch, the two-statement split is value-equivalent to a single native
-statement (`emit.py::_merge_extended_clauses` docstring).
+statement.
 
 **Discussion.** `WHEN NOT MATCHED BY SOURCE` exists
 nowhere else (PostgreSQL only gained it in 17, and Unique's PG target does

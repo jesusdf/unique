@@ -34,20 +34,13 @@ comma join carries no `ON` clause to promote into `INNER JOIN`, so it becomes
 `CROSS JOIN` (the faithful unfiltered Cartesian product) plus the original
 predicate in `WHERE`, never a guessed `INNER JOIN` — emitting `INNER JOIN` with
 no `ON` is invalid on every target, and inferring one from an unrelated
-`WHERE` predicate would silently change which rows survive. `(+)` similarly
+`WHERE` predicate would change which rows survive. `(+)` similarly
 becomes an explicit `LEFT JOIN … ON`, with the marked side moved to the
-outer/right position: an early version emitted `INNER JOIN` with no `ON` at
-all here too — a syntax error on PostgreSQL/MySQL/T-SQL and a silent
-LEFT→INNER semantic change everywhere.
+outer/right position, so the optional side stays optional on every target.
 
 > **Note** faithful — live-verified identical rows on Oracle, PostgreSQL,
 > MySQL and T-SQL (see above).
 
-**See Also.** [`tests/unit/core/test_oracle_join_mark.py`](../../../tests/unit/core/test_oracle_join_mark.py)
-(note: this test lives in `tests/unit/core/`, not `tests/integration/`) ·
-challenge `red2-ora-plus-outer-join-dup` (`tests/fixtures/challenge/challenge_oracle.sql`,
-tagged `[fixed]`) is a **related but distinct**, already-fixed defect — a
-table with *two* `(+)` predicates used to duplicate that table's join into an
-extra `CROSS JOIN` — which this single-predicate mechanism never exhibited ·
+**See Also.** [`tests/unit/core/test_oracle_join_mark.py`](../../../tests/unit/core/test_oracle_join_mark.py) ·
 [§7](../../03-unsupported.md) "To Oracle" (the reverse-direction
 parenthesized-join-tree gate).

@@ -42,12 +42,10 @@ WHERE id = 1;
 The `qty` column (a plain `INT`, not `BIT`) keeps its integer literal on
 every target — only the columns the script itself declared `BIT` are
 rewritten. The same script transpiled `tsql -> mysql` keeps `1`/`0`
-verbatim (`test_mysql_keeps_integer_literals`): MySQL's own `BIT`/`TINYINT`
-already accepts integer literals natively, so no coercion is needed there.
-The coercion also reaches an `INSERT` embedded in a stored procedure body
-(`test_procedure_body_insert_coerced_for_postgresql`), which goes through a
-separate (embedded-DML) code path from top-level statements but consults
-the same harvested column-type map:
+verbatim: MySQL's own `BIT`/`TINYINT` already accepts integer literals
+natively, so no coercion is needed there. The coercion also reaches an
+`INSERT` embedded in a stored procedure body, using the same column-type
+information gathered from the script's own `CREATE TABLE`:
 
 ```sql
 -- tsql -> postgresql, INSERT inside CREATE PROCEDURE dbo.mk @id INT AS BEGIN ... END
@@ -57,11 +55,11 @@ INSERT INTO invoice (id, is_paid) VALUES (v_id, FALSE);
 **Discussion.** A bare `0`/`1` literal carries no type information by
 itself — the only way to know it must become `TRUE`/`FALSE` is to already
 know, from an earlier statement, that the column it is being written to was
-declared `BIT`. Unique's converter harvests every column's declared type as
-it walks the script (`CREATE TABLE`) and keeps consulting that map for
-every later `INSERT`/`UPDATE`/`DEFAULT`, in or out of a procedure body —
-this is why the entry is schema-state-driven rather than a plain per-call
-literal rewrite.
+declared `BIT`. Unique tracks every column's declared type from its
+`CREATE TABLE` and keeps consulting that for every later
+`INSERT`/`UPDATE`/`DEFAULT`, in or out of a procedure body, so the coercion
+follows the column's declared type wherever it is written to, not just at
+the point where the type was declared.
 
 > **Note** faithful — same boolean value, spelled in each target's own
 > literal domain; MySQL is deliberately left untouched because its `BIT`
