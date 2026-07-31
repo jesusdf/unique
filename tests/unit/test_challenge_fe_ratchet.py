@@ -23,8 +23,17 @@ from tests.helpers.corpus_diff import is_comparable
 
 # Measured 2026-07-31 at the B36b/B45 merge base (43 excluded cases: 25
 # defect-pending-fix, 12 precision-policy-pending, 4 documented-inherent, 2
-# session-dependent). Monotonic downward only.
-LEDGER_SIZE_FLOOR = 43
+# session-dependent).
+#
+# 2026-07-31 (brief A10-T2): the comparator gained a coarser-operand-precision
+# numeric tolerance (see ``tests/helpers/corpus_diff.py`` module docstring),
+# live-verified to clear 11 of the 12 precision-policy-pending cases (removed
+# from the ledger); the 12th (``my-num-to-str``) survives — its numbers are
+# embedded in text, out of the comparator's scope by design — and moved to
+# ``documented-inherent``. New count: 25 defect-pending-fix, 0
+# precision-policy-pending, 5 documented-inherent, 2 session-dependent = 32.
+# Monotonic downward only.
+LEDGER_SIZE_FLOOR = 32
 
 
 def _eligible_cases() -> list[CorpusEntry]:
