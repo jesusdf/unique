@@ -41,7 +41,14 @@ from tests.helpers.corpus_diff import is_comparable
 # (my-dateadd, my-str-plus-interval), and Oracle FOR UPDATE over an unlockable
 # view (postgresql-qdrop). 8 cases removed: 17 defect-pending-fix, 5
 # documented-inherent, 2 session-dependent = 24. Monotonic downward only.
-LEDGER_SIZE_FLOOR = 24
+#
+# 2026-07-31 (brief T4-B, second BLUE round over defect-pending-fix): MySQL
+# string-function value fidelity — the INSERT() out-of-range bounds guard
+# generalized to Oracle/PG targets (my-insert-oob, my-insert-zeropos) and float
+# length/count operands rounded on every target (my-left-float, my-repeat-float:
+# Oracle SUBSTR/RPAD truncated, PG rejected the numeric length). 4 removed: 13
+# defect-pending-fix, 5 documented-inherent, 2 session-dependent = 20.
+LEDGER_SIZE_FLOOR = 20
 
 
 def _eligible_cases() -> list[CorpusEntry]:

@@ -1868,6 +1868,19 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             _rp_n = f"ROUND({_rp_n}, 0)"
             _rp_n = f"CASE WHEN {_rp_n} < 0 THEN 0 ELSE {_rp_n} END"
         return f"REPLICATE({_rp_s}, {_rp_n})"
+    # MySQL rounds a float REPEAT count (REPEAT('ab',2.9)='ababab'); PostgreSQL
+    # REPEAT needs an INTEGER count (``repeat(text, numeric)`` does not exist)
+    # and returns '' for a negative one. Round and cast to INTEGER.
+    if (
+        fn_name == "REPEAT"
+        and dialect == "postgresql"
+        and SOURCE_DIALECT.get() == "mysql"
+        and len(node.args) == 2
+        and not _is_nonneg_int_literal(node.args[1])
+    ):
+        _rp_s = _emit_expression(node.args[0], dialect)
+        _rp_n = _emit_expression(node.args[1], dialect)
+        return f"REPEAT({_rp_s}, CAST(ROUND({_rp_n}) AS INTEGER))"
     # MySQL rounds a float LEFT length (LEFT('hello', 2.9) = 'hel') and returns
     # '' for a negative one; T-SQL LEFT truncates the float and errors on a
     # negative. Round (with the scale T-SQL needs) and clamp.
@@ -1881,18 +1894,23 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         _lf_s = _emit_expression(node.args[0], dialect)
         _lf_n = f"ROUND({_emit_expression(node.args[1], dialect)}, 0)"
         return f"LEFT({_lf_s}, CASE WHEN {_lf_n} < 0 THEN 0 ELSE {_lf_n} END)"
-    # MySQL LEFT with a negative length returns '' ; PostgreSQL reads a negative
-    # length as "all but the last |n|". Clamp to 0 to preserve the empty string.
+    # MySQL LEFT rounds a float length (LEFT('hello',2.9)='hel') and returns ''
+    # for a negative one; PostgreSQL LEFT needs an INTEGER length
+    # (``left(text, numeric)`` does not exist) and reads a negative length as
+    # "all but the last |n|". Round, clamp to 0, and cast to INTEGER.
     if (
         fn_name == "LEFT"
         and SOURCE_DIALECT.get() == "mysql"
         and dialect == "postgresql"
         and len(node.args) == 2
-        and not _is_nonneg_literal(node.args[1])
+        and not _is_nonneg_int_literal(node.args[1])
     ):
         _lf_s = _emit_expression(node.args[0], dialect)
         _lf_n = _emit_expression(node.args[1], dialect)
-        return f"LEFT({_lf_s}, CASE WHEN {_lf_n} < 0 THEN 0 ELSE {_lf_n} END)"
+        return (
+            f"LEFT({_lf_s}, CAST(CASE WHEN ROUND({_lf_n}) < 0 THEN 0 "
+            f"ELSE ROUND({_lf_n}) END AS INTEGER))"
+        )
     # The reverse: PostgreSQL LEFT with a negative length returns "all but the
     # last |n|" (LEFT('abc', -1) = 'ab'); MySQL returns '' for a negative
     # length, and T-SQL/Oracle error/NULL on it. Reproduce PostgreSQL's
@@ -3204,6 +3222,13 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         # string, n=0 returns '' which Oracle treats as NULL either way).
         s = _emit_expression(node.args[0], dialect)
         n = _emit_expression(node.args[1], dialect)
+        # MySQL rounds a float length (LEFT('hello',2.9)='hel'); Oracle SUBSTR
+        # truncates, so round to match. A provably non-negative integer literal
+        # needs no rounding.
+        if SOURCE_DIALECT.get() == "mysql" and not _is_nonneg_int_literal(
+            node.args[1]
+        ):
+            n = f"ROUND({n})"
         return f"SUBSTR({s}, 1, {n})"
     if up == "INITCAP" and node.args and dialect in ("oracle", "postgresql"):
         # Oracle and PG INITCAP take a single argument; sqlglot appends a
@@ -3436,6 +3461,10 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return (
                 f"RPAD({s}, LENGTH({s}) * {n}, {s})"  # exact, incl. n=0 -> '' (NULL).
             )
+        # MySQL rounds a float count (REPEAT('ab',2.9)='ababab'); Oracle's
+        # RPAD length truncates, so round first to match.
+        if SOURCE_DIALECT.get() == "mysql":
+            n = f"ROUND({n})"
         # A non-literal count may be negative at runtime; clamp so it yields ''.
         return f"RPAD({s}, GREATEST(LENGTH({s}) * {n}, 0), {s})"
     # MySQL INSERT() returns the original string when the position is 0 or past
@@ -3461,12 +3490,24 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     if up == "STUFF" and len(node.args) == 4 and dialect != "tsql":
         s, start, length, new = (_emit_expression(a, dialect) for a in node.args)
         if dialect == "mysql":
-            return f"INSERT({s}, {start}, {length}, {new})"
-        if dialect == "postgresql":
-            return f"OVERLAY({s} PLACING {new} FROM {start} FOR {length})"
-        return (
-            f"(SUBSTR({s}, 1, {start} - 1) || {new} || SUBSTR({s}, {start} + {length}))"
-        )
+            core = f"INSERT({s}, {start}, {length}, {new})"
+        elif dialect == "postgresql":
+            core = f"OVERLAY({s} PLACING {new} FROM {start} FOR {length})"
+        else:
+            core = (
+                f"(SUBSTR({s}, 1, {start} - 1) || {new} || "
+                f"SUBSTR({s}, {start} + {length}))"
+            )
+        # MySQL INSERT() returns the original string when the position is 0 or
+        # past the string's end (PG OVERLAY errors on a 0/negative start, the
+        # Oracle SUBSTR-concat silently mis-splices); guard the bounds so the
+        # MySQL value is preserved (the in-bounds case is identical).
+        if SOURCE_DIALECT.get() == "mysql":
+            return (
+                f"CASE WHEN {start} < 1 OR {start} > LENGTH({s}) THEN {s} "
+                f"ELSE {core} END"
+            )
+        return core
     if dialect == "postgresql" and up == "MEDIAN" and len(node.args) == 1:
         x = _emit_expression(node.args[0], dialect)
         return f"PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY {x})"

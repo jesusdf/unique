@@ -536,31 +536,48 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
         "oracle": {"degrade": True},
         "postgresql": {"degrade": True},
     },
+    # MySQL INSERT() returns the original string when the position is out of
+    # range (0 or > length); every target guards the bounds so the value
+    # survives (pos 10 > len 3 -> 'abc' unchanged, live-verified).
     "my-insert-oob": {
         "tsql": {
-            "present": ["STUFF('abc', 10, 1, 'X')"],
+            "present": ["10 > LEN('abc') THEN 'abc'", "STUFF('abc', 10, 1, 'X')"],
             "absent": ["INSERT("],
         },
         "oracle": {
-            "present": ["(SUBSTR('abc', 1, 10 - 1) || 'X' || SUBSTR('abc', 10 + 1))"],
+            "present": [
+                "10 > LENGTH('abc') THEN 'abc'",
+                "(SUBSTR('abc', 1, 10 - 1) || 'X' || SUBSTR('abc', 10 + 1))",
+            ],
             "absent": ["INSERT("],
         },
         "postgresql": {
-            "present": ["OVERLAY('abc' PLACING 'X' FROM 10 FOR 1)"],
+            "present": [
+                "10 > LENGTH('abc') THEN 'abc'",
+                "OVERLAY('abc' PLACING 'X' FROM 10 FOR 1)",
+            ],
             "absent": ["INSERT("],
         },
     },
+    # Position 0 is out of range too: the guard returns the original string
+    # (also avoids PG OVERLAY's "negative substring length" error at FROM 0).
     "my-insert-zeropos": {
         "tsql": {
-            "present": ["STUFF('abcdef', 0, 2, 'XY')"],
+            "present": ["0 > LEN('abcdef') THEN 'abcdef'", "STUFF('abcdef', 0, 2, 'XY')"],
             "absent": ["INSERT("],
         },
         "oracle": {
-            "present": ["SUBSTR('abcdef', 1, 0 - 1) || 'XY'"],
+            "present": [
+                "0 > LENGTH('abcdef') THEN 'abcdef'",
+                "SUBSTR('abcdef', 1, 0 - 1) || 'XY'",
+            ],
             "absent": ["INSERT("],
         },
         "postgresql": {
-            "present": ["OVERLAY('abcdef' PLACING 'XY' FROM 0 FOR 2)"],
+            "present": [
+                "0 > LENGTH('abcdef') THEN 'abcdef'",
+                "OVERLAY('abcdef' PLACING 'XY' FROM 0 FOR 2)",
+            ],
             "absent": ["INSERT("],
         },
     },
@@ -689,6 +706,34 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
         "postgresql": {
             "present": ["POSITION(LOWER('') IN LOWER('abc'))"],
             "absent": ["LOCATE"],
+        },
+    },
+    # MySQL rounds a float length/count arg (LEFT('hello',2.9)='hel',
+    # REPEAT('ab',2.9)='ababab'); Oracle SUBSTR/RPAD truncate and PG rejects a
+    # numeric length outright, so every target must ROUND the operand.
+    "my-left-float": {
+        "tsql": {"present": ["ROUND(2.9, 0)"], "absent": ["LEFT('hello', 2.9)"]},
+        "oracle": {
+            "present": ["SUBSTR('hello', 1, ROUND(2.9))"],
+            "absent": ["SUBSTR('hello', 1, 2.9)"],
+        },
+        "postgresql": {
+            "present": ["CAST(CASE WHEN ROUND(2.9) < 0 THEN 0 ELSE ROUND(2.9) END AS INTEGER)"],
+            "absent": ["LEFT('hello', 2.9)"],
+        },
+    },
+    "my-repeat-float": {
+        "tsql": {
+            "present": ["REPLICATE('ab', CASE WHEN ROUND(2.9, 0)"],
+            "absent": ["REPEAT"],
+        },
+        "oracle": {
+            "present": ["RPAD('ab', GREATEST(LENGTH('ab') * ROUND(2.9), 0), 'ab')"],
+            "absent": ["REPEAT"],
+        },
+        "postgresql": {
+            "present": ["REPEAT('ab', CAST(ROUND(2.9) AS INTEGER))"],
+            "absent": ["REPEAT('ab', 2.9)"],
         },
     },
     "my-log-2arg": {

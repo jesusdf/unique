@@ -124,30 +124,6 @@ LEDGER: tuple[Excluded, ...] = (
         sql="SELECT CONVERT('abc',BINARY), CONVERT('abc' USING latin1), CAST('abc' AS BINARY)",
     ),
     Excluded(
-        id="my-insert-oob",
-        tag="defect-pending-fix",
-        reason="out-of-bounds INSERT() emulation not guarded",
-        sql="SELECT INSERT('abc', 10, 1, 'X') AS r",
-    ),
-    Excluded(
-        id="my-insert-zeropos",
-        tag="defect-pending-fix",
-        reason="INSERT() at position 0 / negative substring length",
-        sql="SELECT INSERT('abcdef', 0, 2, 'XY') AS r",
-    ),
-    Excluded(
-        id="my-left-float",
-        tag="defect-pending-fix",
-        reason="float length arg: MySQL rounds, emulation truncates / left(unknown,numeric)",
-        sql="SELECT LEFT('hello', 2.9) AS r",
-    ),
-    Excluded(
-        id="my-repeat-float",
-        tag="defect-pending-fix",
-        reason="float count arg: MySQL rounds, emulation truncates",
-        sql="SELECT REPEAT('ab', 2.9) AS r",
-    ),
-    Excluded(
         id="my-ts-to-date",
         tag="defect-pending-fix",
         reason="Oracle DATE keeps the time component (DATE() should drop it)",
