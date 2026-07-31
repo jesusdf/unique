@@ -33,7 +33,8 @@ Brief A10-P3 additions: ``RoutineCase.freeze_func1`` pins the fixture's
 bare ``SELECT`` (the secondary result set is discarded, not compared — see
 ``_call_table_state_with_rs_tail``); ``targets`` restricts a case to a subset
 of ``TARGETS`` when it is comparable on some but hits an unrelated, documented
-defect on another (see ``proc_26`` in ``procedures_fe_spec.py``).
+defect on another (``proc_26`` used this for MySQL until brief B60 fixed the
+underlying defect and re-enrolled it on every target).
 """
 
 from __future__ import annotations

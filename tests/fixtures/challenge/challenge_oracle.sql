@@ -503,6 +503,9 @@ SELECT id,col,val FROM (SELECT 1 id,10 a,20 b FROM DUAL) UNPIVOT (val FOR col IN
 -- CASE[fixed]: ora-upd-correlated — wrap the target's self-reference in a derived table (FROM (SELECT * FROM t) x) so MySQL allows the correlated subquery; live-verified (1,NULL),(2,10),(3,20).
 CREATE TABLE t (id NUMBER, n NUMBER);UPDATE t SET n=(SELECT MAX(n) FROM t x WHERE x.id<t.id)
 
+-- CASE[fixed]: ora-upd-selfref-where — brief B60: the self-reference also needs wrapping when it sits in the WHERE clause (IN/EXISTS), not only in a SET scalar subquery — same MySQL error 1093 ("You can't specify target table for update in FROM clause"), zero warnings before the fix. Live-verified.
+CREATE TABLE t (id NUMBER, k NUMBER, flag NUMBER);CREATE TABLE s (k NUMBER);UPDATE t SET flag=0 WHERE flag=1 AND id IN (SELECT x.id FROM t x INNER JOIN s ON s.k=x.k WHERE x.flag=1)
+
 -- CASE[fixed]: ora-user-context — fails on mysql, postgresql, tsql. (195, b"'SYS_CONTEXT' is not a recognized built-in function name.DB-Lib error message 2001
 SELECT USER, SYS_CONTEXT('USERENV','SESSION_USER') FROM DUAL
 

@@ -29,8 +29,8 @@ from tests.helpers.procedures_fe_spec import ENROLLED, discover_routines
 # proc_16/18, proc_19/21, proc_22/24, proc_27 (table_state); proc_1/3/5
 # (result sets — refcursor OUT on Oracle, refcursor INOUT on PG since B56,
 # direct on MySQL); proc_4 + proc_26 (func1-freeze table_state; proc_26 on
-# oracle/postgresql only — MySQL hits an unwarned 1093 self-ref-subquery
-# defect, see the spec comment).
+# all four targets since brief B60 fixed the MySQL 1093 self-ref-subquery
+# defect — see the spec comment).
 # Ledger = 15 (33 - 18): 4 nondeterministic-clock (func1/func2 kept for
 # inherent reasons + proc_6 encoding, proc_25 embedded-dml-fallback), 4
 # dynamic-sql, 3 degrade-output-clause (incl. proc_2 retagged), 1

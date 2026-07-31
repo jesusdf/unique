@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import dataclasses
 import re
+from collections.abc import Callable
 
 import sqlglot
 import sqlglot.expressions as exp
@@ -2844,33 +2845,105 @@ def _emit_upsert_merge(
     return merge + note
 
 
-def _wrap_mysql_update_self_ref(val: ASTNode, target: str) -> ASTNode:
-    """MySQL error 1093: a subquery in SET can't select FROM the UPDATE target.
-    Wrap an aliased target-table FROM reference in a derived table
-    (``FROM t x`` -> ``FROM (SELECT * FROM t) x``) to force materialization so
-    the correlated subquery is allowed; the outer correlation is unaffected."""
-    if not isinstance(val, SubqueryExpression):
-        return val
-    sel = val.query
-    fc = sel.from_clause
-    if (
-        isinstance(fc, TableRef)
-        and fc.function is None
-        and fc.name == target
-        and fc.alias
-        and fc.alias != target
-    ):
-        derived = SubqueryExpression(
-            query=SelectStatement(
-                columns=(Star(),),
-                from_clause=dataclasses.replace(fc, alias=None),
-            ),
-            alias=fc.alias,
+#: Every shape a SELECT's FROM/JOIN source can be — the wrap is a no-op on
+#: anything but a bare matching ``TableRef``, so it is safe to type the
+#: relation-level helper over this whole union.
+_RelationRef = TableRef | SubqueryExpression | UnpivotRelation | PivotRelation | None
+
+
+def _wrap_self_ref_relation(
+    rel: _RelationRef, target: str, next_alias: Callable[[], str]
+) -> _RelationRef:
+    """Materialize a bare reference to *target* (MySQL error 1093: a subquery
+    of an UPDATE/DELETE can't select FROM the very table being written) in a
+    derived table (``FROM t x`` -> ``FROM (SELECT * FROM t) x``). A relation
+    with its own alias keeps it, so existing qualified references (``x.id``)
+    stay valid; an unaliased self-reference gets a fresh synthesized alias
+    from *next_alias* (the ``uq_`` family) since nothing else can be pointing
+    at it by name. A relation aliased to the *same* name as the target (no
+    way to distinguish inner from outer) is left alone."""
+    if not (isinstance(rel, TableRef) and rel.function is None and rel.name == target):
+        return rel
+    if rel.alias == target:
+        return rel
+    alias = rel.alias or next_alias()
+    return SubqueryExpression(
+        query=SelectStatement(
+            columns=(Star(),),
+            from_clause=dataclasses.replace(rel, alias=None),
+        ),
+        alias=alias,
+    )
+
+
+def _wrap_mysql_self_ref_tree(
+    value: object, target: str, next_alias: Callable[[], str]
+) -> object:
+    """Recursively wrap every direct self-reference to *target* reachable
+    from *value* (a SET value or a WHERE tree) in a derived table — MySQL
+    error 1093. A self-reference can sit behind IN/EXISTS/a scalar comparison,
+    more than one can appear in the same statement, and one subquery can nest
+    inside another; this descends through every reachable subquery (its own
+    FROM *and* JOINs), not just the statement's immediate one. A relation
+    that isn't a bare reference to *target* is left untouched."""
+    if isinstance(value, SubqueryExpression):
+        sel = _wrap_mysql_self_ref_tree(value.query, target, next_alias)
+        assert isinstance(sel, SelectStatement)
+        new_from = _wrap_self_ref_relation(sel.from_clause, target, next_alias)
+        new_joins = []
+        joins_changed = False
+        for j in sel.joins:
+            new_table = _wrap_self_ref_relation(j.table, target, next_alias)
+            if (
+                isinstance(new_table, (TableRef, SubqueryExpression))
+                and new_table is not j.table
+            ):
+                j = dataclasses.replace(j, table=new_table)
+                joins_changed = True
+            new_joins.append(j)
+        if new_from is not sel.from_clause or joins_changed:
+            sel = dataclasses.replace(sel, from_clause=new_from, joins=tuple(new_joins))
+        return value if sel is value.query else dataclasses.replace(value, query=sel)
+    if isinstance(value, tuple):
+        new = tuple(_wrap_mysql_self_ref_tree(v, target, next_alias) for v in value)
+        return (
+            new if any(a is not b for a, b in zip(new, value, strict=True)) else value
         )
-        return dataclasses.replace(
-            val, query=dataclasses.replace(sel, from_clause=derived)
-        )
-    return val
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        changes = {
+            f.name: nv
+            for f in dataclasses.fields(value)
+            if (
+                nv := _wrap_mysql_self_ref_tree(
+                    getattr(value, f.name), target, next_alias
+                )
+            )
+            is not getattr(value, f.name)
+        }
+        return dataclasses.replace(value, **changes) if changes else value
+    return value
+
+
+def _wrap_mysql_update_self_ref(node: ASTNode, target: str, dialect: str) -> ASTNode:
+    """Public entry: wrap every direct self-reference to *target* reachable
+    from *node* (an UPDATE's SET value, or an UPDATE/DELETE's WHERE tree) in a
+    derived table so MySQL accepts the subquery (error 1093, "You can't
+    specify target table ... for update in FROM clause") — a no-op on every
+    other target. Each call gets its own alias counter so two unaliased
+    self-references in the same tree don't collide. Callers invoke this
+    unconditionally (the dialect check lives here, once, instead of at every
+    call site)."""
+    if dialect != "mysql":
+        return node
+    counter = [0]
+
+    def next_alias() -> str:
+        counter[0] += 1
+        return "uq_sr" if counter[0] == 1 else f"uq_sr{counter[0]}"
+
+    result = _wrap_mysql_self_ref_tree(node, target, next_alias)
+    assert isinstance(result, ASTNode)
+    return result
 
 
 def _emit_join_table_ref(table: TableRef | SubqueryExpression, dialect: str) -> str:
@@ -3016,7 +3089,11 @@ def _emit_update_mysql_join(
         result += f"\n{jc}"
     result += f"\nSET {sets}"
     if node.where is not None:
-        result += f"\nWHERE {_emit_condition(node.where, dialect)}"
+        # A WHERE-embedded subquery can independently self-reference the
+        # target (error 1093) regardless of the cross-table JOIN structure
+        # above — same materialization fix as the single-table UPDATE.
+        where = _wrap_mysql_update_self_ref(node.where, target.name, dialect)
+        result += f"\nWHERE {_emit_condition(where, dialect)}"
     return result
 
 

@@ -26,8 +26,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### T-SQL as source
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot) | [`MERGE` / upsert lowering](#merge--upsert-lowering) | [Multi-table `DELETE`](#multi-table-delete) | [Multi-join `UPDATE`](#multi-join-update) | [`OUTPUT` / `RETURNING`](#output--returning) | [Set-operation `ORDER BY`](#set-operation-order-by) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction) | [Recursive CTE synthesis](#recursive-cte-synthesis) | [Conditional expression translation](#conditional-expression-translation) | [Literal parsing recovery](#literal-parsing-recovery) |
-|---|---|---|---|---|---|---|---|---|---|
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot) | [`MERGE` / upsert lowering](#merge--upsert-lowering) | [Multi-table `DELETE`](#multi-table-delete) | [Multi-join `UPDATE`](#multi-join-update) | [`OUTPUT` / `RETURNING`](#output--returning) | [Set-operation `ORDER BY`](#set-operation-order-by) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction) | [Recursive CTE synthesis](#recursive-cte-synthesis) | [Conditional expression translation](#conditional-expression-translation) | [Self-referencing `UPDATE`/`DELETE` subquery (MySQL)](#self-referencing-updatedelete-subquery-mysql) | [Literal parsing recovery](#literal-parsing-recovery) |
+|---|---|---|---|---|---|---|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
 
@@ -87,6 +87,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [T-SQL `IIF(cond, a, b)` / MySQL `IF(cond, a, b)` → Oracle/PostgreSQL searched `CASE`](iif-to-case-or-native.md) | tsql/mysql → oracle/postgresql | T-SQL's `IIF(cond, a, b)` and MySQL's `IF(cond, a, b)` are both a three-argument ternary conditional expression — neither function exists on Oracle or PostgreSQL, so carrying either name across verbatim would be an unresolved-function error there. |
 
+#### Self-referencing `UPDATE`/`DELETE` subquery (MySQL)
+
+| Article | Direction | Description |
+|---|---|---|
+| [A subquery reading its own `UPDATE`/`DELETE` target → MySQL derived-table wrap](mysql-update-delete-self-reference.md) | all → mysql | MySQL rejects a subquery — anywhere in an `UPDATE`'s `SET` or `WHERE` clause, or a `DELETE`'s `WHERE` clause — that reads from the very table being written, with error 1093 ("You can't specify target table 't' for update in FROM clause"). |
+
 #### Literal parsing recovery
 
 | Article | Direction | Description |
@@ -144,8 +150,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### Oracle as source
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-2) | [Row-value comparisons](#row-value-comparisons-1) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-2) |
-|---|---|---|
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-2) | [Row-value comparisons](#row-value-comparisons-1) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-2) | [Self-referencing `UPDATE`/`DELETE` subquery (MySQL)](#self-referencing-updatedelete-subquery-mysql-1) |
+|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
 
@@ -166,6 +172,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [`FROM DUAL` synthesis and removal (bidirectional)](from-dual.md) | oracle ↔ all | Oracle has no table-less `SELECT` — `SELECT 1` is `ORA-00923` — so every scalar `SELECT` needs a `FROM` clause; Oracle's answer is `DUAL`, a one-row system table. |
+
+#### Self-referencing `UPDATE`/`DELETE` subquery (MySQL)
+
+| Article | Direction | Description |
+|---|---|---|
+| [A subquery reading its own `UPDATE`/`DELETE` target → MySQL derived-table wrap](mysql-update-delete-self-reference.md) | all → mysql | MySQL rejects a subquery — anywhere in an `UPDATE`'s `SET` or `WHERE` clause, or a `DELETE`'s `WHERE` clause — that reads from the very table being written, with error 1093 ("You can't specify target table 't' for update in FROM clause"). |
 
 ### Oracle as target
 
@@ -244,8 +256,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### PostgreSQL as source
 
-| [Multi-join `UPDATE`](#multi-join-update-2) | [Row-value comparisons](#row-value-comparisons-2) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-4) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-2) | [Positional GROUP BY resolved to a column name](#positional-group-by-resolved-to-a-column-name-1) |
-|---|---|---|---|---|
+| [Multi-join `UPDATE`](#multi-join-update-2) | [Row-value comparisons](#row-value-comparisons-2) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-4) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-2) | [Positional GROUP BY resolved to a column name](#positional-group-by-resolved-to-a-column-name-1) | [Self-referencing `UPDATE`/`DELETE` subquery (MySQL)](#self-referencing-updatedelete-subquery-mysql-2) |
+|---|---|---|---|---|---|
 
 #### Multi-join `UPDATE`
 
@@ -277,6 +289,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [`GROUP BY 1` (positional ordinal) → the actual `SELECT`-list column name](group-by-ordinal-resolved.md) | postgresql → tsql | PostgreSQL accepts a positional ordinal in `GROUP BY` — `GROUP BY 1` groups by whatever the first `SELECT`-list expression is. |
+
+#### Self-referencing `UPDATE`/`DELETE` subquery (MySQL)
+
+| Article | Direction | Description |
+|---|---|---|
+| [A subquery reading its own `UPDATE`/`DELETE` target → MySQL derived-table wrap](mysql-update-delete-self-reference.md) | all → mysql | MySQL rejects a subquery — anywhere in an `UPDATE`'s `SET` or `WHERE` clause, or a `DELETE`'s `WHERE` clause — that reads from the very table being written, with error 1093 ("You can't specify target table 't' for update in FROM clause"). |
 
 ### PostgreSQL as target
 
@@ -355,8 +373,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### MySQL as source
 
-| [Multi-table `DELETE`](#multi-table-delete-4) | [Row-value comparisons](#row-value-comparisons-3) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-6) | [Recursive CTE synthesis](#recursive-cte-synthesis-4) | [Conditional expression translation](#conditional-expression-translation-3) |
-|---|---|---|---|---|
+| [Multi-table `DELETE`](#multi-table-delete-4) | [Row-value comparisons](#row-value-comparisons-3) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-6) | [Recursive CTE synthesis](#recursive-cte-synthesis-4) | [Conditional expression translation](#conditional-expression-translation-3) | [Self-referencing `UPDATE`/`DELETE` subquery (MySQL)](#self-referencing-updatedelete-subquery-mysql-3) |
+|---|---|---|---|---|---|
 
 #### Multi-table `DELETE`
 
@@ -388,10 +406,16 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [T-SQL `IIF(cond, a, b)` / MySQL `IF(cond, a, b)` → Oracle/PostgreSQL searched `CASE`](iif-to-case-or-native.md) | tsql/mysql → oracle/postgresql | T-SQL's `IIF(cond, a, b)` and MySQL's `IF(cond, a, b)` are both a three-argument ternary conditional expression — neither function exists on Oracle or PostgreSQL, so carrying either name across verbatim would be an unresolved-function error there. |
 
+#### Self-referencing `UPDATE`/`DELETE` subquery (MySQL)
+
+| Article | Direction | Description |
+|---|---|---|
+| [A subquery reading its own `UPDATE`/`DELETE` target → MySQL derived-table wrap](mysql-update-delete-self-reference.md) | all → mysql | MySQL rejects a subquery — anywhere in an `UPDATE`'s `SET` or `WHERE` clause, or a `DELETE`'s `WHERE` clause — that reads from the very table being written, with error 1093 ("You can't specify target table 't' for update in FROM clause"). |
+
 ### MySQL as target
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-5) | [`MERGE` / upsert lowering](#merge--upsert-lowering-3) | [Multi-table `DELETE`](#multi-table-delete-5) | [Multi-join `UPDATE`](#multi-join-update-4) | [Set-operation `ORDER BY`](#set-operation-order-by-3) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-7) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-4) | [Recursive CTE synthesis](#recursive-cte-synthesis-5) | [Literal parsing recovery](#literal-parsing-recovery-3) |
-|---|---|---|---|---|---|---|---|---|
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-5) | [`MERGE` / upsert lowering](#merge--upsert-lowering-3) | [Multi-table `DELETE`](#multi-table-delete-5) | [Multi-join `UPDATE`](#multi-join-update-4) | [Set-operation `ORDER BY`](#set-operation-order-by-3) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-7) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-4) | [Recursive CTE synthesis](#recursive-cte-synthesis-5) | [Self-referencing `UPDATE`/`DELETE` subquery (MySQL)](#self-referencing-updatedelete-subquery-mysql-4) | [Literal parsing recovery](#literal-parsing-recovery-3) |
+|---|---|---|---|---|---|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
 
@@ -442,6 +466,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [Recursive CTE synthesis: `WITH RECURSIVE` keyword, Oracle's required column list, and the `MAXRECURSION` hint](recursive-cte-keyword-and-column-list.md) | tsql/mysql → all | A recursive CTE — one whose body queries its own name — needs different declaration syntax on every engine. |
+
+#### Self-referencing `UPDATE`/`DELETE` subquery (MySQL)
+
+| Article | Direction | Description |
+|---|---|---|
+| [A subquery reading its own `UPDATE`/`DELETE` target → MySQL derived-table wrap](mysql-update-delete-self-reference.md) | all → mysql | MySQL rejects a subquery — anywhere in an `UPDATE`'s `SET` or `WHERE` clause, or a `DELETE`'s `WHERE` clause — that reads from the very table being written, with error 1093 ("You can't specify target table 't' for update in FROM clause"). |
 
 #### Literal parsing recovery
 
@@ -577,6 +607,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [T-SQL `IIF(cond, a, b)` / MySQL `IF(cond, a, b)` → Oracle/PostgreSQL searched `CASE`](iif-to-case-or-native.md) | tsql/mysql → oracle/postgresql | T-SQL's `IIF(cond, a, b)` and MySQL's `IF(cond, a, b)` are both a three-argument ternary conditional expression — neither function exists on Oracle or PostgreSQL, so carrying either name across verbatim would be an unresolved-function error there. |
+
+## Self-referencing `UPDATE`/`DELETE` subquery (MySQL)
+
+| Article | Direction | Description |
+|---|---|---|
+| [A subquery reading its own `UPDATE`/`DELETE` target → MySQL derived-table wrap](mysql-update-delete-self-reference.md) | all → mysql | MySQL rejects a subquery — anywhere in an `UPDATE`'s `SET` or `WHERE` clause, or a `DELETE`'s `WHERE` clause — that reads from the very table being written, with error 1093 ("You can't specify target table 't' for update in FROM clause"). |
 
 ## Literal parsing recovery
 

@@ -1726,7 +1726,8 @@ BEGIN
     UPDATE tbl_6
     SET col_32 = 0
     WHERE col_32 = 1 AND col_31 IN (SELECT col_171.col_31
-    FROM tbl_6 col_171
+    FROM (SELECT *
+    FROM tbl_6) col_171
     INNER JOIN tbl_2 col_56 ON col_56.col_6 = col_171.col_6
     INNER JOIN tbl_1 col_11 ON col_11.col_1 = col_56.col_1
     WHERE col_32 = 1 AND v_func1 > DATE_ADD(col_11.col_50, INTERVAL v_col_67 MINUTE));
