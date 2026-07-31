@@ -20,13 +20,14 @@ The `ORDER BY` is preserved on the whole set
 operation: PostgreSQL/MySQL keep `EXCEPT`/`UNION` as-is; Oracle's `EXCEPT`
 spells `MINUS`.
 
-**Discussion.** This is not a cross-engine gap — every
-target supports `ORDER BY` on a set-operation result — so there is no
-engine-level reason to drop it; the entry is here because the earlier
-conversion **silently dropped** the `ORDER BY` on every target (a real
-defect, not an approved limit).
+**Discussion.** The `ORDER BY` binds to the combined result of the whole
+set operation on every target engine, so nothing about its scope changes —
+only its ordering semantics need attention. T-SQL sorts `NULL` first in
+ascending order; PostgreSQL and Oracle sort `NULL` last by default, so the
+output adds an explicit `ASC NULLS FIRST` on those two engines to reproduce
+T-SQL's row order. MySQL already sorts `NULL` first in ascending order, so
+a plain `ASC` reproduces the same order with no extra clause needed.
 
-> **Note** faithful — the earlier silent drop made an ordered
-> result unordered with no warning.
+> **Note** faithful — same rows, same order, on every target.
 
 **See Also.** [`reda-ts-setop-orderby`](../../../tests/fixtures/challenge/challenge_sqlserver.sql).

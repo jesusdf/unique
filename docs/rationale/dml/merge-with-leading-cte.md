@@ -27,12 +27,14 @@ of kept as a separate `WITH`: Oracle's `MERGE INTO t USING (<cte body>) src
 …`, MySQL's `INSERT INTO t (…) SELECT … FROM (<cte body>) AS src`.
 
 **Discussion.** Oracle forbids a leading `WITH` before
-`MERGE` (`ORA-00928`). MySQL has no `MERGE` at all — Unique's MySQL upsert
-lowering (`INSERT … SELECT … ON DUPLICATE KEY UPDATE`) referenced the CTE
-name (`src`) in its `SELECT … FROM src`, but on its own dropped the `WITH src
-AS (…)` that defines it, leaving `src` undefined (MySQL error 1146).
+`MERGE` (`ORA-00928`). MySQL has no `MERGE` at all, so the upsert is
+rewritten as `INSERT … SELECT … ON DUPLICATE KEY UPDATE`, with the `MERGE`'s
+`USING` source rendered as the `SELECT`'s own `FROM` — the same way any
+other `USING` source is rendered there, whether it is a plain table or, as
+here, a CTE — so the CTE body appears inline as a derived table in both
+targets rather than as a separate `WITH src AS (…)` definition.
 
-> **Note** faithful — both targets now produce a valid,
-> value-equivalent statement instead of an undefined-relation error.
+> **Note** faithful — both targets produce a valid,
+> value-equivalent statement.
 
 **See Also.** [`reda-ts-cte-merge`](../../../tests/fixtures/challenge/challenge_sqlserver.sql).

@@ -52,8 +52,8 @@ renders it uniformly rather than special-casing the one or two positions
 (T-SQL/MySQL `FROM`) where a native `VALUES` would actually parse.
 
 > **Note** faithful — corpus `pg-avg-null` is live-verified equal (same
-> value, engine-specific decimal scale — precision-only diff, maintainer
-> policy 2026-07-19); corpus `pg-all-values` is live-executed on
+> value; the decimal scale differs per engine's own `AVG` precision rules,
+> not a translation loss); corpus `pg-all-values` is live-executed on
 > T-SQL/Oracle/MySQL.
 
 **See Also.** [`pg-avg-null`, `pg-all-values`](../../../tests/fixtures/challenge/challenge_postgresql.sql)

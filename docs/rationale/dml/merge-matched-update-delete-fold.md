@@ -25,5 +25,4 @@ original (pre-update) row.
 > **Note** faithful in the safe shape (live-verified
 > identical rows). Full warned carrier in the unsafe shape.
 
-**See Also.** [§3.6](../../03-unsupported.md) (MERGE clause composition,
-audit 2026-07-24).
+**See Also.** [§3.6](../../03-unsupported.md) (MERGE clause composition).
