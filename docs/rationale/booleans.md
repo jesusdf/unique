@@ -462,7 +462,7 @@ defined to *never* itself be `UNKNOWN` (that is the entire point of
 conservative. Internally the emitter builds one value-shaped form
 (`CASE WHEN <pred> THEN 1 ELSE 0 END = 1`) and two separate call sites peel
 it back down for their own position — the select-list emitter keeps the
-bare `CASE` (`src/unique/core/converter/emit.py`, `_emit_select_list_item`,
+bare `CASE` (`src/unique/core/converter/emit.py`, `_emit_value_expression`,
 around line 1133), the condition emitter keeps the bare `EXISTS`/`NOT
 EXISTS` predicate (`emit.py`, `_emit_condition`, around line 1497) — so the
 intermediate value-shaped spelling never actually reaches SQL output; both
