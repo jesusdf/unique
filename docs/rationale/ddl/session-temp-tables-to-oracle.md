@@ -33,9 +33,8 @@ its default row-retention is `ON COMMIT DELETE ROWS` (transaction-scoped),
 the opposite of the source engines' session-scoped, commit-surviving rows.
 
 > **Note** faithful **once** `ON COMMIT PRESERVE ROWS` is
-> added (verified: without it, a later statement in the same script sees 0
-> rows on Oracle against 2 on PostgreSQL — a silent cross-statement
-> divergence the fix closes).
+> added — verified: without it, a later statement in the same script sees 0
+> rows on Oracle against 2 on PostgreSQL across the same commit boundary.
 
 **See Also.** [`ts-select-into-temp`](../../../tests/fixtures/challenge/challenge_sqlserver.sql), [`pg-select-into-ctas`](../../../tests/fixtures/challenge/challenge_postgresql.sql),
 [`pg-temp-oncommit-oracle`](../../../tests/fixtures/challenge/challenge_postgresql.sql).

@@ -27,8 +27,7 @@ all (`ORA-00905` if attempted).
 
 > **Warning** `[limit]` on Oracle — the cascade-on-parent-update
 > behaviour is lost there and must be reproduced with a trigger if needed;
-> faithful elsewhere. (An earlier version of this conversion dropped the
-> clause on Oracle **silently**, with no warning — a real defect this closes.)
+> faithful elsewhere.
 
 **See Also.** [`reda-ts-fk-on-update`](../../../tests/fixtures/challenge/challenge_sqlserver.sql), [`pg-fk-onupdate-oracle`](../../../tests/fixtures/challenge/challenge_postgresql.sql) ·
 [§2](../../03-unsupported.md) (FK `ON UPDATE` action → Oracle row) ·
