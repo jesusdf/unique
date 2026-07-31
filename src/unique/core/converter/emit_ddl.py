@@ -260,6 +260,8 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
     # PostgreSQL; _emit_table_ref drops it for those dialects so the table lands
     # in the current user's schema (Oracle), the connected database (MySQL), or
     # the default "public" schema (PostgreSQL).
+    from unique.core.converter.emit import _emit_table_ref
+
     table = _emit_table_ref(node.table, dialect)
     temp = ""
     if node.temporary:
@@ -984,6 +986,8 @@ _NATIVE_VIEW_MODIFIERS: dict[str, tuple[str, Callable[[str], bool]]] = {
 
 def _emit_create_view(node: CreateViewStatement, dialect: str) -> str:
     """Emit a CREATE VIEW statement."""
+    from unique.core.converter.emit import _emit_table_ref
+
     name = _emit_table_ref(node.name, dialect)
     if node.or_replace:
         # T-SQL has no CREATE OR REPLACE VIEW; CREATE OR ALTER VIEW (2016+) is
@@ -1052,6 +1056,8 @@ def _emit_drop(node: DropStatement, dialect: str) -> str:
     When the target requires a table the source did not carry, the statement
     degrades to a documented carrier — never invalid SQL.
     """
+    from unique.core.converter.emit import _emit_table_ref
+
     name = _emit_table_ref(node.name, dialect)
     exists = "IF EXISTS " if node.if_exists else ""
     cascade = " CASCADE" if node.cascade else ""
@@ -1110,9 +1116,15 @@ def _emit_drop(node: DropStatement, dialect: str) -> str:
 from unique.core.converter.emit import (  # noqa: E402
     _UNSIGNED_INT_TYPES,
     _emit_select,
-    _emit_table_ref,
     _portable_type_name,
 )
+
+# _emit_table_ref (emit_relations.py) is imported lazily at each call site
+# below rather than in this tail block: emit_relations's own tail needs
+# _emit_expression (this module), so a module-level import here would be a
+# circular import at load time (both seams would need the other's name
+# before either finished loading). Deferring to call time — well after every
+# seam module has finished loading — resolves it.
 from unique.core.converter.emit_expr import _emit_expression  # noqa: E402
 from unique.core.converter.emit_passthrough import (  # noqa: E402
     _emit_passthrough_inline,

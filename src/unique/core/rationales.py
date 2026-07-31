@@ -3010,4 +3010,23 @@ RATIONALES: dict[str, Rationale] = {
             "transaction unit are carried, not silently dropped."
         ),
     ),
+    "UNIQUE-1235": _R(
+        construct="Oracle STANDARD_HASH(x, 'SHA1') (→ PostgreSQL)",
+        reason=(
+            "STANDARD_HASH defaults to SHA1 when no algorithm argument is given. "
+            "PostgreSQL 11+ has core md5()/sha256()/sha384()/sha512() (live-verified "
+            "byte-identical to Oracle's RAWTOHEX(STANDARD_HASH(x, ALG)) for those four "
+            "algorithms), but no sha1 without the pgcrypto extension, which is not "
+            "assumed to be installed."
+        ),
+        example_case=(
+            "tests/integration/test_function_translation.py::"
+            "TestOracleHashFunctionsToPostgresql::"
+            "test_standard_hash_sha1_degrades_honestly"
+        ),
+        divergence=(
+            "Warned limit — degrades to a NULL carrier; MD5/SHA256/SHA384/SHA512 "
+            "still map faithfully (byte-for-byte, live-verified)."
+        ),
+    ),
 }

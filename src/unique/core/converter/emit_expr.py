@@ -50,6 +50,7 @@ from unique.core.converter.harvest import (  # noqa: F401
     wrap_oracle_date_arg,
 )
 from unique.core.mappings import (
+    CURRENT_TIMESTAMP_EXPR,
     DML_FOUND_EXPR,
     ERROR_DIAGNOSTIC_EXPRS,
     ERROR_DIAGNOSTIC_SOURCES,
@@ -81,6 +82,7 @@ __all__ = [
     "_emit_unary",
     "_emit_case",
     "_emit_window",
+    "_emit_b36b_unmapped_builtins",
 ]
 
 # Integer-family CAST targets: an error-safe (TRY) cast of a non-literal value
@@ -265,6 +267,9 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         return f"{inner} AS {_ident(node.name, node.quoted, dialect)}"
 
     if isinstance(node, FunctionCall):
+        _b36b = _emit_b36b_unmapped_builtins(node, node.name.upper(), dialect)
+        if _b36b is not None:
+            return _b36b
         return _emit_function(node, dialect)
 
     if isinstance(node, ArrayLiteral):
@@ -869,6 +874,12 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         return _emit_window(node, dialect)
 
     if isinstance(node, TableRef):
+        # Lazy: _emit_table_ref (emit_relations.py) needs _emit_expression
+        # (this module) at its own tail, so a module-level import here would
+        # be a circular import at load time; deferring to call time (well
+        # after every seam module has finished loading) resolves it.
+        from unique.core.converter.emit import _emit_table_ref
+
         return _emit_table_ref(node, dialect)
 
     if isinstance(node, RawSQL):
@@ -2287,6 +2298,169 @@ def _emit_window(node: WindowFunction, dialect: str) -> str:
     return f"{func} OVER ({spec})"
 
 
+def _emit_mysql_unix_timestamp_to_postgresql(
+    node: FunctionCall, dialect: str
+) -> str | None:
+    """MySQL UNIX_TIMESTAMP()/UNIX_TIMESTAMP(expr) -> PostgreSQL (B36b).
+
+    EXTRACT(EPOCH FROM ...) matches value-for-value (live-verified: MySQL 8 /
+    PostgreSQL 16, both in UTC — UNIX_TIMESTAMP('2020-01-01 00:00:00') =
+    1577836800 = EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01 00:00:00'), and a
+    fractional-second argument round-trips exactly, e.g. ...00.500 on both
+    sides). The niladic form additionally floors: MySQL's argument-less
+    UNIX_TIMESTAMP() has whole-second resolution (it reads NOW(), which has no
+    fractional seconds in MySQL), while PG's CURRENT_TIMESTAMP carries
+    microseconds, so FLOOR matches MySQL's own granularity. Returns ``None``
+    for any other target (the existing degrade stands there).
+    """
+    if dialect != "postgresql":
+        return None
+    if not node.args:
+        return f"FLOOR(EXTRACT(EPOCH FROM {CURRENT_TIMESTAMP_EXPR['postgresql']}))"
+    return f"EXTRACT(EPOCH FROM {_emit_expression(node.args[0], dialect)})"
+
+
+#: Oracle source types that are already binary (RAWTOHEX/STANDARD_HASH's
+#: argument arrives on PG as BYTEA — no CONVERT_TO needed, and CONVERT_TO(a
+#: bytea, 'UTF8') is a runtime error there: "function convert_to(bytea, ...)
+#: does not exist").
+_HASH_ARG_RAW_TYPES = frozenset({"RAW", "LONG RAW", "BLOB", "BYTEA"})
+#: Oracle character source types — CONVERT_TO(x, 'UTF8') first (PG's ENCODE
+#: needs bytea; a character value has none until converted).
+_HASH_ARG_CHAR_TYPES = frozenset(
+    {"VARCHAR2", "VARCHAR", "CHAR", "NCHAR", "NVARCHAR2", "CLOB", "NCLOB", "LONG"}
+)
+
+
+def _hash_arg_kind(arg: ASTNode) -> str:
+    """Classify a RAWTOHEX/STANDARD_HASH argument as ``"raw"`` (already
+    binary — emit it directly), ``"char"`` (character data — CONVERT_TO
+    first), or ``"unknown"`` (cannot tell — the caller must decline rather
+    than guess either way: CONVERT_TO on a genuinely binary value and
+    ENCODE/a hash function on a genuinely character value both error at
+    runtime on PostgreSQL).
+
+    A CAST to a known type, or a column whose type was harvested from this
+    script's own CREATE TABLE, resolves positively; anything else (a
+    concatenation, a CASE expression, a procedural parameter — the dominant
+    real-world shape, e.g. hashing ``payload || secret``) defaults to
+    ``"char"``, matching the live-verified CONVERT_TO form this mapping
+    already shipped with. Only an *unresolvable* column — no harvested DDL,
+    or a name that clashes across tables of different types — is "unknown";
+    that is the one shape that silently broke (a RAW column read bare).
+    """
+    if isinstance(arg, CastExpression):
+        base = arg.target_type.name.split("(")[0].strip().upper()
+        if base in _HASH_ARG_RAW_TYPES:
+            return "raw"
+        if base in _HASH_ARG_CHAR_TYPES:
+            return "char"
+    if isinstance(arg, ColumnRef):
+        resolved = _resolve_column_source_type(arg)
+        if resolved in _HASH_ARG_RAW_TYPES:
+            return "raw"
+        if resolved is None or resolved not in _HASH_ARG_CHAR_TYPES:
+            return "unknown"
+    return "char"
+
+
+def _emit_oracle_hash_to_postgresql(
+    node: FunctionCall, fn_name: str, dialect: str
+) -> str | None:
+    """Oracle RAWTOHEX(x) / STANDARD_HASH(x[, 'ALG']) -> PostgreSQL (B36b).
+
+    STANDARD_HASH returns RAW (defaults to SHA1 with no algorithm argument);
+    RAWTOHEX renders that RAW as an uppercase hex string. PostgreSQL has core
+    md5()/sha256()/sha384()/sha512() (PG 11+, no pgcrypto needed) that produce
+    byte-identical digests (live-verified against Oracle for 'abc': MD5,
+    SHA256, SHA384 and SHA512 all match to the byte, both as raw bytes and as
+    the RAWTOHEX hex string). SHA1 — Oracle's own default — has no core-PG
+    equivalent (needs pgcrypto), so it degrades honestly (UNIQUE-1235) rather
+    than fake a different digest.
+
+    The argument may already be RAW (a RAW/BLOB-typed column, or a value CAST
+    to one) — PG's ENCODE/hash functions want that as bytea directly, so no
+    CONVERT_TO wrapper is added there (``_hash_arg_kind``); wrapping a bytea
+    in CONVERT_TO(x, 'UTF8') is a PostgreSQL runtime error, not merely a
+    wrong value. An argument whose type cannot be determined at all declines
+    (returns ``None``) rather than guess, so the pre-existing validity-gate
+    degrade takes over. Returns ``None`` for any other target or call shape
+    too (the existing degrade stands there).
+    """
+    if dialect != "postgresql":
+        return None
+    hash_inner: ASTNode | None = node.args[0] if node.args else None
+    wrapped_hash = (
+        fn_name == "RAWTOHEX"
+        and len(node.args) == 1
+        and isinstance(hash_inner, FunctionCall)
+        and hash_inner.name.upper() == "STANDARD_HASH"
+        and hash_inner.args
+    )
+    if (fn_name == "STANDARD_HASH" and node.args) or wrapped_hash:
+        hash_call = (
+            hash_inner
+            if wrapped_hash and isinstance(hash_inner, FunctionCall)
+            else node
+        )
+        alg = (
+            _emit_expression(hash_call.args[1], dialect).strip("'").upper()
+            if len(hash_call.args) >= 2
+            else "SHA1"
+        )
+        if alg not in ("MD5", "SHA256", "SHA384", "SHA512"):
+            return (
+                "NULL /* UNIQUE-1235: Oracle STANDARD_HASH(x, 'SHA1') (the "
+                "default algorithm with no ALG argument) has no core-PostgreSQL "
+                "equivalent (needs the pgcrypto extension) — see "
+                "docs/03-unsupported.md */"
+            )
+        kind = _hash_arg_kind(hash_call.args[0])
+        if kind == "unknown":
+            return None
+        _val = _emit_expression(hash_call.args[0], dialect)
+        hashed = _val if kind == "raw" else f"CONVERT_TO({_val}, 'UTF8')"
+        if wrapped_hash:
+            # RAWTOHEX wraps the digest as an uppercase hex STRING. PG's md5()
+            # already returns lowercase hex text; sha256/384/512() return
+            # bytea, so ENCODE(...,'hex') renders the string form.
+            if alg == "MD5":
+                return f"UPPER(MD5({hashed}))"
+            return f"UPPER(ENCODE({alg}({hashed}), 'hex'))"
+        # Bare STANDARD_HASH returns RAW bytes. PG's sha256/384/512() already
+        # return bytea (a direct match); md5() returns hex TEXT, so
+        # DECODE(...,'hex') turns it back into the matching bytea value.
+        if alg == "MD5":
+            return f"DECODE(MD5({hashed}), 'hex')"
+        return f"{alg}({hashed})"
+    if fn_name == "RAWTOHEX" and node.args:
+        # Bare RAWTOHEX(x): the common case is a character argument implicitly
+        # converted to RAW through the database charset (UTF8 here, matching
+        # PostgreSQL's) — unless x is already RAW (a RAW-typed column: no
+        # PG builtin does the RAW-to-hex-string step in one call, so ENCODE
+        # (bytea) + UPPER (Oracle always uppercases; PG's encode() is
+        # lowercase) either way, CONVERT_TO first only for character input.
+        kind = _hash_arg_kind(node.args[0])
+        if kind == "unknown":
+            return None
+        _val = _emit_expression(node.args[0], dialect)
+        arg = _val if kind == "raw" else f"CONVERT_TO({_val}, 'UTF8')"
+        return f"UPPER(ENCODE({arg}, 'hex'))"
+    return None
+
+
+def _emit_b36b_unmapped_builtins(
+    node: FunctionCall, fn_name: str, dialect: str
+) -> str | None:
+    """Dispatch the B36b unmapped-builtin mappings by name (a single call site
+    keeps ``_emit_function``'s branch budget unchanged)."""
+    if fn_name == "UNIX_TIMESTAMP" and len(node.args) <= 1:
+        return _emit_mysql_unix_timestamp_to_postgresql(node, dialect)
+    if fn_name in ("RAWTOHEX", "STANDARD_HASH"):
+        return _emit_oracle_hash_to_postgresql(node, fn_name, dialect)
+    return None
+
+
 # Cross-family imports at the tail (after the defs above) so the mutually
 # recursive emit-family modules resolve without namespace injection — see
 # emit.py's module docstring.
@@ -2300,7 +2474,6 @@ from unique.core.converter.emit import (  # noqa: E402
     _emit_excluded_column,
     _emit_order_item,
     _emit_select,
-    _emit_table_ref,
     _is_predicate_node,
     _map_system_global,
     _plain_int_value,

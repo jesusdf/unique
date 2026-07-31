@@ -10,10 +10,12 @@ converting sqlglot's expression tree into our engine-agnostic IR.
 
 from __future__ import annotations
 
+import contextlib
 import contextvars
 import dataclasses
 import logging
 import re
+from collections.abc import Iterator
 
 import sqlglot
 import sqlglot.expressions as exp
@@ -26,6 +28,7 @@ from unique.core.ast_nodes import (
     JoinType,
     Literal,
     RawSQL,
+    SelectStatement,
     TableRef,
     UpdateStatement,
 )
@@ -172,6 +175,55 @@ IDENTITY_COLUMNS: contextvars.ContextVar[dict[str, str] | None] = (
 COLUMN_TYPES: contextvars.ContextVar[dict[str, dict[str, str]] | None] = (
     contextvars.ContextVar("column_types", default=None)
 )
+
+
+#: The single non-joined FROM table's lowercase name, set by ``_emit_select``
+#: around its column-list emission. COLUMN_TYPES is keyed by table, but a
+#: bare unqualified ColumnRef in the SELECT list carries no table of its own
+#: — this lets ``_resolve_column_source_type`` resolve it the same way a
+#: qualified ``t.col`` reference already can. None outside a single-table
+#: SELECT: a join (or any other scope) makes the owning table ambiguous
+#: without real name resolution, which this transpiler does not do, and a
+#: same-named column in some UNRELATED table elsewhere in the script must
+#: never be guessed as the answer (that would be exactly as unsafe as the
+#: bug this closes).
+CURRENT_SELECT_TABLE: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "current_select_table", default=None
+)
+
+
+def _resolve_column_source_type(col: ColumnRef) -> str | None:
+    """The SOURCE-dialect declared base type of *col* (upper-cased, no
+    length/precision), from the script's own harvested ``CREATE TABLE``(s) —
+    or ``None`` when it cannot be resolved (the owning table's DDL was never
+    seen in this script, or the reference is unqualified outside a
+    single-table SELECT — see ``CURRENT_SELECT_TABLE``)."""
+    registry = COLUMN_TYPES.get()
+    if not registry:
+        return None
+    table = (col.table or CURRENT_SELECT_TABLE.get() or "").lower()
+    if not table:
+        return None
+    decl = registry.get(table, {}).get(col.name.lower())
+    if not decl:
+        return None
+    return decl.strip().upper().split("(")[0].strip()
+
+
+@contextlib.contextmanager
+def _current_select_table(node: SelectStatement) -> Iterator[None]:
+    """CURRENT_SELECT_TABLE set to *node*'s single non-joined FROM table (or
+    ``None``) for the scope of the ``with`` block (see ``_emit_select``)."""
+    table = (
+        node.from_clause.name
+        if isinstance(node.from_clause, TableRef) and not node.joins
+        else None
+    )
+    token = CURRENT_SELECT_TABLE.set(table.lower() if table else None)
+    try:
+        yield
+    finally:
+        CURRENT_SELECT_TABLE.reset(token)
 
 
 # Per-column NOT NULL knowledge harvested alongside COLUMN_TYPES (table ->
@@ -1070,6 +1122,9 @@ def _object_id_name(node: TableRef) -> str:
 
 __all__ = [
     "COLUMN_TYPES",
+    "CURRENT_SELECT_TABLE",
+    "_current_select_table",
+    "_resolve_column_source_type",
     "COLUMN_NOT_NULL",
     "PK_UNIQUE_COLUMNS",
     "ENUM_COLUMNS",
