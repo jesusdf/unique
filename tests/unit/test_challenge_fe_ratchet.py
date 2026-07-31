@@ -32,8 +32,16 @@ from tests.helpers.corpus_diff import is_comparable
 # embedded in text, out of the comparator's scope by design — and moved to
 # ``documented-inherent``. New count: 25 defect-pending-fix, 0
 # precision-policy-pending, 5 documented-inherent, 2 session-dependent = 32.
-# Monotonic downward only.
-LEDGER_SIZE_FLOOR = 32
+#
+# 2026-07-31 (brief T4-A, first BLUE round over the defect-pending-fix family):
+# the STRUCTURAL/invalid-emission mechanisms fixed at the emitter/IR layer —
+# boolean-to-char casts (pg-bool-repr, my-bool-char), Oracle string-to-int
+# rounding (ora-cast-int-edge), synthesized derived-table column names
+# (po-distinct-case, my-having-noagg), string-date + INTERVAL promotion
+# (my-dateadd, my-str-plus-interval), and Oracle FOR UPDATE over an unlockable
+# view (postgresql-qdrop). 8 cases removed: 17 defect-pending-fix, 5
+# documented-inherent, 2 session-dependent = 24. Monotonic downward only.
+LEDGER_SIZE_FLOOR = 24
 
 
 def _eligible_cases() -> list[CorpusEntry]:

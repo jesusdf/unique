@@ -462,23 +462,25 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         else:
             inner = _emit_expression(node.expression, dialect)
         # MySQL CAST of a boolean (a comparison) to a character type yields
-        # '1'/'0' (MySQL booleans are integers); PostgreSQL renders the boolean
-        # as 't'/'f'. Convert the boolean to an integer first so the value
-        # matches.
+        # '1'/'0' (MySQL booleans are integers); every other engine renders a
+        # boolean differently (PG 't'/'f'; T-SQL/Oracle have no boolean value
+        # type and reject the predicate as a CAST operand outright — T-SQL error
+        # 156, ORA-02000 "missing AS keyword"). Convert the boolean to an integer
+        # first so the value matches and the CAST operand is a legal scalar.
         if (
-            dialect == "postgresql"
+            dialect in ("postgresql", "tsql", "oracle")
             and SOURCE_DIALECT.get() == "mysql"
             and _is_predicate_node(node.expression)
-            and node.target_type.name.split("(")[0].strip().upper()
-            in ("CHAR", "VARCHAR", "TEXT", "NCHAR", "NVARCHAR")
+            and node.target_type.name.split("(")[0].strip().upper() in _CHAR_CAST_BASES
         ):
             inner = f"CASE WHEN {inner} THEN 1 ELSE 0 END"
         # The reverse: PostgreSQL renders a boolean cast to text as 'true'/'false',
-        # but MySQL has no boolean text and would give '1'/'0'. Emit the words so
-        # the value matches (a boolean is a comparison predicate or a true/false
-        # literal).
+        # but MySQL has no boolean text (it would give '1'/'0') and T-SQL/Oracle
+        # reject a boolean CAST operand entirely (156 / ORA-02000). Emit the words
+        # so the value matches (a boolean is a comparison predicate or a
+        # true/false literal).
         if (
-            dialect == "mysql"
+            dialect in ("mysql", "tsql", "oracle")
             and SOURCE_DIALECT.get() == "postgresql"
             and (
                 _is_predicate_node(node.expression)
@@ -487,9 +489,16 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
                     and node.expression.dtype == "boolean"
                 )
             )
-            and node.target_type.name.split("(")[0].strip().upper()
-            in ("CHAR", "VARCHAR", "TEXT", "NCHAR", "NVARCHAR")
+            and node.target_type.name.split("(")[0].strip().upper() in _CHAR_CAST_BASES
         ):
+            if (
+                dialect in ("tsql", "oracle")
+                and isinstance(node.expression, Literal)
+                and node.expression.dtype == "boolean"
+            ):
+                # T-SQL/Oracle have no boolean value type, so a bare boolean
+                # literal cannot key a CASE WHEN — fold it to its rendered word.
+                return "'true'" if node.expression.value else "'false'"
             return f"CASE WHEN {inner} THEN 'true' ELSE 'false' END"
         # Oracle CAST-to-integer ROUNDS the value (CAST('3.9' AS INT) = 4), but
         # MySQL's CAST(... AS SIGNED) truncates a string ('3.9' -> 3). Round
@@ -501,6 +510,26 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             in ("INT", "INTEGER", "BIGINT", "SMALLINT", "TINYINT")
         ):
             inner = f"ROUND({inner})"
+        # Same Oracle rounding, but T-SQL/PostgreSQL reject a fractional numeric
+        # STRING as an integer CAST operand outright (T-SQL 245 "conversion
+        # failed", PG "invalid input syntax for type integer"). Oracle
+        # CAST('3.9' AS INT) rounds half-away-from-zero to 4; reproduce it by
+        # rounding a numeric cast of the string first. T-SQL ROUND needs a
+        # FLOAT (and its 2-arg form); PG round(numeric, int) needs a NUMERIC —
+        # both are half-away-from-zero, matching Oracle (live-verified 2.5->3,
+        # -2.5->-3). Gated to a fractional numeric string literal: an integer
+        # string already casts cleanly, and a string COLUMN's type is unknown.
+        if (
+            dialect in ("tsql", "postgresql")
+            and SOURCE_DIALECT.get() == "oracle"
+            and isinstance(node.expression, Literal)
+            and isinstance(node.expression.value, str)
+            and re.fullmatch(r"\s*[+-]?\d+\.\d+\s*", node.expression.value)
+            and node.target_type.name.split("(")[0].strip().upper()
+            in ("INT", "INTEGER", "BIGINT", "SMALLINT", "TINYINT")
+        ):
+            _numt = "FLOAT" if dialect == "tsql" else "NUMERIC"
+            inner = f"ROUND(CAST({inner} AS {_numt}), 0)"
         # The reverse target: Oracle/PG/MySQL CAST-to-integer ROUNDS a numeric
         # literal half-away-from-zero (CAST(2.7 AS INT) = 3, 7.5 -> 8), but T-SQL
         # CAST truncates (2, 7). Round first so the value matches — T-SQL ROUND is
@@ -1420,6 +1449,32 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
         return _emit_interval_chain(
             _iv_left, _iv_comps, node.operator == BinaryOperator.SUB, dialect
         )
+    # Date arithmetic on an ISO date/datetime STRING literal ('2020-01-01' +
+    # INTERVAL 1 HOUR, the MySQL spelling): the string reaches Oracle/PG as a
+    # bare ``'…' + interval`` (ORA-30081 / "invalid input syntax for type
+    # interval"). Promote the string to an ANSI DATE/TIMESTAMP literal so the
+    # interval math is valid and the value matches (a date-only base + a sub-day
+    # interval yields a timestamp on both engines — live-verified). A bare
+    # ``string + INTERVAL`` is unambiguously date arithmetic and only a MySQL-
+    # style source produces it, so no source-dialect guard is needed. T-SQL keeps
+    # its own DATEADD/CAST-back path further below.
+    if (
+        dialect in ("oracle", "postgresql")
+        and node.operator in (BinaryOperator.ADD, BinaryOperator.SUB)
+        and isinstance(node.left, Literal)
+        and isinstance(node.left.value, str)
+        and node.left.dtype in ("string", "national", "unknown")
+        and isinstance(node.right, RawSQL)
+        and (
+            _mdi := re.fullmatch(
+                r"(?is)\s*INTERVAL\s+'?(\d+)'?\s+'?([A-Z]+)'?\s*", node.right.sql
+            )
+        )
+        and (_mdlit := _oracle_date_literal(node.left.value.strip())) is not None
+    ):
+        _mop = "-" if node.operator == BinaryOperator.SUB else "+"
+        _mn, _munit = _mdi.group(1), _mdi.group(2).upper().rstrip("S")
+        return f"{_mdlit} {_mop} INTERVAL '{_mn}' {_munit}"
     # An INTERVAL literal in +/- arithmetic renders per target: T-SQL has no
     # interval at all (DATEADD), MySQL takes an unquoted count, Oracle quotes
     # the count alone (INTERVAL '1' DAY — '1 DAY' is ORA-30089), PG accepts
@@ -1734,9 +1789,15 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             amount = n if node.operator == BinaryOperator.ADD else f"-{n}"
             other_sql = _emit_expression(other_side, dialect)
             result = f"DATEADD({unit}, {amount}, {other_sql})"
-            # MySQL date + INTERVAL on a DATE returns a DATE; cast the T-SQL
-            # DATEADD back to DATE when the base is a date-only literal.
-            if SOURCE_DIALECT.get() == "mysql" and _is_date_only_literal(other_side):
+            # MySQL date + INTERVAL on a DATE returns a DATE, but adding a
+            # sub-day unit (HOUR/MINUTE/SECOND) promotes it to a DATETIME
+            # ('2020-01-01' + INTERVAL 1 HOUR = '2020-01-01 01:00:00'). Cast the
+            # T-SQL DATEADD back to DATE only for a whole-day-or-larger unit.
+            if (
+                SOURCE_DIALECT.get() == "mysql"
+                and _is_date_only_literal(other_side)
+                and unit not in ("HOUR", "MINUTE", "SECOND")
+            ):
                 result = f"CAST({result} AS DATE)"
             return result
 

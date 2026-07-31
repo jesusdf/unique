@@ -402,6 +402,23 @@ CASES.update(
                 ),
             },
         ),
+        # invalid: a boolean predicate cast to TEXT — T-SQL/Oracle have no
+        # boolean value type and reject the predicate as a CAST operand (156 /
+        # ORA-02000 "missing AS"). PG renders a boolean text as 'true'/'false',
+        # so emit that CASE form (live-verified value 'true').
+        "pg-bool-repr": Case(
+            "pg-bool-repr ",
+            {
+                "tsql": Expect(
+                    present=("CASE WHEN 1 > 0 THEN 'true' ELSE 'false' END",),
+                    absent=("CAST(1 > 0 AS",),
+                ),
+                "oracle": Expect(
+                    present=("CASE WHEN 1 > 0 THEN 'true' ELSE 'false' END",),
+                    absent=("CAST(1 > 0 AS",),
+                ),
+            },
+        ),
         # composition: bool_or + FILTER — the FILTER CASE's boolean THEN-value
         # must be wrapped 1/0 on T-SQL/Oracle (the bool_agg 1/0 form composes
         # with the FILTER rewrite). Result = 1 (True).
@@ -812,11 +829,14 @@ CASES.update(
                 "mysql": Expect(("FOREIGN KEY (pid) REFERENCES p (id) MATCH FULL",)),
             },
         ),
+        # Oracle rejects FOR UPDATE over this VALUES inline view (ORA-02014), so
+        # the lock is dropped with a UNIQUE-1145 warning (was blessing the invalid
+        # `AS v(x) FOR UPDATE` output); T-SQL has no clause at all; MySQL keeps it.
         "postgresql-qdrop-for": Case(
             "qdrop-for",
             {
                 "tsql": Expect(absent=("FOR UPDATE",), warn=True),
-                "oracle": Expect(("AS v(x) FOR UPDATE",)),
+                "oracle": Expect(absent=("FOR UPDATE",), warn=True),
                 "mysql": Expect(("AS v FOR UPDATE",)),
             },
         ),
@@ -826,6 +846,19 @@ CASES.update(
                 "tsql": Expect(("UNION ALL",), ("VALUES (1)",)),
                 "oracle": Expect(("UNION ALL", "FROM DUAL"), ("VALUES (1)",)),
                 "mysql": Expect(("UNION ALL",), ("VALUES (1)",)),
+            },
+        ),
+        # invalid: a case-sensitive DISTINCT gets a binary COLLATE on the string
+        # key, but T-SQL wraps the DISTINCT (under a null-priority ORDER key) in
+        # the uq_d derived table — where COLLATE strips the column name (error
+        # 8155). Re-alias the collated column so the wrapper is valid (result A,
+        # B, a, live-verified).
+        "po-distinct-case": Case(
+            "po-distinct-case ",
+            {
+                "tsql": Expect(
+                    present=("COLLATE Latin1_General_BIN2 AS x", "uq_d"),
+                ),
             },
         ),
         # func: DISTINCT ON (a) keeps one row per a (first by ORDER BY); a plain

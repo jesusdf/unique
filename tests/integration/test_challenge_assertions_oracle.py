@@ -136,6 +136,24 @@ CASES.update(
         # <unit>'`` for a non-literal count) is the exact equivalent (B36).
         # T-SQL/MySQL have no standalone interval value, so they keep the warned
         # degrade.
+        # invalid: Oracle CAST(<numeric string> AS INT) ROUNDS the string's value
+        # (CAST('3.9' AS INT) = 4), but T-SQL/PG reject a fractional numeric string
+        # as an integer CAST operand (245 "conversion failed" / "invalid input
+        # syntax for type integer"). Round a numeric cast of the string first so
+        # the value matches (live-verified 4). T-SQL ROUND needs FLOAT, PG NUMERIC.
+        "ora-cast-int-edge": Case(
+            "ora-cast-int-edge ",
+            {
+                "tsql": Expect(
+                    ("CAST(ROUND(CAST('3.9' AS FLOAT), 0) AS INT)",),
+                    ("CAST('3.9' AS INT)",),
+                ),
+                "postgresql": Expect(
+                    ("CAST(ROUND(CAST('3.9' AS NUMERIC), 0) AS INT)",),
+                    ("CAST('3.9' AS INT)",),
+                ),
+            },
+        ),
         "ora-numtodsinterval": Case(
             "ora-numtodsinterval ",
             {

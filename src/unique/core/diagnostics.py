@@ -1157,4 +1157,10 @@ DIAGNOSTICS: dict[str, Diagnostic] = {
         "is bounded to DECIMAL(38, 10); values beyond that precision/scale are "
         "not representable (docs/03-unsupported.md",
     ),
+    "UNIQUE-1237": _D(
+        "statement",
+        "Oracle cannot FOR UPDATE from a view built on VALUES / a set operation / "
+        "DISTINCT / GROUP BY (ORA-02014); the rows are not lockable, so the row "
+        "lock is dropped (docs/03-unsupported.md",
+    ),
 }

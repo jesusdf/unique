@@ -118,28 +118,10 @@ LEDGER: tuple[Excluded, ...] = (
         sql="SELECT SUM(x>1), COUNT(x>1), AVG(x>1), MAX(x>1) FROM (SELECT 1 x UNION ALL SELECT 2 UNION ALL SELECT 3) t",
     ),
     Excluded(
-        id="my-bool-char",
-        tag="defect-pending-fix",
-        reason="CAST(bool AS CHAR) emits invalid target CAST (missing AS)",
-        sql="SELECT CAST((1=1) AS CHAR) AS r",
-    ),
-    Excluded(
         id="my-cast-binary2",
         tag="defect-pending-fix",
         reason="fixed-width BINARY padding not reproduced on T-SQL",
         sql="SELECT CONVERT('abc',BINARY), CONVERT('abc' USING latin1), CAST('abc' AS BINARY)",
-    ),
-    Excluded(
-        id="my-dateadd",
-        tag="defect-pending-fix",
-        reason="string-typed date + INTERVAL needs a date cast on targets",
-        sql="SELECT DATE_ADD('2020-01-31',INTERVAL 1 MONTH), DATE_ADD('2020-01-01',INTERVAL 1 DAY), DATE_SUB('2020-03-01',INTERVAL 1 DAY), '2020-01-01'+INTERVAL 1 HOUR",
-    ),
-    Excluded(
-        id="my-having-noagg",
-        tag="defect-pending-fix",
-        reason="HAVING without GROUP BY lowers to an unnamed derived column",
-        sql="SELECT x, RANK() OVER (ORDER BY x) FROM (SELECT 1 x UNION ALL SELECT 2) t HAVING x>0",
     ),
     Excluded(
         id="my-insert-oob",
@@ -166,22 +148,10 @@ LEDGER: tuple[Excluded, ...] = (
         sql="SELECT REPEAT('ab', 2.9) AS r",
     ),
     Excluded(
-        id="my-str-plus-interval",
-        tag="defect-pending-fix",
-        reason="string date + INTERVAL needs a date cast on targets",
-        sql="SELECT '2020-01-01' + INTERVAL 1 DAY AS r",
-    ),
-    Excluded(
         id="my-ts-to-date",
         tag="defect-pending-fix",
         reason="Oracle DATE keeps the time component (DATE() should drop it)",
         sql="SELECT DATE(TIMESTAMP '2020-01-01 14:30') AS r",
-    ),
-    Excluded(
-        id="ora-cast-int-edge",
-        tag="defect-pending-fix",
-        reason="CAST('3.9' AS INT): Oracle rounds, targets reject",
-        sql="SELECT CAST('3.9' AS INT), TRUNC(3.9), ROUND(3.9), CAST(3.9 AS NUMBER(1)) FROM DUAL",
     ),
     Excluded(
         id="ora-frac-seconds",
@@ -214,28 +184,10 @@ LEDGER: tuple[Excluded, ...] = (
         sql="SELECT 255::bit(8)::text,to_hex(255),255::text",
     ),
     Excluded(
-        id="pg-bool-repr",
-        tag="defect-pending-fix",
-        reason="boolean cast emits invalid target CAST (missing AS)",
-        sql="SELECT (1>0), (1>0)::int, (1>0)::text, NOT (1>0), true AND NULL",
-    ),
-    Excluded(
         id="pg-chr-ascii-unicode",
         tag="defect-pending-fix",
         reason="multibyte CHR/ASCII not reproduced on MySQL",
         sql="SELECT chr(233), ascii('é')",
-    ),
-    Excluded(
-        id="po-distinct-case",
-        tag="defect-pending-fix",
-        reason="DISTINCT lowers to an unnamed derived-table column",
-        sql="SELECT DISTINCT x FROM (VALUES ('a'),('A'),('a'),('B')) v(x) ORDER BY x",
-    ),
-    Excluded(
-        id="postgresql-qdrop",
-        tag="defect-pending-fix",
-        reason="FOR UPDATE over a derived table rejected on Oracle (ORA-02014)",
-        sql="SELECT x FROM (VALUES (1),(2)) v(x) FOR UPDATE",
     ),
     Excluded(
         id="reda-ora-decode-mixed-type",

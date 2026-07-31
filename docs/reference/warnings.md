@@ -2,7 +2,7 @@
 
 > **Generated — do not edit by hand.** Produced by `python scripts/generate_reference_docs.py` from the `UNIQUE-NNNN` registry (`src/unique/core/diagnostics.py`) and the rationale side-table (`src/unique/core/rationales.py`). The CI freshness gate (`python scripts/generate_reference_docs.py --check`) fails the build if this file drifts from the source data.
 
-One entry per stable diagnostic code the transpiler can emit. `code` is the grep/suppress token (`-- UNIQUE-1234: …`); every code is anchored as `warnings.md#unique-1234`. A code with a rationale entry (184 of 235) renders as a recipe: **Problem** (the triggering construct), **Solution (pointer)** (what Unique does about it — a pointer, not a worked example: the registry carries no SQL sample), **Discussion** (the engine-level reason no direct mapping exists) and **See Also** (the corpus case or test that proves it). The remaining codes render in a compact table marked `_(rationale pending)_` until a rationale is added (the coverage ratchet in `tests/unit/core/test_diagnostics.py` drives that count down).
+One entry per stable diagnostic code the transpiler can emit. `code` is the grep/suppress token (`-- UNIQUE-1234: …`); every code is anchored as `warnings.md#unique-1234`. A code with a rationale entry (185 of 236) renders as a recipe: **Problem** (the triggering construct), **Solution (pointer)** (what Unique does about it — a pointer, not a worked example: the registry carries no SQL sample), **Discussion** (the engine-level reason no direct mapping exists) and **See Also** (the corpus case or test that proves it). The remaining codes render in a compact table marked `_(rationale pending)_` until a rationale is added (the coverage ratchet in `tests/unit/core/test_diagnostics.py` drives that count down).
 
 ## Diagnostics with a rationale
 
@@ -2214,6 +2214,18 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **See Also.** [`TestOracleBareNumberToInteger::test_non_key_bare_number_to_tsql_bounded_and_warned`](../../tests/unit/core/test_boolean_timestamp.py)
 
+### <a id="unique-1237"></a>`UNIQUE-1237` — SELECT ... FOR UPDATE over a non-key-preserved view (VALUES / set operation / DISTINCT / GROUP BY) → Oracle
+
+**Category:** `statement` · **Message:** Oracle cannot FOR UPDATE from a view built on VALUES / a set operation / DISTINCT / GROUP BY (ORA-02014); the rows are not lockable, so the row lock is dropped (docs/03-unsupported.md
+
+**Problem.** SELECT ... FOR UPDATE over a non-key-preserved view (VALUES / set operation / DISTINCT / GROUP BY) → Oracle
+
+**Solution (pointer).** Warned limit — the unlockable row lock is dropped rather than left as an ORA-02014 runtime error; the result set is unchanged.
+
+**Discussion.** Oracle rejects FOR UPDATE when the locked relation is not key-preserved — an inline view built on a VALUES constructor, a set operation, or DISTINCT/GROUP BY has no lockable base rows (ORA-02014). T-SQL/PostgreSQL/MySQL tolerate the same query, so the restriction bites only Oracle; a plain base-table FOR UPDATE keeps its lock.
+
+**See Also.** [`postgresql-qdrop-FOR`](../../tests/fixtures/challenge/challenge_postgresql.sql)
+
 ## Diagnostics without a rationale yet
 
 | Code | Category | Message template | Rationale |
@@ -2270,4 +2282,4 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 | <a id="unique-1230"></a>`UNIQUE-1230` | procedural | procedural parse note; the specific reason is carried at runtime | _(rationale pending)_ |
 | <a id="unique-1232"></a>`UNIQUE-1232` | procedural | procedural transpilation failed (internal error); the routine is preserved; the error is carried at<br>runtime | _(rationale pending)_ |
 
-235 codes across 6 categories (184 with a rationale).
+236 codes across 6 categories (185 with a rationale).
