@@ -1,0 +1,378 @@
+# Docs-gap sweep — faithful creative conversions with no user-facing doc
+
+Analysis-only pass over the **test suite** (`tests/integration/` +
+`tests/unit/core/`), directed by PURPLE. No `src/` changes, no rationale
+entries written, nothing fixed. HEAD at start: `d1acd8e` (fast-forwarded,
+strict ancestor, clean); the sweep itself made no code changes, so this
+report applies regardless of how far `main` has moved since.
+
+**The blind spot this hunts:** `UNIQUE-NNNN` warned degrades already have a
+rationale-coverage floor (`src/unique/core/rationales.py`). The gap is
+**faithful** conversions — the transpiler silently produces a *structurally
+different* output than a literal reading of the input would suggest (a
+rewrite, hoist, relocation, wrapper, compensation, decomposition, or
+derived-table restructure), with **no warning and no code**, pinned only by
+a test. The seed example, already fixed same-day: leading comments before a
+routine header get relocated into the declaration section
+(`docs/rationale/procedural.md`, "Comments written before a routine
+header"). This sweep looks for its siblings.
+
+## Method
+
+1. Inventoried "already documented": every `###` heading in
+   `docs/rationale/*.md` (54 constructs across 6 pages), every topic heading
+   in `docs/03-unsupported.md`, `docs/05-procedural-engine.md`,
+   `docs/07-interfaces.md`, and the `UNIQUE-NNNN` registry
+   (`src/unique/core/rationales.py`, warned-degrade family — out of scope by
+   definition).
+2. Split `tests/integration/` (51 files, ~30.7k lines) and
+   `tests/unit/core/` (39 files, ~7.3k lines) into 7 batches by file-size
+   tier; each batch was swept independently (4 general-purpose workers ran
+   synchronously, 3 ran as background agents; the largest file,
+   `tests/integration/test_pg_source_wave1.py` at 8,400 lines/261 classes,
+   was finished in the foreground directly by the orchestrator via a
+   keyword-only docstring grep + full reads of the 32 flagged classes, no
+   systematic every-Nth sample — see recall notes).
+3. Each worker classified every candidate class as: (a) pure rename/spelling
+   map → excluded, (b) warned degrade (`UNIQUE-NNNN`/carrier/diagnostic) →
+   excluded, (c) harness/infra/identity → excluded, or (d) a faithful
+   structural rewrite with no warning → checked against the documented-set
+   inventory (generous matching) and reported as **covered** or **gap**.
+4. This document merges the 7 batch reports: a synthesized, deduplicated
+   **top-clusters** table first (the actionable list — several batches
+   independently rediscovered the same mechanism from different files,
+   which is itself a signal of how pervasive/undocumented it is), then the
+   full raw per-batch tables as an appendix for traceability.
+
+## Headline counts
+
+| | Count |
+|---|---|
+| Rationale-page constructs already documented (`###` headings) | 54 |
+| `03-unsupported.md` / `05` / `07` topics already documented | ~45 |
+| Test files swept | 51 integration + 39 unit/core = 90 |
+| Transformation candidates examined across all batches | ~334 |
+| Already covered (generous match) | ~155 |
+| **Raw gap rows reported by the 7 batches** | **179** |
+| **Distinct mechanism clusters after cross-batch dedup** | **~18** |
+
+The raw-179 number overcounts: several batches independently found the same
+mechanism from different test files (e.g. the tri-state boolean CASE-wrap
+turned up in 4 of 7 batches unprompted — see cluster 1). The 18-cluster list
+below is the actionable one; the appendix keeps all 179 raw rows because
+each still cites a distinct pinning test worth keeping for a future BLUE
+pass.
+
+## Top clusters (synthesized, ranked)
+
+| # | Behavior (plain words) | Representative pinning tests | Suggested rationale page | Priority |
+|---|---|---|---|---|
+| 1 | **Boolean/predicate value duality.** A comparison, `AND`/`OR`, `IS [NOT] NULL`, or bare truthy-typed expression used in *value* position (SELECT list, computed column, assignment) on an engine without a first-class boolean-as-value gets wrapped in a tri-state `CASE WHEN p THEN 1 WHEN NOT-p THEN 0 END` (implicit `ELSE NULL`); the reverse — a numeric/bit value used in *predicate* position (`IF`, `WHILE`) — gets a `<> 0` comparison synthesized. Found independently by 4 of 7 batches without prompting. | `test_ir_first_families.py::TestZeroPush{Z4b,W1,W7}Batch`, `test_challenge.py::TestBoolColumnIsPredicate`, `test_pg_source_wave1.py::{TestSelectListComparisonsWrap,TestBooleanOpInSelectList,TestUnaryPredicateInSelectList,TestWave169NotNullParenCompare}`, `test_ir_first_families.py::TestZeroPushMysqlOracle` | `03-unsupported.md` §3.18 (currently only covers the narrow "NOT of a non-predicate" case) — needs a general "value/predicate duality" write-up, likely its own rationale page | **HIGH** |
+| 2 | **Triggers have no dedicated rationale page at all.** Row-level trigger bodies (`:NEW`/`SET NEW.col`) rewritten to statement-level set-based `UPDATE ... FROM inserted/deleted` (T-SQL); event predicates (`INSERTING`/`UPDATING('col')`/T-SQL `UPDATE(col)`) rewritten per engine (`TG_OP`, `IS DISTINCT FROM`, `UPDATING(...)`); a re-reading MySQL/PG row trigger synthesized into an Oracle `COMPOUND TRIGGER`; T-SQL `INSTEAD OF` emulated on PG via `BEFORE` + `pg_trigger_depth()` suppression; a PG trigger decomposed into `CREATE FUNCTION ... RETURNS TRIGGER` + `CREATE TRIGGER`; MySQL gets the body statically duplicated per event variant. Only the pure set-based→transition-table case is documented (03-unsupported §-adjacent); everything else in this family is silent. | `test_triggers.py` (whole file), `test_trigger_predicates_scheduler.py`, `test_oracle_source_m4_wave.py::TestEventPredicates`, `test_challenge.py::TestInsteadOfTriggers`, `test_ir_first_families.py::TestTriggerShellIdiomsIrFirst`, `test_transpiler.py::test_sqlite_trigger_to_targets` | New `docs/rationale/procedural.md` "Triggers" section (multiple workers suggested this independently) | **HIGH** |
+| 3 | **Procedural loop/cursor desugaring.** `SET @cur = CURSOR ... FOR q; OPEN @cur;` merges to one statement; PL/SQL `FOR rec IN cur LOOP` expands into an explicit `DECLARE`/`OPEN`/positional-`FETCH INTO`/`CLOSE`/`DEALLOCATE` scaffold with every `rec.col` rewritten to `@rec_col`; `FOR i IN a..b LOOP` desugars into an explicit `WHILE`+counter; a MySQL cursor `FOR` loop expands into `OPEN`/`FETCH`/`WHILE` with synthesized per-column `DECLARE`s in a new block. | `test_cursor_variable_binding.py`, `test_cursor_for_loop_tsql.py`, `test_oracle_mysql_tail.py::{TestNumericRangeForLoop,TestMySqlCursorForLoopExpansion}` | `docs/rationale/procedural.md` (new entries; existing scroll-cursor/`%FOUND` entries are adjacent, not this) | **HIGH** |
+| 4 | **Cross-statement schema-state-driven coercion.** Integer `0`/`1` literals written into a T-SQL `BIT` column (default/INSERT/UPDATE, incl. inside procedure bodies) get coerced to `TRUE`/`FALSE` on PostgreSQL by tracking that column's declared type across statements; T-SQL `ALTER COLUMN <c> <type>` re-states the column's last-known nullability (from `CREATE TABLE`, a prior `ADD COLUMN`, or a prior `ALTER`, surviving an intervening `RENAME COLUMN`) instead of silently defaulting it to nullable; Oracle bare `NUMBER` maps to `BIGINT`/identity/`DECIMAL` depending on the column's inferred role (PK/FK/sized) in the same table. | `test_boolean_timestamp.py::{TestBitDefaultToBoolean,TestBitLiteralCoercion,TestOracleBareNumberToInteger}`, `test_pg_source_wave1.py::TestB10RunningColumnTypeAlterNullability` | `docs/rationale/ddl.md` | **HIGH** |
+| 5 | **DDL guard / catalog-probe cross-engine synthesis.** A T-SQL `IF NOT EXISTS(SELECT 1 FROM sys.columns ...) ALTER TABLE ... ADD ...` idempotent guard becomes a full synthesized probe block on each target: Oracle `FOR unique_guard IN (SELECT 1 FROM DUAL WHERE NOT EXISTS(user_tab_columns...)) LOOP EXECUTE IMMEDIATE...`, PostgreSQL `DO $$ IF NOT EXISTS(information_schema.columns...)`, MySQL `PREPARE`/`EXECUTE`/`DROP PREPARE`; a guarded `DROP TRIGGER` targeting PG becomes a `pg_trigger` catalog-probe `DO $$` block (PG's `DROP TRIGGER` needs `ON table`, absent from the source guard); Oracle catalog probes (`user_indexes`, `user_tab_cols`) get rewritten to each target's native catalog. Only the `sys.objects`/`OBJECT_ID` CREATE/DROP-guard family is documented; the column/index/trigger-existence probe family is not. | `test_guard_translation.py`, `test_transpiler.py::TestTranspiler` (alter-add idempotent tests), `test_oracle_source_m4_wave.py::{TestOracleCatalogOnTsql,TestWave11Classes}` | `docs/03-unsupported.md` (extend the guard entry) | **HIGH** |
+| 6 | **`CREATE TABLE AS SELECT` ↔ `SELECT ... INTO` bidirectional idiom.** T-SQL has no CTAS: rewritten as `SELECT ... INTO <table> FROM ...` (temp or plain table); the reverse direction (a plain, non-temp `SELECT INTO` from a PG/T-SQL source) becomes `CREATE TABLE ... AS SELECT ...` on MySQL/Oracle. | `test_pg_source_wave1.py::TestTsqlCtasBecomesSelectInto`, `test_challenge.py::TestSelectIntoCtas`, `test_cross_dialect.py::TestDDLPassthrough` | `docs/rationale/ddl.md` (extend the existing temp-table entry to cover the plain-table CTAS case explicitly) | **HIGH** |
+| 7 | **Oracle `(+)` / `ROWNUM` reverse direction.** Oracle's `(+)` outer-join mark rewrites to an explicit `LEFT JOIN ... ON`; comma joins become `CROSS JOIN`+`WHERE`; `ROWNUM <= n` in a `SELECT ... WHERE` becomes `LIMIT`/`TOP`. `docs/rationale/dml.md` documents only the *reverse* direction of each (T-SQL flattening → Oracle, `DELETE TOP` → `ROWNUM`), so a reader trusting the existing doc would miss that these also run outbound from Oracle. | `test_oracle_join_mark.py::TestOracleJoinMark`, `test_rownum_dual.py::TestRownum` | `docs/rationale/dml.md` | **HIGH** |
+| 8 | **MySQL `DECLARE {EXIT|CONTINUE} HANDLER FOR ...` folded into block-structured exception handling.** MySQL's handler is declared *separately* from the code it protects; an `EXIT` handler for `SQLEXCEPTION`/`SQLWARNING` is exactly the enclosing block's exception section and folds into `EXCEPTION WHEN OTHERS` (PG/Oracle) or wraps the whole body in `BEGIN TRY...END TRY BEGIN CATCH...END CATCH` (T-SQL). `CONTINUE` handlers and unmapped condition classes keep the honest whole-routine degrade (that part is warned/covered). | `test_pg_source_wave1.py::TestMysqlDeclareHandler` | `docs/rationale/procedural.md` (§3.5 Error Handling is TRY/CATCH↔EXCEPTION in general; this specific declarative-to-block-structured fold isn't named) | **HIGH** |
+| 9 | **Expression-valued error/call arguments hoisted through a synthesized variable.** `RAISERROR`'s message argument accepts only a literal or a variable — an expression payload (e.g. a `+`/`\|\|` concatenation) hoists through a synthesized `@unique_errmsgN`; the same pattern hoists an `EXEC`/routine-call argument expression through `@uq_nowN`; Oracle's `RAISE_APPLICATION_ERROR` with an expression message hoists through a `DECLARE @unique_errmsgN`; `RAISERROR`'s printf-style `%d`/`%s` substitution args get spliced into PostgreSQL's `%`-placeholder `RAISE EXCEPTION` or Oracle's string concatenation. | `test_pg_source_wave1.py::TestTsqlRaiserrorExpressionHoist`, `test_oracle_source_m4_wave.py::{TestOracleBuiltinsOnTsql,TestWave12And13Classes}`, `test_challenge.py::TestRaiserrorFormatArgs` | `docs/rationale/procedural.md` | **HIGH** |
+| 10 | **`agg(x) FILTER (WHERE p)` → universal `CASE` rewrite.** PostgreSQL's `FILTER` clause has no T-SQL/MySQL/Oracle spelling; it rewrites to `agg(CASE WHEN p THEN x END)` (with `COUNT(*) FILTER` counting a literal `1`) on every non-PG target. The existing `bool_or(...) FILTER (...)` rationale entry covers only that one aggregate; the general rewrite for any aggregate is undocumented. | `test_pg_source_wave1.py::TestAggregateFilterRewrite` | `docs/rationale/aggregates-windows.md` | **HIGH** |
+| 11 | **Numeric division/rounding/precision compensation family.** Integer division compensated per target (`TRUNC(...)` on Oracle, `DIV`/`NULLIF` on MySQL/PG, `* 1.0` on decimal targets) for both literals and declared-integer variables; `AVG()` over an integer column promoted via `AVG((x) * 1.0)` on T-SQL; a fractional-literal `CAST(... AS INT)` into T-SQL wrapped in `ROUND(x, 0)` to trade truncation for rounding; MySQL's NULL-safe `a / b` preserved elsewhere by wrapping the divisor in `NULLIF(b, 0)`; `MOD`/`%` by zero guarded with `CASE WHEN divisor = 0 THEN NULL ELSE ...`. Recurred independently in 4 of 7 batches. | `test_func_compensation.py`, `test_challenge_assertions_{sqlserver,oracle,mysql}.py` (division/AVG/MOD cases), `test_challenge.py::{TestTsqlCastIntRounds,TestTsqlAvgIntegerPromotion,TestMysqlSafeDivision}` | `docs/rationale/aggregates-windows.md` (extend the existing `SUM(x)/COUNT(x)` NULL-safe-division entry into a general numeric-semantics family) | **MED** |
+| 12 | **Oracle `ADD_MONTHS` sticky-last-day compensation contradicts the existing doc.** `docs/rationale/datetime.md`'s "DATEADD(MONTH) → Oracle ADD_MONTHS" entry states the *reverse* direction (Oracle `ADD_MONTHS` as source) "needs no compensation" — but `test_rc1a_mappings.py::test_add_months_preserves_sticky_last_day` shows Oracle-source `ADD_MONTHS` wrapped in a sticky-last-day `CASE WHEN` when targeting MySQL/T-SQL/PostgreSQL, and `test_pg_source_wave1.py`'s `TestOracleAddMonthsPgTypedLiteral`-adjacent tests show the PG-target emulation via `DATE_TRUNC('month', ...)`. This needs a **correction**, not just an addition — a reader trusting the current text is actively misled. | `test_rc1a_mappings.py::test_add_months_preserves_sticky_last_day` | `docs/rationale/datetime.md` (fix the existing entry) | **HIGH** |
+| 13 | **Multi-join `UPDATE` restructured per engine.** `UPDATE t SET ... FROM t JOIN d ... JOIN c ...` (or the aliased single-table Oracle form) restructures differently per target: Oracle gets a correlated scalar subquery guarded by `EXISTS`; MySQL gets a comma-join `UPDATE t1, t2 SET ...`; PostgreSQL keeps `FROM`/`WHERE`. Only the analogous multi-table *DELETE* case is documented. | `test_embedded_dml_ir.py::test_multijoin_cross_table_update_rewrites_for_oracle`, `test_cross_dialect.py::TestCrossDialectDML`, `test_ir_first_families.py::TestZeroPushW3Batch` (update-from), `test_oracle_source_m4_wave.py::TestAliasedSingleTableUpdateOnTsql` | `docs/rationale/dml.md` (sibling entry to the documented multi-table DELETE) | **MED** |
+| 14 | **Synthesized deterministic identifiers for anonymous constructs.** Unnamed derived-table/`SELECT INTO` projections get a synthesized alias (`uq_col1`); alias-less derived tables and join subqueries get `uq_dtN`/`uq_j`; a nameless `CREATE INDEX ON t(col)` gets a synthesized index name; a joined derived table's own alias must survive (not synthesized, but must not be dropped). | `test_challenge.py::{TestTsqlDerivedColumnName,TestSelectIntoDerivedColumnsNamed}`, `test_pg_source_wave1.py::{TestWave198BareDerivedTables,TestWave205InlineTvfJoinAlias}`, `test_ir_first_families.py::TestZeroPushW2Batch` (index naming) | `docs/rationale/ddl.md` / `dml.md` | **MED** |
+| 15 | **NULL-propagation guard `CASE` wraps for functions that differ across engines.** `GREATEST`/`LEAST` NULL-propagate on MySQL but not T-SQL/PG — guarded with a synthesized `CASE WHEN ... IS NULL THEN NULL ...`; Oracle's 2-arg `REPLACE(s, search)` NULL-when-empty semantics reproduced via `NULLIF(REPLACE(s, search, ''), '')`; MySQL's `REPLACE` with a literal-NULL argument folds the whole call to `NULL`. | `test_challenge_assertions_mysql.py` (greatest/least null cases), `test_challenge.py::{TestOracleTwoArgReplaceTranslate,TestMysqlReplaceNullPropagates}` | `docs/rationale/strings-collation.md` (NULL-propagation section) | **MED** |
+| 16 | **String/character-set function emulation family.** Oracle 3-arg `TRIM('x' FROM col)` emulated via nested `LTRIM(RTRIM(col,'x'),'x')`; PG-only `OVERLAY(... PLACING ...)` rebuilt via `STUFF` (T-SQL), `INSERT()` (MySQL), or `SUBSTR`+`\|\|` composition (Oracle); MySQL `INSERT(str,pos,len,new)` emulated for Oracle by splicing three `SUBSTR` calls; `STUFF` emulated via `SUBSTR`+concat (Oracle)/`OVERLAY` (PG)/`INSERT` (MySQL). | `test_pg_source_wave1.py::TestWave188IfBareCondTrimTwoArg`, `test_challenge.py::TestOverlay`, `test_challenge_assertions_mysql.py` (INSERT cases), `test_challenge_assertions_sqlserver.py` (`ts-stuff`) | `docs/rationale/strings-collation.md` | **MED** |
+| 17 | **PostgreSQL row-source constructs rewritten to a portable form on every target, even ones that support the native syntax.** `FROM (VALUES (1),(2),...)` rewrites to a `UNION ALL SELECT` chain even on T-SQL/MySQL (which support `VALUES` natively); `FROM generate_series(a,b)` rewrites to `ROW_NUMBER() OVER ... sys.all_objects` (T-SQL) or `CONNECT BY LEVEL ... FROM DUAL` (Oracle); a quantified bare-`VALUES` subquery (`n > ALL (VALUES ...)`) rewrites the same way. | `test_challenge_assertions_postgresql.py` (`pg-avg-null`, `pg-bulk-insert`), `test_challenge.py::{TestGenerateSeriesFrom,TestWave5GroupingAndFolds::test_quantified_values_rewritten}` | `docs/rationale/dml.md` | **MED** |
+| 18 | **Parenthesized-structure unwrapping / shielding.** Parenthesized set-operation arms (`(SELECT ...) UNION ALL (SELECT ...)`) unwrap, but an arm carrying its own `ORDER BY`/`LIMIT` is shielded by wrapping it in a derived table (so the outer union doesn't re-scope the ordering); a parenthesized join-relation group in `FROM` unwraps, hoisting the inner table+joins directly into the outer list; PostgreSQL's column-aliased table ref (`tbl AS alias(col1,col2)`) rewrites as a derived-table wrap (`(SELECT * FROM tbl) AS alias(col1,col2)`) for T-SQL. | `test_pg_source_wave1.py::{TestParenthesizedUnionArms,TestParenthesizedJoinRelations,TestTableColumnAliases}` | `docs/rationale/dml.md` | **MED** |
+
+## Appendix — full raw findings by batch
+
+Batches 1–4 and 7 were finished by parallel workers; batch 5
+(`test_challenge.py`, 6,251 lines / 263 classes) and batch 6
+(`test_pg_source_wave1.py`, 8,400 lines / 261 classes) are the two largest
+files in the suite and were read via a keyword-grep-plus-sample strategy
+rather than linearly in full — see each batch's recall notes. All tables
+below are the workers' own output, lightly reformatted; priorities are the
+individual worker's call and may differ slightly from the synthesized
+cluster table above where I merged/re-ranked.
+
+### Batch 1 — small integration files (26 files, `test_func_compensation.py` … `test_live_syntax.py`)
+
+10 gaps reported (of ~18 transformation candidates, 8 already covered):
+
+| Behavior | Pinning test | Priority |
+|---|---|---|
+| Integer division compensated per target (literal + declared-integer operands) | `test_func_compensation.py::{test_integer_division_literals_preserved,test_integer_division_declared_variables_procedural}` | MED |
+| Inline column-level `REFERENCES ... ON DELETE` / `CHECK` relocated to table-level | `test_clause_drops.py::{test_inline_fk_with_on_delete_survives_to_every_target,test_inline_check_survives,test_inline_fk_without_action_survives}` | MED |
+| T-SQL cursor-variable binding merged into one statement per target | `test_cursor_variable_binding.py` | HIGH |
+| PL/SQL `FOR rec IN cur LOOP` expanded into full cursor scaffold | `test_cursor_for_loop_tsql.py` | HIGH |
+| Oracle anonymous block flattened to a bare T-SQL batch (DECLARE/BEGIN/END dropped) | `test_anonymous_block_tsql.py` | MED |
+| Unqualified T-SQL scalar UDF calls auto-qualified with `dbo.` | `test_tsql_udf_qualification.py` | MED |
+| `SET NOCOUNT ON` injected into every T-SQL procedure lacking one | `test_tsql_nocount.py::test_injection_still_happens_without_body_directive` | HIGH |
+| `LOG(base, x)` argument order swapped to T-SQL's `LOG(x, base)` | `test_log_arg_order.py` | MED |
+| `ELT`/`FIELD` decomposed into a synthesized `CASE` chain | `test_rc1a_mappings.py::test_elt_and_field_to_case_chains` | MED |
+| Oracle `ADD_MONTHS` sticky-last-day wrap contradicts existing doc | `test_rc1a_mappings.py::test_add_months_preserves_sticky_last_day` | HIGH |
+
+### Batch 2 — mid integration files (triggers, cursors, real-world, embedded DML)
+
+12 gaps reported (of ~28 candidates, ~16 covered):
+
+| Behavior | Pinning test | Priority |
+|---|---|---|
+| Oracle `INSERTING`/`DELETING` → T-SQL `EXISTS(SELECT 1 FROM inserted/deleted)` | `test_trigger_predicates_scheduler.py::test_inserting_deleting_predicates_map_to_tsql` | HIGH |
+| Row-level trigger body → T-SQL statement-level set-based `UPDATE ... FROM inserted/deleted` | `test_trigger_predicates_scheduler.py`, `test_triggers.py::{TestRowLevelTriggerToTSql,TestPgDelegatingTriggerToTSql}` | HIGH |
+| T-SQL `UPDATE(col)` predicate → per-target boolean expression | `test_triggers.py::TestTriggerUpdatePredicate` | HIGH |
+| Re-reading MySQL/PG trigger synthesized into Oracle `COMPOUND TRIGGER` (and reverse) | `test_triggers.py::{TestRowLevelReReadToOracleCompound,TestOracleCompoundTrigger}` | HIGH |
+| `EXECUTE IMMEDIATE ... INTO x` → two-statement T-SQL dynamic-SQL capture via table variable | `test_trigger_predicates_scheduler.py::test_execute_immediate_into_tsql_capture` | HIGH |
+| T-SQL base64-XML idiom → each target's native base64-decode call | `test_test2_residue_wave.py::TestScalarIdioms::test_base64_xml_idiom_per_target` | HIGH |
+| Multi-join `UPDATE ... FROM` → Oracle correlated-`EXISTS` scalar subquery | `test_embedded_dml_ir.py::test_multijoin_cross_table_update_rewrites_for_oracle` | HIGH |
+| `ERROR_MESSAGE()`/`RAISERROR` → per-target error-capture+re-raise idiom | `test_test2_residue_wave.py::TestScalarIdioms::test_error_message_maps_per_target` | MED |
+| Nested `DECLARE ... = <expr>` hoisted to routine top with a conditional assignment left in place | `test_trigger_predicates_scheduler.py::test_nested_declare_hoists_with_conditional_assignment` | MED |
+| 3-arg `CHARINDEX` on PostgreSQL compensated with `SUBSTRING`+`POSITION`+`CASE` offset | `test_trigger_predicates_scheduler.py::test_three_arg_charindex_keeps_start_on_postgresql` | MED |
+| PostgreSQL trigger decomposed into `CREATE FUNCTION ... RETURNS TRIGGER` + `CREATE TRIGGER` | `test_triggers.py::TestTriggerTiming::test_after_insert_postgresql_emits_function_and_trigger` | MED |
+| Trailing inline comment relocated to a leading line comment to protect the terminator | `test_embedded_dml_ir.py::test_procedural_inline_comment_does_not_eat_terminator` | LOW |
+
+### Batch 3 — dialect assertions A (`test_oracle_mysql_tail.py`, `test_challenge_assertions_{sqlserver,oracle}.py`, `test_cross_dialect.py`, `test_oracle_source_m4_wave.py`)
+
+31 gaps reported (of ~75 candidates, ~44 covered):
+
+| Behavior | Pinning test | Priority |
+|---|---|---|
+| Bare `RETURN` in a nested MySQL handler → labeled `proc_exit:` block + `LEAVE` | `test_oracle_mysql_tail.py::TestMySqlReturnBecomesLeave` | HIGH |
+| `EXECUTE...USING` binds copied into synthesized `SET @var = local` before the call | `test_oracle_mysql_tail.py::TestMySqlExecuteUsingSessionVars` | HIGH |
+| `FOR i IN a..b LOOP` desugared into explicit `WHILE`+counter | `test_oracle_mysql_tail.py::TestNumericRangeForLoop` | HIGH |
+| Cursor `FOR` loop expanded into `OPEN`/`FETCH`/`WHILE` scaffold (MySQL) | `test_oracle_mysql_tail.py::TestMySqlCursorForLoopExpansion` | HIGH |
+| Oracle single-table `UPDATE` restructured per target (FROM/WHERE, comma-join, correlated) | `test_cross_dialect.py::TestCrossDialectDML`, `test_oracle_source_m4_wave.py::TestAliasedSingleTableUpdateOnTsql` | HIGH |
+| `CREATE TYPE x FROM base` alias harvested; columns typed `x` resolve to base type | `test_cross_dialect.py::TestTSQLAliasTypes` | HIGH |
+| Bare `RETURN;` in a PG trigger's nested handler → `RETURN NEW;` | `test_oracle_source_m4_wave.py::TestBareReturnInPgTriggerFunction` | HIGH |
+| `RAW(16) DEFAULT SYS_GUID()` → `BYTEA` + `DECODE(REPLACE(gen_random_uuid()...))` default | `test_oracle_source_m4_wave.py::TestRawGuidDefaultOnPg` | HIGH |
+| Oracle `INSERTING`/`UPDATING('col')` → PG `TG_OP`/`IS DISTINCT FROM`; MySQL body duplicated per event | `test_oracle_source_m4_wave.py::TestEventPredicates` | HIGH |
+| Oracle catalog probes rewritten to target's native catalog | `test_oracle_source_m4_wave.py::{TestOracleCatalogOnTsql,TestWave11Classes}` | HIGH |
+| `CAST(2.9 AS INT)` literal folds; `AVG(int)` wrapped in `TRUNC`/`TRUNCATE` | `test_challenge_assertions_sqlserver.py` (`reda-ts-cast-int-trunc`, `reda-ts-avg-int-trunc`) | MED |
+| Oracle-source `int/int` division compensated with `* 1.0` | `test_challenge_assertions_oracle.py` (`ora-div*`) | MED |
+| Unary bitwise NOT emulated (Oracle `-(x)-1`, MySQL `CAST(~x AS SIGNED)`) | `test_challenge_assertions_sqlserver.py` (`ts-bitops`) | MED |
+| `STUFF` emulated via `SUBSTR`+concat/`OVERLAY`/`INSERT` | `test_challenge_assertions_sqlserver.py` (`ts-stuff`) | MED |
+| `COT(x)` emulated as `1/TAN(x)` (Oracle) | `test_challenge_assertions_sqlserver.py` (`ts-trig`) | MED |
+| Hex/binary literal folded to its integer value in arithmetic | `test_challenge_assertions_sqlserver.py` (`reda-ts-hex-literal-arith`) | MED |
+| `DECODE` mixed-type branches → `CASE` with a `CAST` inserted to unify types | `test_challenge_assertions_oracle.py` (`reda-ora-decode-mixed-type`) | MED |
+| DATE-literal typing propagated through a derived-table alias | `test_challenge_assertions_oracle.py` (`reda-ora-date-literal-subquery`) | MED |
+| `LTRIM`/`RTRIM` with a character set → `TRIM(LEADING/TRAILING ... FROM ...)` | `test_challenge_assertions_oracle.py` (`ora-ltrim-set`, `ora-rtrim-chars`, `ora-trim-translate`) | MED |
+| `GREATEST` NULL-propagation guarded with synthesized `CASE` | `test_challenge_assertions_oracle.py` (`reda-ora-greatest-null`) | MED |
+| `CONVERT(type,val,style)` numeric style codes → format strings | `test_cross_dialect.py::TestConvertStyle` | MED |
+| Oracle `ALTER TABLE ADD (...)` parenthesized list unwrapped per target | `test_cross_dialect.py::TestOracleAlterAddParenthesized` | MED |
+| `RAISE_APPLICATION_ERROR` expression message hoisted into `DECLARE @unique_errmsgN` | `test_oracle_source_m4_wave.py::TestOracleBuiltinsOnTsql.test_error_context_and_sys_context` | MED |
+| Routine-call expression argument hoisted into `DECLARE @uq_nowN` | `test_oracle_source_m4_wave.py::TestWave12And13Classes.test_exec_expression_argument_hoisted` | MED |
+| Bare `BOOLEAN` variable in a condition gains explicit `= 1` (T-SQL) | `test_oracle_source_m4_wave.py::TestBooleanVarCondition` | MED |
+| `SELECT ... INTO :NEW.col1, :NEW.col2` routed through MySQL session vars | `test_oracle_source_m4_wave.py::TestPseudoRowIntoTargets` | MED |
+| Mid-expression line comment relocated + converted to inline `/* ... */` | `test_oracle_mysql_tail.py::{TestCommentInsideIfCondition,TestCommentInsideCaseStatement}` | LOW |
+| 3-arg `CONVERT` with numeric target type ignores the style code | `test_challenge_assertions_sqlserver.py` (`reda-ts-convert-numeric-style`) | LOW |
+| `LPAD` multi-character pad emulated via `REPLICATE` | `test_challenge_assertions_oracle.py` (`ora-lpad-multichar`) | LOW |
+| Plain `SELECT ... INTO tbl` → `CREATE TABLE tbl AS SELECT` (MySQL/Oracle) | `test_cross_dialect.py::TestDDLPassthrough` | LOW |
+| Package ref-cursor type resolved to native `REFCURSOR` (PostgreSQL) | `test_oracle_mysql_tail.py::TestPackageRefCursorType` | LOW |
+
+### Batch 4 — dialect assertions B (`test_challenge_assertions_{postgresql,mysql}.py`, `test_procedural.py`)
+
+20 gaps reported (of ~38 candidates, ~18 covered):
+
+| Behavior | Pinning test | Priority |
+|---|---|---|
+| PG `VALUES(...)` table constructor rewritten to `UNION ALL SELECT` on every target | `test_challenge_assertions_postgresql.py` (`pg-avg-null`, etc.) | HIGH |
+| Top-level T-SQL/Oracle batch wrapped in synthesized PostgreSQL `DO $$ ... $$` | `test_procedural.py::{TestTopLevelPrintAndSet,TestTopLevelTryCatch,TestExecOutputCapture,TestOracleAnonymousBlock}` | HIGH |
+| `CATCH`-block-local `DECLARE` hoisted to the routine's top-level declaration section | `test_procedural.py::TestTopLevelTryCatch::test_catch_local_declare_is_hoisted_on_oracle` | HIGH |
+| `generate_series` row source → `ROW_NUMBER() OVER ... sys.all_objects` / `CONNECT BY LEVEL` | `test_challenge_assertions_postgresql.py` (`pg-bulk-insert`) | HIGH |
+| Bare `RETURN` in MySQL procedure → `LEAVE` + synthesized `proc_exit:` wrapper | `test_procedural.py::{TestBareReturnInProcedure,TestReturnValueInProcedure}` | HIGH |
+| MySQL `CAST(x AS SIGNED)` rounds; T-SQL cast truncates — `ROUND(x,0)` inserted | `test_challenge_assertions_mysql.py` (`my-cast-int`) | HIGH |
+| MySQL `ELT`/`FIELD` emulated via synthesized `CASE` on every foreign target | `test_challenge_assertions_mysql.py` (`my-elt`, `my-field`, `my-index-fns`) | HIGH |
+| MySQL `GREATEST`/`LEAST` NULL-propagation guard `CASE` | `test_challenge_assertions_mysql.py` (greatest/least-null cases) | HIGH |
+| `ALTER COLUMN a DROP DEFAULT` → Oracle `MODIFY DEFAULT NULL`; T-SQL dynamic-SQL script querying `sys.default_constraints` | `test_challenge_assertions_postgresql.py` (`pg-drop-default`) | HIGH |
+| `AVG()` on integer/numeric widened via `*1.0` on T-SQL | `test_challenge_assertions_mysql.py` (`my-avg-precision2`) | MED |
+| Positional `GROUP BY 1` resolved to the actual column name | `test_challenge_assertions_postgresql.py` (`pg-group-by-ordinal`) | MED |
+| MySQL `MOD`/`%` by zero guarded (NULL-safe) vs raising engines | `test_challenge_assertions_mysql.py` (`my-mod-edge`, `my-mod-zero`) | MED |
+| Bitwise NOT emulated (Oracle `-(x)-1`; MySQL `CAST(~x AS SIGNED)`) | `test_challenge_assertions_postgresql.py` (`pg-bitnot`, `pg-bit-negative`) | MED |
+| CAST inside PL/SQL expression hoisted into `SELECT ... INTO ... FROM DUAL` | `test_procedural.py::TestTSQLToOracle::test_cast_in_plsql_body_drops_constraint` | MED |
+| MySQL `LOCATE('', s)=1` vs T-SQL `CHARINDEX` empty-needle guard `CASE` | `test_challenge_assertions_mysql.py` (`my-locate-empty*`) | MED |
+| MySQL `INSERT(str,pos,len,new)` emulated for Oracle via 3 spliced `SUBSTR` calls | `test_challenge_assertions_mysql.py` (`my-insert-*`) | MED |
+| `PI()` emulated as `ACOS(-1)` (Oracle); `TRUNC(x,n)` as `ROUND(x,n,1)` (T-SQL) | `test_challenge_assertions_postgresql.py` (`pg-pi-fns`) | LOW |
+| `WAITFOR DELAY` parsed to seconds, mapped to each engine's sleep primitive | `test_procedural.py::TestWaitFor` | LOW |
+| `RAISERROR(<numeric-id>,...)` mapped to canned literal MySQL `SIGNAL` text | `test_procedural.py::TestRaiserrorToMySQLSignal::test_numeric_message_id` | LOW |
+| Call argument recognized as ISO date wrapped in `DATE '...'` for Oracle | `test_procedural.py::TestTSQLToOracle::test_call_wraps_iso_date_argument` | LOW |
+
+### Batch 5 — `test_challenge.py` (6,251 lines, 263 classes; ~99 read in full via sample+keyword grep)
+
+51 merged gap rows (of ~89 candidates, ~38 covered). Full table preserved
+from the worker report (grouped loosely by theme; several rows are already
+folded into the synthesized clusters above — CTAS/SELECT-INTO,
+triggers/`INSTEAD OF`, tri-state CASE-wrap, RAISERROR hoist, division/AVG
+compensation, `VALUES`/`generate_series`, synthesized aliases):
+
+- MySQL `HAVING` without `GROUP BY` → outer derived-table `WHERE` (`TestHavingNoGroupBy`, HIGH)
+- `UPDATE` SET-subquery self-reference wrapped in a derived table for MySQL (`TestMysqlUpdateSelfRef`, HIGH)
+- MySQL `UPDATE ... ORDER BY ... LIMIT n` capped via keyed subquery per target (`TestUpdateOrderByLimitCap`, HIGH)
+- `generate_series` → `CONNECT BY LEVEL`/`ROW_NUMBER()` numbers source (`TestGenerateSeriesFrom`, HIGH)
+- T-SQL int↔DATETIME epoch (1900-01-01) rebuilt as explicit arithmetic (`TestTsqlIntToDatetime`, `TestWave4Rewrites`, HIGH)
+- ISO date-string literals into Oracle/PG promoted to ANSI `DATE '...'` (`TestDateLiteralIntoOracle`, HIGH)
+- `DATE`-valued `CONCAT` argument wrapped in `TO_CHAR(d,'YYYY-MM-DD')` on Oracle (`TestConcatDateIso`, HIGH)
+- Oracle `ROUND(date,'MONTH')` emulated on MySQL via day-of-month conditional (`TestRoundDateMonth`, HIGH)
+- MySQL lenient string→number casts folded at transpile time (`TestMysqlLenientDecimalCast`, `TestMysqlCastUnsignedLenient`, HIGH)
+- PG word-spelled boolean casts folded to 1/0 literals (`TestPgBooleanWordCast`, `TestPgBooleanCastFolds`, HIGH)
+- T-SQL `CAST('true' AS BIT)` folded to a `SIGN(ABS(...))`-shaped expr (`TestBitStringCast`, HIGH)
+- `OVERLAY(... PLACING ...)` rewritten to `STUFF`/`INSERT()`/`SUBSTR`+`\|\|` (`TestOverlay`, HIGH)
+- Boolean-column `IS TRUE`/`IS NOT FALSE` → value comparisons (`TestBoolColumnIsPredicate`, HIGH)
+- T-SQL `INSTEAD OF` triggers → PG `BEFORE`+`pg_trigger_depth()` suppression (`TestInsteadOfTriggers`, HIGH)
+- Oracle 2-arg `REPLACE` NULL-when-empty via `NULLIF(REPLACE(...,''),'')` (`TestOracleTwoArgReplaceTranslate`, MED)
+- MySQL NULL-safe division via `NULLIF(divisor,0)` (`TestMysqlSafeDivision`, MED)
+- Fractional `CAST(...AS INT)` into T-SQL wrapped in `ROUND(x,0)` (`TestTsqlCastIntRounds`, MED)
+- `AVG` over integers promoted via `AVG((x)*1.0)` (`TestTsqlAvgIntegerPromotion`, MED)
+- STRING_AGG/LISTAGG value cast to `TEXT` + `WITHIN GROUP` folded (`TestStringAggTextCastIntoPg`, MED)
+- Unordered `GROUP_CONCAT` gains synthesized deterministic `WITHIN GROUP (ORDER BY ...)` on Oracle (`TestGroupConcatUnorderedRefinement`, MED)
+- MySQL named `WINDOW w AS (...)` inlined into each `OVER w` (`TestWave5GroupingAndFolds`, MED)
+- Oracle `JSON_OBJECTAGG` gains synthesized `KEY ... VALUE` + explicit cast (`TestJsonAggregates`, MED)
+- Unnamed derived-table/SELECT-INTO projection gets synthesized alias `uq_col1` (`TestTsqlDerivedColumnName`, `TestSelectIntoDerivedColumnsNamed`, MED)
+- Quantified bare-`VALUES` subquery rewritten to `UNION ALL` derived subquery (`TestWave5GroupingAndFolds`, MED)
+- `USING(x)` join → `ON a.x=b.x` + re-qualified bare projected `x` (`TestUsingJoinQualified`, MED)
+- Self-qualified Oracle routine parameter resolved, qualifier stripped per target (`TestOracleSelfQualifiedParam`, MED)
+- PG `check_violation` named condition → Oracle `WHEN OTHERS`+`SQLCODE=-2290` test+re-`RAISE` (`TestWave6Procedural`, MED)
+- `RAISERROR` printf substitution args spliced per target (`TestRaiserrorFormatArgs`, MED)
+- `DAYNAME`/`MONTHNAME` → `TO_CHAR(d,'fmDay'/'FMMonth')` (`TestLastDayAndNames`, MED)
+- MySQL `YEAR` literal folds to 4-digit integer with 2-digit century rule (`TestTsqlIntToDatetime`, MED)
+- `CONVERT(MONEY,'$12.99')` currency string stripped via nested `REPLACE` (`TestTsqlIntToDatetime`, MED)
+- Oracle `ADD_MONTHS` into PG emulated via `DATE_TRUNC('month',...)` (`TestOracleAddMonthsPgTypedLiteral`, MED)
+- Oracle `DECODE` NULL-safe equality spelled `WHEN NULL IS NULL THEN` (`TestOracleDecodeNullSafe`, MED)
+- MySQL string-`+`-is-arithmetic preserved on T-SQL via operand folding/casting (`TestMysqlStringPlusIsArithmetic`, MED)
+- MySQL `REPLACE` with literal-NULL arg folds the call to `NULL` (`TestMysqlReplaceNullPropagates`, MED)
+- `DATE(x)` emitted as explicit `CAST(...AS DATE)` (`TestDateExtractCast`, MED)
+- Plain `SELECT ... INTO newtable` → `CREATE TABLE ... AS SELECT` (Oracle) (`TestSelectIntoCtas`, MED)
+- `ADD COLUMN` clause order swapped for Oracle; MySQL TEXT/BLOB default parenthesized (`TestAlterAddColumnDefault`, MED)
+- MySQL `CONVERT(x USING charset)` → unbounded string cast (`TestConvertUsingCharset`, MED)
+- `XMLELEMENT` element-name keyword/quoting requoted per target (`TestXmlElementBetweenOracleAndPg`, MED)
+- MySQL binary/bit-string literals fold to integer values (`TestBitStringNumericFold`, MED)
+- Single-arg `COALESCE(x)` reduced to `x` (`TestSingleArgCoalesce`, LOW)
+- MySQL `WITH ROLLUP` ↔ standard `ROLLUP(x)` spelling interconversion (`TestGroupByRollup`, LOW)
+- Leading `DECLARE` block reordered (variables before cursors) for MySQL (`TestMysqlCursorDeclOrder`, LOW)
+- `VALUES` constructor rows wrapped in `ROW(...)` for MySQL derived tables (`TestMysqlValuesConstructorInProc`, LOW)
+- Length-less MySQL `CAST(x AS CHAR)` gets synthesized bounded length on Oracle (`TestTsqlIntToDatetime`, LOW)
+- MySQL `CONCAT` boolean argument stringified as `1`/`0` (`TestMysqlConcatNumBool`, LOW)
+- Redundant PG `= ANY(ARRAY(subquery))` unwrapped to `= ANY (subquery)` (`TestWave4Rewrites`, LOW)
+- `information_schema.tables`/`sys.tables` mapped to Oracle catalog views (`TestWave6Procedural`, LOW)
+- Base64 blob-length literal folds to computed byte length (`TestLiteralFolds`, LOW)
+- Wide scientific-notation numeric cast explicitly sized `DECIMAL(30,0)` (`TestLiteralFolds`, LOW)
+
+Recall note from the worker: 164/263 classes (62%) were never read in full;
+the pass-2 keyword grep is docstring-language dependent and would miss a
+conversion whose docstring avoids the trigger vocabulary.
+
+### Batch 6 — `test_pg_source_wave1.py` (8,400 lines, 261 classes; done in foreground by the orchestrator, keyword-grep only, no systematic sample)
+
+32 classes flagged by keyword grep, all read in full. ~20 were genuine
+transformation candidates, ~7 already covered (row-value tuple expansion via
+the documented `dml.md` entry, `STRING_AGG ... ORDER BY` → `WITHIN GROUP`
+generously covered by the LISTAGG/STRING_AGG family, `DECODE('ff','hex')` →
+per-engine hex function judged rename-class, MySQL `STR_TO_DATE` known-format
+→ fixed `CONVERT` style covered by §3.1). 13 gaps:
+
+| Behavior | Pinning test | Priority |
+|---|---|---|
+| MySQL `DECLARE {EXIT} HANDLER FOR ...` folded into `EXCEPTION WHEN OTHERS`/TRY-CATCH | `TestMysqlDeclareHandler` | HIGH |
+| T-SQL CTAS has no native form → `SELECT ... INTO <table>` | `TestTsqlCtasBecomesSelectInto` | HIGH |
+| `agg(x) FILTER (WHERE p)` → universal `CASE WHEN p THEN x END` rewrite | `TestAggregateFilterRewrite` | HIGH |
+| Parenthesized union arm with its own `ORDER BY`/`LIMIT` shielded via derived-table wrap | `TestParenthesizedUnionArms` | MED |
+| PG column-aliased table ref (`x AS xx(xx1,xx2)`) → T-SQL derived-table wrap | `TestTableColumnAliases` | MED |
+| Parenthesized join-relation group in `FROM` unwrapped, joins hoisted to outer list | `TestParenthesizedJoinRelations` | MED |
+| Oracle 3-arg `TRIM('x' FROM col)` emulated via nested `LTRIM(RTRIM(...))` | `TestWave188IfBareCondTrimTwoArg::test_two_arg_trim_oracle` | MED |
+| `LANGUAGE sql` bare-statement-list body parsed as statements; trailing SELECT → RETURN | `TestLanguageSqlBody` | MED |
+| PG `RETURNS TABLE` single-`RETURN` body → T-SQL inline TVF (`AS RETURN (select)`) form | `TestWave205InlineTvfJoinAlias::test_inline_tvf_tsql` | MED |
+| Cross-statement `ALTER COLUMN` re-states last-known nullability (survives RENAME/USING-strip) | `TestB10RunningColumnTypeAlterNullability` | MED |
+| plpgsql `$1` positional refs / `ALIAS FOR` declarations resolved to the declared name, alias declaration removed | `TestPositionalParamReference`, `TestAliasForDeclaration` | MED |
+| `FOR v IN EXECUTE '<literal>' LOOP` — EXECUTE dropped, query inlines directly | `TestForExecuteLiteralInlines` | LOW |
+| (confirms, doesn't add) synthesized `uq_dtN`/`uq_j` aliases for alias-less derived tables/joins | `TestWave198BareDerivedTables`, `TestWave205InlineTvfJoinAlias` | — |
+
+Recall note (orchestrator, honest): this batch skipped the systematic
+every-Nth-class sample pass the other large-file batches used, due to the
+"no more rounds" directive — only the keyword-flagged 32/261 classes (12%)
+were read. A conversion whose docstring doesn't use the trigger vocabulary
+(`relocat|hoist|rewrit|restructur|wrap|compensat|decompos|fold|synthesiz|
+emulat|faithful|becomes|maps to|guard|...`) is invisible to this pass. Given
+this file is the largest in the suite and organized as ~150 sequential
+"wave" bug-fix classes (each pinning one narrow defect fix), the true gap
+count here is very likely higher than 13 — this is the batch with the
+weakest recall guarantee in the whole sweep.
+
+### Batch 7 — `tests/unit/core/*.py` (39 files, ~7,300 lines, 3 sub-workers merged)
+
+42 gaps reported (of 66 candidates, 24 covered) — see the synthesized
+clusters above for the highest-value rows (cross-statement BIT/nullability
+coercion, DDL guard synthesis, Oracle `(+)`/`ROWNUM`). Additional rows not
+folded into a cluster:
+
+| Behavior | Pinning test | Priority |
+|---|---|---|
+| SQLite `CREATE TRIGGER` → PG decomposed into function + trigger | `test_transpiler.py::test_sqlite_trigger_to_targets` | HIGH |
+| ISO date/timestamp literals into schema-harvested DATE/TIMESTAMP columns wrapped in Oracle ANSI literals | `test_transpiler.py::TestOracleDateLiterals` | HIGH |
+| MySQL tristate `NOT` emulated on Oracle with a NULL-preserving ELSE-less `CASE` | `test_ir_first_families.py::TestZeroPushMysqlOracle` | HIGH |
+| PG `UPDATE ... FROM` restructured into MySQL comma-join `UPDATE t1, t2 SET ...` | `test_ir_first_families.py::TestZeroPushW3Batch` | HIGH |
+| Oracle local variable colliding with a built-in name silently renamed everywhere | `test_ir_first_families.py::TestZeroPushW4Batch` | HIGH |
+| 3-arg `CHARINDEX` on PG wrapped in a zero-guard `CASE` | `test_ir_first_families.py::TestCharindexStartGuardOnPg` | MED |
+| `IN` refcursor param promoted to `IN OUT SYS_REFCURSOR` on Oracle (usage-inferred mode) | `test_ir_first_families.py::TestZeroPushW5Batch` | MED |
+| Oracle bare `TO_NUMBER(x)` → T-SQL `CAST(x AS DECIMAL(38,10))` with invented precision | `test_ir_first_families.py::TestToNumberInIr` | MED |
+| PG implicit `FOUND` flag → `@@ROWCOUNT>0`/`ROW_COUNT()>0` | `test_ir_first_families.py::TestPgFoundFlagInIr` | MED |
+| `CONVERT(...,HASHBYTES(...),2)` wrapper collapses to native hash call | `test_ir_first_families.py::TestStyledConvertInIr` | MED |
+| `DBMS_LOB.SUBSTR` args reordered to T-SQL `SUBSTRING` order | `test_ir_first_families.py::TestTrimPositionAndLobHelpers` | MED |
+| `TRUNC(x)` on MySQL dispatches by inferred variable type (date vs numeric) | `test_ir_first_families.py::TestDateVarsContextInIr` | MED |
+| Empty/comment-only trigger body synthesizes `SET NOCOUNT ON;` no-op (T-SQL forbids empty body) | `test_ir_first_families.py::{TestZeroPushZ4bBatch,TestZeroPushW5Batch}` | MED |
+| `CAST(x AS BIT)` → Oracle `SIGN(ABS(x))` instead of a plain cast | `test_transformer.py::TestTypeMapper::test_bit_cast_normalizes_to_sign_abs` | MED |
+| Oracle guard-loop idiom rewritten as plain `IF (NOT EXISTS(...)) BEGIN...END` on T-SQL | `test_output_gate.py::TestNoFalseGuardWarning` | MED |
+| One T-SQL `ALTER COLUMN` decomposed into two PG clauses (`TYPE` + `SET NOT NULL`) | `test_transpiler.py::TestTranspiler::test_alter_column_postgres_type_then_nullability` | MED |
+| Oracle parameter/RETURN types stripped of precision/scale (context-sensitive vs table columns) | `test_boolean_timestamp.py::TestOracleParameterTypes` | MED |
+| Bare `DROP TABLE t` gains synthesized `IF EXISTS` on PG | `test_ddl_flags.py::TestDropGuard` | MED |
+| `THROW`/`RAISERROR` → per-engine raise with synthesized Oracle number offset (`50001`→`-20001`) | `test_throw_message.py::TestThrowMessagePreserved` | MED |
+| PG `ILIKE` → Oracle `UPPER(x) LIKE UPPER(pattern)` | `test_ilike_groupconcat.py::TestIlike` | MED |
+| T-SQL derived-table `ORDER BY` (no LIMIT/OFFSET) silently dropped | `test_ir_first_families.py::TestZeroPushW3Batch` | MED |
+| `FROM DUAL` synthesized onto table-less SELECT for Oracle | `test_rownum_dual.py::TestFromDual` | MED |
+| Oracle `CREATE SEQUENCE ... AS <type>` silently dropped (ORA-03048) | `test_transpiler.py::TestCreateSequence` | LOW |
+| Oracle `/` batch-terminator placement rule (only after PL/SQL blocks) | `test_transpiler.py::TestTranspiler` | LOW |
+| `NVL2(e,a,b)` → `CASE WHEN e IS NOT NULL THEN a ELSE b END` | `test_function_mappings.py::TestNullFunctions` | LOW |
+| `GROUP_CONCAT` gains synthesized `WITHIN GROUP (ORDER BY <arg>)` on Oracle LISTAGG | `test_ilike_groupconcat.py::TestStringAggregation` | LOW |
+| `MODE() WITHIN GROUP (ORDER BY s)` collapses to Oracle `STATS_MODE(s)` | `test_ir_first_families.py::TestZeroPushW2Batch` | LOW |
+| `SELECT (VALUES (1))` → `SELECT (SELECT 1)` on T-SQL | `test_ir_first_families.py::TestZeroPushW1Batch` | LOW |
+| `SQLSTATE`/`SQLCODE` → `CAST(ERROR_STATE()/ERROR_NUMBER() AS NVARCHAR(n))` | `test_ir_first_families.py::TestFlipRegressions` | LOW |
+| Invalid self-referential variable initializer silently dropped on Oracle | `test_ir_first_families.py::{TestZeroPushW4Batch,TestZeroPushW5Batch}` | LOW |
+| `count() OVER ()` gains synthesized `*` on MySQL | `test_ir_first_families.py::TestZeroPushPgOnlyShapes` | LOW |
+| No-op `OFFSET 0` dropped on T-SQL/MySQL | `test_ir_first_families.py::TestZeroPushW2Batch` | LOW |
+| `PRIMARY KEY CLUSTERED (col ASC)` drops `CLUSTERED`+ordering on PG | `test_output_gate.py::TestGateEndToEnd` | LOW |
+
+## Recall / method honesty notes
+
+- **File-size-driven recall gradient.** Batches on files under ~1,300 lines
+  (1–4, 7) read every assigned class in full; recall there is high. The two
+  largest files — `test_challenge.py` (6,251 lines) and
+  `test_pg_source_wave1.py` (8,400 lines), together 40% of
+  `tests/integration/`'s line count — were swept via keyword-grep-on-
+  docstring plus (for batch 5 only) an every-10th-class sample. A
+  creative-conversion class whose docstring avoids the trigger vocabulary is
+  invisible to a pure keyword pass; batch 6 in particular (this file, done
+  by the orchestrator under a "no more rounds" time constraint) skipped even
+  the sample pass, reading only the 32/261 (12%) keyword-flagged classes.
+  **`test_pg_source_wave1.py` is the weakest-coverage batch in this sweep
+  and the most likely place to find additional gaps in a follow-up pass.**
+- **"Covered" calls were generous by instruction**, per the brief's
+  explicit ask. Several rows credited as covered lean on family/umbrella
+  statements (e.g. "NULL-propagation section," "§3.21 literal-fold
+  umbrella," "the LISTAGG/STRING_AGG family") rather than an exact-mechanism
+  sentence. A stricter bar would move some of those back into the gap list.
+- **Cross-batch duplication is itself signal.** Four independent workers,
+  reading different files with no visibility into each other's findings,
+  converged on the tri-state boolean CASE-wrap pattern (cluster 1) and the
+  trigger-restructuring family (cluster 2) from entirely different test
+  files. That convergence is stronger evidence of a real, pervasive,
+  undocumented mechanism than any single worker's report would be alone.
+- **Mechanism vs. instance risk in the raw appendix.** Several raw rows
+  likely share one underlying `src/` mechanism (e.g. many of the
+  transpile-time literal folds, or the various synthesized-identifier
+  cases) — a BLUE fix pass should cluster by mechanism before writing
+  rationale entries, not fix/document one row at a time.
+- **What this sweep did NOT check:** whether any of these behaviors is
+  *correct* (live-DB verification was out of scope — this is a
+  documentation-coverage sweep, not a correctness audit), and it did not
+  read `tests/fixtures/challenge/*.sql` fixture files directly except where
+  a worker cited one for evidence.
