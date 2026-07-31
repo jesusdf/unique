@@ -589,3 +589,105 @@ added to any gap table or `docs/TODO.md`).**
 sweep: live-DB correctness of the ~65 "already covered" dispositions, and
 `tests/fixtures/challenge/*.sql` fixture content beyond what a cited test
 already quoted.
+
+### Batch 8 — remaining test directories (2026-07-31)
+
+**Method.** The original sweep and its 6b/5b follow-ups covered
+`tests/integration/`, `tests/unit/core/` (39 top-level files), and (in 6b/5b)
+the two largest integration files in full. This batch closes the rest of
+the test tree: every directory `ls tests/` reveals that no prior batch
+touched — `tests/unit/core/procedural/` (missed by the original "39 files"
+count, which stopped at `tests/unit/core/`'s top level and did not descend
+into its `procedural/` subdirectory), `tests/unit/api/`, `tests/unit/dialects/`,
+`tests/unit/cli/`, `tests/unit/helpers/`, `tests/functional_equivalence/`,
+`tests/property/`, and `tests/unit/`'s own top-level files. Three workers
+each read every `test_*.py` file in their assigned directories **in full**
+(40 files, 8,234 lines, no sampling — these directories are small enough
+that full reads were feasible throughout, unlike the two giant integration
+files 6b/5b had to close separately), applied the same (a)/(b)/(c)/(d)
+classification as every prior batch, and checked every (d) candidate
+against the **current** `docs/rationale/*` article set (now organized as
+per-topic subdirectories, e.g. `docs/rationale/procedural/*.md`, not the
+flat files the original sweep inventoried against — the flat
+`docs/rationale/<topic>.md` files are now redirect stubs) and
+`docs/03-unsupported.md` in full, including §7. Every worker-reported
+candidate gap was independently re-verified by the orchestrator: reading
+the pinning test's actual assertions, re-probing the transpiler directly
+(`PYTHONPATH=$PWD/src .venv/bin/python`) for the exact output and warning
+set, and live-executing the produced SQL against the target engine (Oracle,
+PostgreSQL, MySQL) before accepting it as a genuine, unwarned, faithful gap.
+
+**Per-directory counts.**
+
+| Directory | Files (lines) read | Candidates examined | Covered / excluded | New gaps |
+|---|---|---|---|---|
+| `tests/unit/core/procedural/` | 15 (3,452) | ~230 | ~31 (28 covered + 3 reinforcing known clusters) | 3 (1 more reported by the worker was reclassified — see correction below) |
+| `tests/unit/api/` | 1 (1,052) | 21 | 21 — all (a)/(c) HTTP/API plumbing | 0 |
+| `tests/unit/dialects/` | 1 (101) | 4 | 4 — all (a)/(c) registration smoke tests | 0 |
+| `tests/unit/cli/` | 1 (251) | 6 | 6 — all (c) CLI plumbing | 0 |
+| `tests/unit/helpers/` | 6 (690) | 18 | 18 — all (c) dev-tooling-script tests | 0 |
+| `tests/functional_equivalence/` | 3 (630) | ~30 | 30 — all (c) harness self-tests (1 reinforces cluster 2, triggers) | 0 |
+| `tests/property/` | 2 (248) | ~11 | 11 — all (c) hypothesis fuzz-invariant harness | 0 |
+| `tests/unit/` (top-level, 11 files) | 11 (1,810) | ~123 | 123 — all (c) CI/ratchet/tooling self-tests | 0 |
+| **Total** | **40 (8,234)** | **~443** | **~440** | **3** |
+
+Every non-`procedural/` directory closed at **zero** new gaps — confirmed,
+not assumed: `tests/unit/api/`, `tests/unit/dialects/`, `tests/unit/cli/`,
+`tests/unit/helpers/`, `tests/functional_equivalence/`, `tests/property/`,
+and `tests/unit/`'s own top-level files are API/CLI-surface plumbing,
+dialect-registration smoke tests, dev-tooling-script unit tests, and the
+project's own CI/quality-gate self-tests (ratchet floors, docs-generator
+determinism, packaging tripwires, a private-corpus leak scanner, mutation-
+and property-fuzz harnesses) — none of them pins a source-engine-to-target
+SQL structural rewrite as its subject. `tests/unit/core/procedural/` (a
+low-level lexer/parser/transformer/emitter unit suite) was the one directory
+in scope with real transpilation-behavior content, and even there the vast
+majority of candidates were internal-mechanics tests, not user-facing
+conversions — consistent with the brief's expectation that this sweep would
+find few new gaps this late in the campaign.
+
+**New gaps.**
+
+| Behavior | Pinning test(s) | Rationale article written | Priority |
+|---|---|---|---|
+| T-SQL subquery-in-expression variable assignment (`SET @x = (SELECT …)`, including nested inside another call, and a `DECLARE @x = (SELECT …)` initializer) restructures into Oracle `SELECT <expr> INTO x FROM DUAL` — PL/SQL's `:=` forbids a subquery anywhere in its expression (`PLS-00405`). A declare-section initializer can't become a `SELECT … INTO` in place either, so the variable is declared bare and the `SELECT … INTO` is hoisted to the top of the body, ahead of first use. | `test_oracle_subquery_assign.py::{TestOracleSubqueryAssignment,TestOracleSubqueryDeclareInit}` | [`docs/rationale/procedural/tsql-subquery-assignment-to-oracle-select-into.md`](../docs/rationale/procedural/tsql-subquery-assignment-to-oracle-select-into.md) | HIGH |
+| Oracle `NUMTODSINTERVAL(n,'unit')`/`NUMTOYMINTERVAL(n,'unit')`, used as the **source**, rewrites to PostgreSQL interval-literal arithmetic (`n * INTERVAL '1 <unit>'`, or a folded `INTERVAL '<n> <unit>'` for a literal count) across `RETURN` expressions, assignment RHS, and embedded DML. Only the reverse direction (T-SQL `DATEADD` → Oracle `NUMTODSINTERVAL` as a **target**) was previously documented, in passing, in `03-unsupported.md` §3.1. | `test_numtointerval.py::TestNumToIntervalToPostgres` (all 4) | [`docs/rationale/datetime/numtointerval-oracle-to-postgresql.md`](../docs/rationale/datetime/numtointerval-oracle-to-postgresql.md) | MED |
+| T-SQL `@@FETCH_STATUS`, used as the **source**, maps per target: Oracle's cursor-scoped `%FOUND`/`%NOTFOUND`, PostgreSQL's implicit `FOUND`, or a synthesized MySQL handler flag (`DECLARE ... DEFAULT FALSE` + `DECLARE CONTINUE HANDLER FOR NOT FOUND SET ...`). The existing cursor-attribute article documents only the reverse direction (Oracle `%FOUND` as source → T-SQL/MySQL). | `test_transformer.py::TestIrFetchStatusContext` (6 tests) | [`docs/rationale/procedural/tsql-fetch-status-to-oracle-postgresql-mysql.md`](../docs/rationale/procedural/tsql-fetch-status-to-oracle-postgresql-mysql.md) | MED |
+
+**Correction to a worker-reported candidate (not a gap).** The
+`tests/unit/core/procedural/` worker also flagged T-SQL `STRING_SPLIT(...)`
+in a `FROM` clause → MySQL `JSON_TABLE(...)` (`test_transformer.py::
+TestMySQLStringSplit`) as a fourth silent gap. Re-probing it through the
+full `Transpiler` (the unit test calls `ProceduralTransformer._transform_node`
+directly, bypassing the pipeline layer that attaches warnings) shows it
+**does** carry a warning — `UNIQUE-1231` ("Embedded DML not modeled by the
+IR converter … review the statement") — while a control statement with the
+same shape but no `STRING_SPLIT` transpiles with zero warnings. That makes
+it classification (b), already excluded by this sweep's own rule; it is not
+counted as a new gap here.
+
+**Stale-doc correction found while cross-checking (not a new gap).**
+`docs/03-unsupported.md` §3.1 states that functions needing argument
+reordering (`CHARINDEX`↔`INSTR`↔`LOCATE`, `DECODE`→`CASE`) "are emitted with
+an inline review comment rather than a guessed conversion." Live-probing
+both shows this is stale: `test_transformer.py::{TestSubstringPosition,
+TestDecode}` and a direct transpile of each confirm both are silently,
+exactly auto-converted with **no** review comment and **no** warning (a grep
+for "review comment"/"guessed conversion" across `src/unique/core/procedural/`
+returns nothing). Same shape of drift as cluster 12 (`ADD_MONTHS`) and the
+Batch 5b `LIKE`-bracket-class correction — needs fixing the next time §3.1
+is touched, not counted as a docs gap here since the behavior it describes
+*is* covered elsewhere (§3.1's own DATEADD/DATEDIFF/string-function bullets).
+
+**Defects noticed, not gaps.** None. Every genuine new gap above was
+live-verified (Oracle, PostgreSQL, and MySQL, per the target) to produce
+valid, faithful output — no invalid SQL or silent semantic loss was found
+in this batch's scope.
+
+**The whole test tree is now swept.** Between the original sweep
+(`tests/integration/` + `tests/unit/core/` top level), Batch 6b and 5b
+(the two giant integration files read in full), and this batch (every
+remaining directory `ls tests/` reveals, including the one subdirectory —
+`tests/unit/core/procedural/` — the original file-count missed), every
+`test_*.py` file under `tests/` has now been read and classified at least
+once by this audit. No test directory remains unswept.
