@@ -37,6 +37,5 @@ argument (`256`) MySQL's `SHA2` expects.
 **See Also.** [`test_ir_first_families.py::TestStyledConvertInIr`](../../../tests/unit/core/test_ir_first_families.py)
 (`test_hash_wrapper_style_2_drops_on_mysql`,
 `test_hash_wrapper_style_2_sha256_on_postgresql`) ·
-[§2](../../03-unsupported.md), "Engine-Specific Features with No
-Equivalent" (`HASHBYTES` digest value → PostgreSQL/Oracle — the sibling
-entry for the bare, un-wrapped call against those two targets).
+[T-SQL `HASHBYTES('SHA2_256', x)` → PostgreSQL `sha256`](hashbytes-sha256-to-postgresql.md)
+(the sibling entry for the bare, un-wrapped call against PostgreSQL/Oracle).

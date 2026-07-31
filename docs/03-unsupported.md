@@ -151,7 +151,7 @@ transpilation target:
 | `x AT TIME ZONE 'zone'` → cross-engine | PG/T-SQL | Oracle/MySQL have no such operator (ORA-00902), and the PG↔T-SQL timestamp/timestamptz semantics plus the session-tz-dependent display differ, so the value can't be guaranteed equal — degrades to a carrier + warning (kept verbatim on its own dialect) |
 | `sha256/sha512(bytea)` → Oracle/T-SQL/MySQL | PG | PG returns a **bytea** digest; the others return a hex string (Oracle STANDARD_HASH, T-SQL HASHBYTES, MySQL SHA2) — the same digest in a different representation, so it degrades to a carrier + warning. `md5()` (a hex digest everywhere) is translated |
 | `STANDARD_HASH(x, 'SHA1')` / `RAWTOHEX(STANDARD_HASH(x, 'SHA1'))` → PG | Oracle | SHA1 is `STANDARD_HASH`'s own default algorithm (no `ALG` argument); core PostgreSQL (11+) has `md5()`/`sha256()`/`sha384()`/`sha512()` but no `sha1()` without the `pgcrypto` extension, so it degrades to a carrier + warning (`UNIQUE-1235`). `RAWTOHEX(x)` and `STANDARD_HASH`/`RAWTOHEX(STANDARD_HASH(...))` for MD5/SHA256/SHA384/SHA512 are translated (byte-identical, live-verified) |
-| `HASHBYTES('SHA2_256', @nvarchar)` digest value → PG/Oracle | T-SQL | The SQL is translated faithfully and runnably — PG's `sha256` takes a `bytea`, so a character argument is wrapped `UPPER(ENCODE(sha256(CONVERT_TO(x, 'UTF8')), 'hex'))` (bare `sha256(text)` was a runtime error the compile gate passed). A **non-unicode** (`VARCHAR`) argument matches byte-for-byte across T-SQL/Oracle/PG (all hash the UTF-8 bytes, live-verified). A **unicode** (`NVARCHAR`) argument is encoding-inherent divergent: T-SQL hashes UTF-16LE, Oracle `NVARCHAR2` UTF-16BE, PG `text` UTF-8 — three different digests for the same characters, not reconcilable (PG has no UTF-16 encoding for `convert_to`) |
+| `HASHBYTES('SHA2_256', @nvarchar)` digest value → PG/Oracle | T-SQL | A `VARCHAR` argument converts faithfully and runnably — see [the rationale article](rationale/procedural/hashbytes-sha256-to-postgresql.md). An `NVARCHAR` argument is a genuine, permanent limit: T-SQL hashes UTF-16LE, Oracle `NVARCHAR2` UTF-16BE, PG `text` UTF-8 — three different digests for the same characters, not reconcilable (PG has no UTF-16 encoding for `convert_to`) |
 | Windowed string aggregation (`LISTAGG(…) OVER (…)`) → PG/MySQL/T-SQL | Oracle | A string aggregate used as a window function: T-SQL/MySQL never allow it and PG rejects an ORDER-BY'd one — degrades to a carrier + warning |
 | Exception handler / `RAISE NOTICE` / PRINT in a scalar **function** → T-SQL | PG/Oracle/MySQL | A T-SQL scalar function forbids side-effecting operators (TRY/CATCH, PRINT, RAISERROR — error 443), so a PG/Oracle `EXCEPTION` handler or `RAISE NOTICE` has no function-level equivalent; the function is preserved as a carrier comment (it compiles on the other engines) |
 | Scroll cursor `FETCH PRIOR/FIRST/LAST/ABSOLUTE/RELATIVE` → Oracle/PG/MySQL | T-SQL | Those engines' cursors are forward-only (only `FETCH NEXT`), so a non-forward fetch has no equivalent; the scroll fetch degrades to a carrier comment and the surrounding OPEN/CLOSE still compile |
@@ -411,19 +411,16 @@ advanced JSON manipulation or PostgreSQL-specific JSONB operators.
 ### 3.10 Bitwise Operators → Oracle
 
 Oracle has no infix bitwise operators (`|` is string concat, `^`/`&` are
-errors). They are now translated via exact integer identities (validated live
-against Oracle; correct for non-negative integers):
-
-| T-SQL | Oracle |
-|-------|--------|
-| `a & b` | `BITAND(a, b)` |
-| `a \| b` | `a + b - BITAND(a, b)` |
-| `a ^ b` | `a + b - 2 * BITAND(a, b)` |
-| `a << b` | `a * POWER(2, b)` |
-| `a >> b` | `FLOOR(a / POWER(2, b))` |
-
+errors); the infix forms (`&`, `|`, `^`, `<<`, `>>`) convert faithfully via
+exact integer identities built from `BITAND`/`POWER` — see
+[the rationale article](rationale/strings-collation/bitwise-operators-to-oracle-identities.md).
 On PostgreSQL `^` becomes `#` (its XOR); MySQL keeps the native operators.
-(A former converter default silently corrupted these to `=`; long fixed.)
+
+The **aggregate** bitwise functions (`BIT_AND`/`BIT_OR`/`BIT_XOR`) are a
+different, genuine limit: Oracle and T-SQL have no bit-aggregate
+equivalent at all (only MySQL and PostgreSQL support them, and translate
+faithfully between each other), so a statement using them on those two
+targets degrades whole via the unmapped-builtin gate (§2.1).
 
 ### 3.11 String Concatenation Between Untyped Columns
 
@@ -438,12 +435,14 @@ by the columns' declared types, which the standalone-DML path does not have (no
 
 ### 3.12 IIF and DATEPART (handled)
 
-`IIF(cond, a, b)` is translated to a searched `CASE WHEN cond THEN a ELSE b END`
-for Oracle/PostgreSQL (kept as `IIF`/`IF` where native), and `DATEPART(part, x)`
-emits the standard `EXTRACT(part FROM x)` (not the comma form every engine
-rejects). Both are validated live. Only date parts outside the common
-year/month/day/hour/minute/second set (e.g. `WEEKDAY`, `QUARTER` on Oracle) may
-still need review.
+Both convert faithfully — `IIF`/MySQL `IF` to a searched `CASE` (see
+[the rationale article](rationale/dml/iif-to-case-or-native.md)), and the
+standard date fields between `DATEPART(part, x)` and `EXTRACT(part FROM
+x)` (see [the rationale article](rationale/datetime/extract-datepart-standard-fields.md)).
+Only date parts outside the common year/month/day/hour/minute/second set
+(e.g. `WEEKDAY`, `QUARTER` on Oracle) need per-field reconstruction
+instead of a plain respelling — see
+[the DATEDIFF/DATEPART unit-map article](rationale/datetime/datediff-datepart-unit-maps.md).
 
 ### 3.25 `GROUPS` Window Frame → T-SQL / MySQL
 
@@ -458,20 +457,13 @@ PostgreSQL keep the native `GROUPS` frame.
 
 ### 3.24 T-SQL Money Literal Shorthand (`$12.50`) — Handled (2026-07-25)
 
-T-SQL's bare currency literal (`$12.50`, `$100`) is mis-parsed by sqlglot as a
-`table.column` reference (`Column(this=Literal(50), table=Identifier($12))`
-for the dotted form, `Column(this=Identifier($100))` for a whole-dollar
-amount) rather than a number — a nonsense shape that used to ship unmodified
-(a quoted `"$12"` identifier and a bare `$` on non-T-SQL targets, both
-invalid SQL there, with zero warnings). The converter now recognizes both
-shapes on T-SQL source and rebuilds the numeric literal (`12.50`, `100`),
-value-preserving on every target — no warning is needed since nothing is
-lost. A **quoted** `"$12".50` / `[$12].[50]` is left untouched (it is
-already-invalid T-SQL, not the money shorthand — live-verified Msg 102), and
-the same `table.column` shape on a dialect with no money-literal syntax
-(Oracle/MySQL source) is now flagged by `validate_source` as invalid input
-instead of validating clean (generalizing the §07-08 "garbage `table.column`"
-detector one level below the top-level bare-statement check).
+Converts faithfully to the plain numeric literal it means — see
+[the rationale article](rationale/dml/money-literal-shorthand.md). A
+**quoted** `"$12".50` / `[$12].[50]` is left untouched (it is
+already-invalid T-SQL, not the money shorthand), and the same
+`table.column` shape on a dialect with no money-literal syntax
+(Oracle/MySQL source) is flagged by source validation as invalid input
+instead of validating clean.
 
 ### 3.22 Annotated Inherent Divergences (2026-07-24 batch)
 
@@ -659,12 +651,10 @@ and reuse it).
 
 ### 3.16 `NCHAR(n)` Unicode Code Point (handled)
 
-T-SQL `NCHAR(n)` returns the character for Unicode code point `n` (an integer — a
-`0x…` argument is a number, not a byte string). It maps to PostgreSQL `CHR(n)`,
-MySQL `CHAR(n USING utf32)`, and Oracle `NCHR(n)`. Oracle's `NCHR` only covers the
-Basic Multilingual Plane and truncates a supplementary code point (`> U+FFFF`) to
-16 bits, so those are emitted as `UNISTR('\HHHH\LLLL')` with the UTF-16 surrogate
-pair (e.g. `NCHAR(0x1F600)` 😀 → `UNISTR('\D83D\DE00')`). Verified live on all three.
+Converts faithfully to PostgreSQL `CHR(n)`, MySQL `CHAR(n USING utf32)`,
+and Oracle `NCHR(n)`/a `UNISTR` surrogate pair for a supplementary code
+point beyond Oracle `NCHR`'s 16-bit range — see
+[the rationale article](rationale/strings-collation/nchar-code-point-per-target.md).
 
 ### 3.15 Error-Tolerant Cast (`DEFAULT … ON CONVERSION ERROR`)
 
@@ -808,103 +798,54 @@ only partially supported:
 - **`SET ROWCOUNT n`**: removed with a warning (deprecated; use `TOP`/
   `FETCH FIRST` instead).
 - **Dynamic SQL** (T-SQL `EXEC(...)`/`EXEC sp_executesql`, Oracle
-  `EXECUTE IMMEDIATE`, plpgsql `EXECUTE`): a **constant** SQL string — a
-  literal argument, or a variable whose single assignment is a constant string
-  literal — is **translated through the regular transpilation pipeline** and
-  the translated text is spliced back into the string (audit N10/B11,
-  2026-07-25), so the target engine executes its own dialect at runtime. A
-  string **built at runtime** (concatenation, parameter values, more than one
-  assignment) cannot be translated statically: literal fragments still get the
-  existing fragment-level rewrites, and the statement is flagged with a
-  "review the dynamic SQL" warning. A constant string that does not parse as a
-  single source-dialect statement, and dynamic **routine DDL** (a
-  `CREATE PROCEDURE/FUNCTION/TRIGGER` kept inside a string), are likewise
-  flagged. A **parameterized** run (bind values via `USING` / `sp_executesql`
-  bindings) keeps the established placeholder-level handling and its
-  documented binding limits — the placeholder spelling belongs to the target's
-  execution form, so the content is not statically re-translated. Nested
-  embedded translation is capped at depth 2 (warned beyond).
-- **`IF [NOT] EXISTS(…)` DDL guards** (idempotent migration scripts): a
-  *system-catalog* existence guard (`IF [NOT] EXISTS(SELECT … FROM sys.…)` /
-  `OBJECT_ID`). The catalog query has no faithful cross-engine form, so on most
-  targets the condition is dropped and the guarded DDL is emitted (PostgreSQL/MySQL
-  use their own `CREATE … IF NOT EXISTS` where available). On **Oracle** the guard
-  is kept idempotently and portably: a guarded `CREATE` becomes a `user_objects`
-  existence probe + `EXECUTE IMMEDIATE` — `BEGIN FOR _ IN (SELECT 1 FROM DUAL WHERE
-  NOT EXISTS(SELECT 1 FROM user_objects WHERE object_name='X' AND object_type='…'))
-  LOOP EXECUTE IMMEDIATE q'[<ddl>]'; END LOOP; END; /`. This is the idiomatic Oracle
-  form (DDL cannot be a conditional statement inline, so `EXECUTE IMMEDIATE` is
-  required; `q'[…]'` avoids escaping) and works on every version — unlike `CREATE …
-  IF NOT EXISTS` (23ai+). A re-run no longer fails with `ORA-00955`. (A guarded
-  `DROP` maps to `DROP … IF EXISTS` / a tolerant block.)
-- **Column-existence DDL guards** (a narrower catalog probe than the
-  object-existence guard above): `IF NOT EXISTS(SELECT 1 FROM sys.columns
-  WHERE object_id = OBJECT_ID('t') AND name = 'c' AND …) ALTER TABLE t
-  ADD/ALTER COLUMN c …` cannot fall back to "drop the condition, use the
-  target's native `IF NOT EXISTS`" the way the object-existence guard does —
-  no target has an `ADD COLUMN IF NOT EXISTS`/`ALTER COLUMN` guard clause, so
-  dropping the probe would raise "column already exists" (or double-apply a
-  default) on a re-run. Every target instead gets a full synthesized probe
-  against its own catalog, keeping the guard's condition: **PostgreSQL** a
-  `DO $$ IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE
-  table_name = lower('t') AND column_name = lower('c') AND …) THEN ALTER
-  TABLE … END IF; END $$;` block; **MySQL** (no anonymous blocks, no `IF`
-  outside a routine) a three-statement `SET @unique_guard_sql = (SELECT
-  IF(NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='t'
-  AND column_name='c' AND …), '<ddl>', 'DO 0')); PREPARE unique_guard_stmt
-  FROM @unique_guard_sql; EXECUTE unique_guard_stmt; DROP PREPARE
-  unique_guard_stmt;`; **Oracle** the same compact `FOR unique_guard IN
-  (SELECT 1 FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM user_tab_columns WHERE
-  table_name = UPPER('t') AND column_name = UPPER('c') AND …)) LOOP EXECUTE
-  IMMEDIATE '<ddl>'; END LOOP;` idiom the object-existence guard uses. An
-  `ELSE` branch is supported when its body is a diagnostic `PRINT` (rewritten
-  to `RAISE NOTICE`/`DBMS_OUTPUT.PUT_LINE`/a MySQL `CONCAT`-built alternate
-  statement); any other `ELSE` body, or a probe predicate outside the
-  recognized set (plain existence, `default_object_id <> 0`, `is_identity`),
-  falls back to the honest warned drop rather than being guessed at. The same
-  catalog-probe treatment covers a guarded `DROP TRIGGER` targeting
-  PostgreSQL, for a different reason: PostgreSQL's `DROP TRIGGER` syntax
-  requires `ON <table>`, which a T-SQL `OBJECT_ID(name, 'TR')` guard never
-  names, so the table is resolved from a `pg_trigger` probe inside the `DO $$`
-  block instead of dropping the statement.
-  (`tests/unit/core/test_guard_translation.py::TestFaithfulColumnProbeGuard`,
-  `::TestGuardElseBranch`, `::TestTrailingCommentOnGuardLine` — note: these
-  live in `tests/unit/core/`, not `tests/integration/`.)
+  `EXECUTE IMMEDIATE`, plpgsql `EXECUTE`): a **constant** SQL string
+  converts through the regular transpilation pipeline — see
+  [the rationale article](rationale/procedural/constant-dynamic-sql-string.md).
+  A string **built at runtime** (concatenation, parameter values, more than
+  one assignment) is a genuine limit: it cannot be translated statically,
+  so literal fragments still get the existing fragment-level rewrites and
+  the statement is flagged with a "review the dynamic SQL" warning. A
+  constant string that does not parse as a single source-dialect
+  statement, and dynamic **routine DDL** (a `CREATE PROCEDURE/FUNCTION/
+  TRIGGER` kept inside a string), are likewise flagged. A **parameterized**
+  run (bind values via `USING` / `sp_executesql` bindings) keeps the
+  established placeholder-level handling and its documented binding
+  limits — the placeholder spelling belongs to the target's execution
+  form, so the content is not statically re-translated. Nested embedded
+  translation is capped at depth 2 (warned beyond).
+- **`IF [NOT] EXISTS(…)` DDL guards** (idempotent migration scripts) and the
+  narrower **column-existence guard** (`sys.columns`-gated `ALTER TABLE ...
+  ADD`/`ALTER COLUMN`) both convert — the catalog condition drops to the
+  target's own native `IF NOT EXISTS` where one exists, or is rebuilt as a
+  synthesized per-target probe (PostgreSQL `DO $$`, MySQL `PREPARE`/`EXECUTE`,
+  Oracle a compact `FOR` loop over `DUAL`) where none does — see
+  [the rationale article](rationale/ddl/tsql-existence-guard-catalog-probes.md).
+  An unrecognized `ELSE` body or probe predicate outside the known set still
+  falls back to the honest warned drop rather than being guessed at.
 - **Oracle-source catalog probes rewritten per target** (the mirror
-  direction): an Oracle guard or dynamic-DDL idiom that queries
-  `user_indexes` (to resolve an index's owning table before a table-less
-  `DROP INDEX`, which T-SQL requires by name — error 159) or
-  `user_tab_cols`/`user_tab_columns` (to gate an `ALTER TABLE … MODIFY`) gets
-  its catalog probe rewritten to the target's own system view with matching
-  semantics, not carried verbatim: T-SQL `sys.indexes`/`sys.columns` +
-  `OBJECT_NAME(object_id)`, PostgreSQL `information_schema.columns` (with a
-  `lower(...)` compare, since Oracle identifiers default to upper case).
-  (`tests/integration/test_oracle_source_m4_wave.py::TestOracleCatalogOnTsql.
-  test_table_less_drop_index_resolves_table`,
-  `::TestWave11Classes.test_alter_modify_inside_guard`.)
+  direction): an Oracle guard or dynamic-DDL idiom querying `user_indexes` or
+  `user_tab_cols`/`user_tab_columns` converts too, rewritten to the target's
+  own system view with matching semantics — see
+  [the rationale article](rationale/ddl/oracle-catalog-probe-rewritten-per-target.md).
 - **Non-catalog `IF EXISTS(…) BEGIN … END` control flow**: a **real-data**
-  condition (e.g. `IF EXISTS (SELECT NULL FROM t …)
-  BEGIN … END`, common in migration scripts) is control flow — dropping its guard
-  would silently change semantics. On **Oracle**, where `IF EXISTS(subquery)` is
-  invalid PL/SQL (PLS-00204), it is **emulated with a cursor FOR loop** over a
-  one-row probe — `FOR … IN (SELECT 1 FROM DUAL WHERE [NOT] EXISTS(<subquery>))
-  LOOP <body> END LOOP` — so the body runs once iff the subquery returns a row; a
-  top-level block is wrapped in an anonymous `BEGIN … END; /`. An **`ELSE`** is a
-  second FOR over the *negated* probe (`EXISTS` ⟷ `NOT EXISTS`, mutually exclusive
-  — exactly one body fires). A T-SQL session directive such as `SET NOEXEC ON`
-  inside the block has no Oracle equivalent and is carried.
+  condition (e.g. `IF EXISTS (SELECT NULL FROM t …) BEGIN … END`, common in
+  migration scripts) converts too — on Oracle, where `IF EXISTS(subquery)` is
+  invalid PL/SQL (PLS-00204), it is emulated with a cursor `FOR` loop over a
+  one-row probe — see
+  [the rationale article](rationale/procedural/if-exists-control-flow-to-oracle-for-loop.md).
+  A T-SQL session directive such as `SET NOEXEC ON` inside the block has no
+  Oracle equivalent and is carried as a documented carrier + warning.
 - **Set-based trigger pseudo-tables** (`FROM inserted JOIN deleted`): T-SQL
-  triggers are statement-level with `inserted`/`deleted` row sets. Column
-  qualifiers (`inserted.col`) map to the row-level `NEW`/`OLD` (`:NEW`/`:OLD`).
-  A **purely set-based** trigger (using `inserted`/`deleted` only via
-  `FROM`/`JOIN`, with no row-level qualifier or `UPDATE(col)` predicate) is now
-  **rewritten to a PostgreSQL statement-level trigger** with `REFERENCING NEW
-  TABLE AS inserted OLD TABLE AS deleted` + `FOR EACH STATEMENT`. Oracle and
-  MySQL keep documenting it with a `-- UNIQUE:` note: Oracle has no *named*
-  transition tables (a compound trigger would need a manual PL/SQL collection,
-  and `FROM inserted` would be invalid), and MySQL has neither. A **mixed**
-  trigger (row-level and set-level together) cannot be a single trigger and
-  stays documented on every target.
+  triggers are statement-level with `inserted`/`deleted` row sets. A **purely
+  set-based** trigger (using `inserted`/`deleted` only via `FROM`/`JOIN`, with
+  no row-level qualifier or `UPDATE(col)` predicate) converts to PostgreSQL —
+  see [the rationale article](rationale/procedural/tsql-set-based-trigger-to-pg-statement-level.md)
+  — but stays a genuine limit on **Oracle** and **MySQL**, documented with a
+  `-- UNIQUE:` note: Oracle has no *named* transition tables (a compound
+  trigger would need a manual PL/SQL collection, and `FROM inserted` would be
+  invalid), and MySQL has neither. A **mixed** trigger (row-level and
+  set-level together) cannot be a single trigger and stays documented on
+  every target.
 
 ### Oracle → T-SQL specifics
 
