@@ -40,6 +40,183 @@ degrades to a documented carrier.
 
 > **Generated file — do not edit by hand.** Produced by `python scripts/generate_rationale_index.py` from the article pages in this directory; the intro above comes from `_intro.md`. The CI freshness gate (`python scripts/generate_rationale_index.py --check`) fails the build if it drifts.
 
+## By engine
+
+Each article grouped by the engine it converts **from** and **to** (derived from the `direction` metadata). Cross-engine articles — no single source/target — are listed once at the end.
+
+| Engine | As source | As target |
+|---|---|---|
+| T-SQL | [as source](#t-sql-as-source) | [as target](#t-sql-as-target) |
+| Oracle | [as source](#oracle-as-source) | [as target](#oracle-as-target) |
+| PostgreSQL | [as source](#postgresql-as-source) | [as target](#postgresql-as-target) |
+| MySQL | [as source](#mysql-as-source) | [as target](#mysql-as-target) |
+
+### T-SQL as source
+
+#### Value position: booleans wrapped for engines with no boolean value
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `CAST(x AS BIT)` → Oracle `SIGN(ABS(x))`, not a plain type change](tsql-cast-as-bit-normalizes.md) | tsql → oracle | T-SQL's `CAST(x AS BIT)` is not a value-preserving type change — it *normalizes* any numeric value to `0` or `1` (any non-zero number becomes `1`, zero stays `0`, `NULL` stays `NULL`). |
+
+### T-SQL as target
+
+| [Value position: booleans wrapped for engines with no boolean value](#value-position-booleans-wrapped-for-engines-with-no-boolean-value-1) | [Predicate position: the reverse direction](#predicate-position-the-reverse-direction) | [Boolean-column predicates re-spelled for engines with no boolean type](#boolean-column-predicates-re-spelled-for-engines-with-no-boolean-type) | [Null-safe equality: `IS [NOT] DISTINCT FROM` has no target operator](#null-safe-equality-is-not-distinct-from-has-no-target-operator) |
+|---|---|---|---|
+
+#### Value position: booleans wrapped for engines with no boolean value
+
+| Article | Direction | Description |
+|---|---|---|
+| [Comparisons, `AND`/`OR`, `IS [NOT] NULL`, `EXISTS` in a SELECT-list value position (MySQL, PostgreSQL) → T-SQL, Oracle](predicate-in-value-position.md) | postgresql/mysql → tsql/oracle | A comparison, boolean combinator, or null-test used as an ordinary value — `SELECT (a > b) AS c`, `SELECT (b1 AND a3) AS b3`, `SELECT (id IS NOT NULL) AS a3` — is legal on MySQL/PostgreSQL (comparisons and booleans are 1/0/NULL values there). |
+| [`NOT` of a truthy variable, assignment, or function `RETURN` (MySQL, PostgreSQL) → T-SQL, Oracle](not-of-truthy-value.md) | postgresql/mysql → tsql/oracle | The same duality inside procedural bodies: `SET done = NOT done` (MySQL) or `RETURN <predicate>` from a function declared to return a boolean assigns/returns a value, not a predicate. |
+
+#### Predicate position: the reverse direction
+
+| Article | Direction | Description |
+|---|---|---|
+| [A numeric/bit value where a genuine predicate or boolean is required (MySQL, PostgreSQL) → T-SQL, Oracle](value-in-predicate-position.md) | postgresql/mysql → tsql/oracle | MySQL/PostgreSQL treat `0`/non-`0` as false/true anywhere a condition is expected (`WHERE 0` never matches); Oracle PL/SQL's `BOOLEAN` return type demands an actual boolean expression, not a `NUMBER`. |
+| [A value-wrapped predicate compared again in predicate position collapses back to the predicate (MySQL) → T-SQL](value-wrapped-predicate-collapse.md) | mysql → tsql | MySQL lets you compare a boolean value against `1`/`0`, or test it with `IS TRUE`, even when that value is itself already a predicate: `WHERE (c2 IS NOT NULL) = 1`. |
+| [A bare Oracle PL/SQL `BOOLEAN` variable used as a condition → `= 1` on T-SQL](oracle-boolean-variable-bare-condition.md) | oracle → tsql | Oracle's PL/SQL `BOOLEAN` variables are used directly as conditions — `IF NOT bexc THEN`, `WHILE bexc LOOP` — since PL/SQL has a real boolean type. |
+
+#### Boolean-column predicates re-spelled for engines with no boolean type
+
+| Article | Direction | Description |
+|---|---|---|
+| [`flag IS [NOT] TRUE/FALSE` on a boolean column (PostgreSQL) → T-SQL, Oracle](boolean-column-is-true-false.md) | postgresql → tsql/oracle | PostgreSQL's `IS TRUE`/`IS FALSE`/`IS NOT TRUE`/`IS NOT FALSE` predicate accepts `TRUE`/`FALSE`/`NULL`/`UNKNOWN` as its right-hand side — never an integer. |
+
+#### Null-safe equality: `IS [NOT] DISTINCT FROM` has no target operator
+
+| Article | Direction | Description |
+|---|---|---|
+| [`IS [NOT] DISTINCT FROM` (PostgreSQL null-safe comparison) → MySQL `<=>` / T-SQL, Oracle `EXISTS`/`INTERSECT`](is-distinct-from.md) | postgresql → tsql/oracle/mysql | PostgreSQL's `IS [NOT] DISTINCT FROM` is a null-safe equality: unlike `=`, it never itself evaluates to `UNKNOWN` — `NULL IS NOT DISTINCT FROM NULL` is `TRUE`, `1 IS DISTINCT FROM NULL` is `TRUE`. |
+
+### Oracle as source
+
+| [Value position: booleans wrapped for engines with no boolean value](#value-position-booleans-wrapped-for-engines-with-no-boolean-value-2) | [Predicate position: the reverse direction](#predicate-position-the-reverse-direction-1) |
+|---|---|
+
+#### Value position: booleans wrapped for engines with no boolean value
+
+| Article | Direction | Description |
+|---|---|---|
+| [Oracle PL/SQL `BOOLEAN` variables and parameters keep native `NOT` (handled)](oracle-plsql-native-boolean.md) | oracle | Oracle's exception to its own "SQL has no boolean value" rule: a PL/SQL variable or parameter declared `BOOLEAN` **is** a first-class value inside procedural code — just not inside a SQL statement issued from that same block. |
+
+#### Predicate position: the reverse direction
+
+| Article | Direction | Description |
+|---|---|---|
+| [A bare Oracle PL/SQL `BOOLEAN` variable used as a condition → `= 1` on T-SQL](oracle-boolean-variable-bare-condition.md) | oracle → tsql | Oracle's PL/SQL `BOOLEAN` variables are used directly as conditions — `IF NOT bexc THEN`, `WHILE bexc LOOP` — since PL/SQL has a real boolean type. |
+
+### Oracle as target
+
+| [Value position: booleans wrapped for engines with no boolean value](#value-position-booleans-wrapped-for-engines-with-no-boolean-value-3) | [Predicate position: the reverse direction](#predicate-position-the-reverse-direction-2) | [Boolean-column predicates re-spelled for engines with no boolean type](#boolean-column-predicates-re-spelled-for-engines-with-no-boolean-type-1) | [Null-safe equality: `IS [NOT] DISTINCT FROM` has no target operator](#null-safe-equality-is-not-distinct-from-has-no-target-operator-1) |
+|---|---|---|---|
+
+#### Value position: booleans wrapped for engines with no boolean value
+
+| Article | Direction | Description |
+|---|---|---|
+| [Comparisons, `AND`/`OR`, `IS [NOT] NULL`, `EXISTS` in a SELECT-list value position (MySQL, PostgreSQL) → T-SQL, Oracle](predicate-in-value-position.md) | postgresql/mysql → tsql/oracle | A comparison, boolean combinator, or null-test used as an ordinary value — `SELECT (a > b) AS c`, `SELECT (b1 AND a3) AS b3`, `SELECT (id IS NOT NULL) AS a3` — is legal on MySQL/PostgreSQL (comparisons and booleans are 1/0/NULL values there). |
+| [`NOT` of a truthy variable, assignment, or function `RETURN` (MySQL, PostgreSQL) → T-SQL, Oracle](not-of-truthy-value.md) | postgresql/mysql → tsql/oracle | The same duality inside procedural bodies: `SET done = NOT done` (MySQL) or `RETURN <predicate>` from a function declared to return a boolean assigns/returns a value, not a predicate. |
+| [T-SQL `CAST(x AS BIT)` → Oracle `SIGN(ABS(x))`, not a plain type change](tsql-cast-as-bit-normalizes.md) | tsql → oracle | T-SQL's `CAST(x AS BIT)` is not a value-preserving type change — it *normalizes* any numeric value to `0` or `1` (any non-zero number becomes `1`, zero stays `0`, `NULL` stays `NULL`). |
+
+#### Predicate position: the reverse direction
+
+| Article | Direction | Description |
+|---|---|---|
+| [A numeric/bit value where a genuine predicate or boolean is required (MySQL, PostgreSQL) → T-SQL, Oracle](value-in-predicate-position.md) | postgresql/mysql → tsql/oracle | MySQL/PostgreSQL treat `0`/non-`0` as false/true anywhere a condition is expected (`WHERE 0` never matches); Oracle PL/SQL's `BOOLEAN` return type demands an actual boolean expression, not a `NUMBER`. |
+
+#### Boolean-column predicates re-spelled for engines with no boolean type
+
+| Article | Direction | Description |
+|---|---|---|
+| [`flag IS [NOT] TRUE/FALSE` on a boolean column (PostgreSQL) → T-SQL, Oracle](boolean-column-is-true-false.md) | postgresql → tsql/oracle | PostgreSQL's `IS TRUE`/`IS FALSE`/`IS NOT TRUE`/`IS NOT FALSE` predicate accepts `TRUE`/`FALSE`/`NULL`/`UNKNOWN` as its right-hand side — never an integer. |
+
+#### Null-safe equality: `IS [NOT] DISTINCT FROM` has no target operator
+
+| Article | Direction | Description |
+|---|---|---|
+| [`IS [NOT] DISTINCT FROM` (PostgreSQL null-safe comparison) → MySQL `<=>` / T-SQL, Oracle `EXISTS`/`INTERSECT`](is-distinct-from.md) | postgresql → tsql/oracle/mysql | PostgreSQL's `IS [NOT] DISTINCT FROM` is a null-safe equality: unlike `=`, it never itself evaluates to `UNKNOWN` — `NULL IS NOT DISTINCT FROM NULL` is `TRUE`, `1 IS DISTINCT FROM NULL` is `TRUE`. |
+
+### PostgreSQL as source
+
+| [Value position: booleans wrapped for engines with no boolean value](#value-position-booleans-wrapped-for-engines-with-no-boolean-value-4) | [Predicate position: the reverse direction](#predicate-position-the-reverse-direction-3) | [Boolean-column predicates re-spelled for engines with no boolean type](#boolean-column-predicates-re-spelled-for-engines-with-no-boolean-type-2) | [Null-safe equality: `IS [NOT] DISTINCT FROM` has no target operator](#null-safe-equality-is-not-distinct-from-has-no-target-operator-2) |
+|---|---|---|---|
+
+#### Value position: booleans wrapped for engines with no boolean value
+
+| Article | Direction | Description |
+|---|---|---|
+| [Comparisons, `AND`/`OR`, `IS [NOT] NULL`, `EXISTS` in a SELECT-list value position (MySQL, PostgreSQL) → T-SQL, Oracle](predicate-in-value-position.md) | postgresql/mysql → tsql/oracle | A comparison, boolean combinator, or null-test used as an ordinary value — `SELECT (a > b) AS c`, `SELECT (b1 AND a3) AS b3`, `SELECT (id IS NOT NULL) AS a3` — is legal on MySQL/PostgreSQL (comparisons and booleans are 1/0/NULL values there). |
+| [`NOT` of a truthy variable, assignment, or function `RETURN` (MySQL, PostgreSQL) → T-SQL, Oracle](not-of-truthy-value.md) | postgresql/mysql → tsql/oracle | The same duality inside procedural bodies: `SET done = NOT done` (MySQL) or `RETURN <predicate>` from a function declared to return a boolean assigns/returns a value, not a predicate. |
+| [Boolean-to-text/char rendering (PostgreSQL `::text` / MySQL `CAST(... AS CHAR)`)](boolean-to-text-rendering.md) | postgresql/mysql → mysql/postgresql | PostgreSQL renders a boolean cast to text as the words `'true'`/`'false'`; MySQL has no boolean text representation at all — its booleans are ordinary integers, so casting one to a character type gives `'1'`/`'0'` instead. |
+
+#### Predicate position: the reverse direction
+
+| Article | Direction | Description |
+|---|---|---|
+| [A numeric/bit value where a genuine predicate or boolean is required (MySQL, PostgreSQL) → T-SQL, Oracle](value-in-predicate-position.md) | postgresql/mysql → tsql/oracle | MySQL/PostgreSQL treat `0`/non-`0` as false/true anywhere a condition is expected (`WHERE 0` never matches); Oracle PL/SQL's `BOOLEAN` return type demands an actual boolean expression, not a `NUMBER`. |
+
+#### Boolean-column predicates re-spelled for engines with no boolean type
+
+| Article | Direction | Description |
+|---|---|---|
+| [`flag IS [NOT] TRUE/FALSE` on a boolean column (PostgreSQL) → T-SQL, Oracle](boolean-column-is-true-false.md) | postgresql → tsql/oracle | PostgreSQL's `IS TRUE`/`IS FALSE`/`IS NOT TRUE`/`IS NOT FALSE` predicate accepts `TRUE`/`FALSE`/`NULL`/`UNKNOWN` as its right-hand side — never an integer. |
+
+#### Null-safe equality: `IS [NOT] DISTINCT FROM` has no target operator
+
+| Article | Direction | Description |
+|---|---|---|
+| [`IS [NOT] DISTINCT FROM` (PostgreSQL null-safe comparison) → MySQL `<=>` / T-SQL, Oracle `EXISTS`/`INTERSECT`](is-distinct-from.md) | postgresql → tsql/oracle/mysql | PostgreSQL's `IS [NOT] DISTINCT FROM` is a null-safe equality: unlike `=`, it never itself evaluates to `UNKNOWN` — `NULL IS NOT DISTINCT FROM NULL` is `TRUE`, `1 IS DISTINCT FROM NULL` is `TRUE`. |
+
+### PostgreSQL as target
+
+#### Value position: booleans wrapped for engines with no boolean value
+
+| Article | Direction | Description |
+|---|---|---|
+| [Boolean-to-text/char rendering (PostgreSQL `::text` / MySQL `CAST(... AS CHAR)`)](boolean-to-text-rendering.md) | postgresql/mysql → mysql/postgresql | PostgreSQL renders a boolean cast to text as the words `'true'`/`'false'`; MySQL has no boolean text representation at all — its booleans are ordinary integers, so casting one to a character type gives `'1'`/`'0'` instead. |
+
+### MySQL as source
+
+| [Value position: booleans wrapped for engines with no boolean value](#value-position-booleans-wrapped-for-engines-with-no-boolean-value-6) | [Predicate position: the reverse direction](#predicate-position-the-reverse-direction-4) |
+|---|---|
+
+#### Value position: booleans wrapped for engines with no boolean value
+
+| Article | Direction | Description |
+|---|---|---|
+| [Comparisons, `AND`/`OR`, `IS [NOT] NULL`, `EXISTS` in a SELECT-list value position (MySQL, PostgreSQL) → T-SQL, Oracle](predicate-in-value-position.md) | postgresql/mysql → tsql/oracle | A comparison, boolean combinator, or null-test used as an ordinary value — `SELECT (a > b) AS c`, `SELECT (b1 AND a3) AS b3`, `SELECT (id IS NOT NULL) AS a3` — is legal on MySQL/PostgreSQL (comparisons and booleans are 1/0/NULL values there). |
+| [`NOT` of a truthy variable, assignment, or function `RETURN` (MySQL, PostgreSQL) → T-SQL, Oracle](not-of-truthy-value.md) | postgresql/mysql → tsql/oracle | The same duality inside procedural bodies: `SET done = NOT done` (MySQL) or `RETURN <predicate>` from a function declared to return a boolean assigns/returns a value, not a predicate. |
+| [Boolean-to-text/char rendering (PostgreSQL `::text` / MySQL `CAST(... AS CHAR)`)](boolean-to-text-rendering.md) | postgresql/mysql → mysql/postgresql | PostgreSQL renders a boolean cast to text as the words `'true'`/`'false'`; MySQL has no boolean text representation at all — its booleans are ordinary integers, so casting one to a character type gives `'1'`/`'0'` instead. |
+
+#### Predicate position: the reverse direction
+
+| Article | Direction | Description |
+|---|---|---|
+| [A numeric/bit value where a genuine predicate or boolean is required (MySQL, PostgreSQL) → T-SQL, Oracle](value-in-predicate-position.md) | postgresql/mysql → tsql/oracle | MySQL/PostgreSQL treat `0`/non-`0` as false/true anywhere a condition is expected (`WHERE 0` never matches); Oracle PL/SQL's `BOOLEAN` return type demands an actual boolean expression, not a `NUMBER`. |
+| [A value-wrapped predicate compared again in predicate position collapses back to the predicate (MySQL) → T-SQL](value-wrapped-predicate-collapse.md) | mysql → tsql | MySQL lets you compare a boolean value against `1`/`0`, or test it with `IS TRUE`, even when that value is itself already a predicate: `WHERE (c2 IS NOT NULL) = 1`. |
+
+### MySQL as target
+
+| [Null-safe equality: `IS [NOT] DISTINCT FROM` has no target operator](#null-safe-equality-is-not-distinct-from-has-no-target-operator-3) | [Value position: booleans wrapped for engines with no boolean value](#value-position-booleans-wrapped-for-engines-with-no-boolean-value-7) |
+|---|---|
+
+#### Null-safe equality: `IS [NOT] DISTINCT FROM` has no target operator
+
+| Article | Direction | Description |
+|---|---|---|
+| [`IS [NOT] DISTINCT FROM` (PostgreSQL null-safe comparison) → MySQL `<=>` / T-SQL, Oracle `EXISTS`/`INTERSECT`](is-distinct-from.md) | postgresql → tsql/oracle/mysql | PostgreSQL's `IS [NOT] DISTINCT FROM` is a null-safe equality: unlike `=`, it never itself evaluates to `UNKNOWN` — `NULL IS NOT DISTINCT FROM NULL` is `TRUE`, `1 IS DISTINCT FROM NULL` is `TRUE`. |
+
+#### Value position: booleans wrapped for engines with no boolean value
+
+| Article | Direction | Description |
+|---|---|---|
+| [Boolean-to-text/char rendering (PostgreSQL `::text` / MySQL `CAST(... AS CHAR)`)](boolean-to-text-rendering.md) | postgresql/mysql → mysql/postgresql | PostgreSQL renders a boolean cast to text as the words `'true'`/`'false'`; MySQL has no boolean text representation at all — its booleans are ordinary integers, so casting one to a character type gives `'1'`/`'0'` instead. |
+
+## All articles by type
+
 ## Value position: booleans wrapped for engines with no boolean value
 
 | Article | Direction | Description |
