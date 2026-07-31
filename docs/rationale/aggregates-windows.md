@@ -76,6 +76,44 @@ per group, so it silently changes both the row count and the result.
 
 ## Boolean aggregates and `FILTER`
 
+### `agg(x) FILTER (WHERE p)` clause (PostgreSQL) → T-SQL / MySQL / Oracle
+
+**Problem.** PostgreSQL's `FILTER (WHERE p)` restricts which rows an
+aggregate sees (`SUM(x) FILTER (WHERE y > 5)` sums only the rows where `y >
+5`) without a separate subquery or `CASE`; none of the other three engines
+parse the clause at all (T-SQL error 102, "incorrect syntax").
+
+**Solution.**
+
+```sql
+-- test_pg_source_wave1.py::TestAggregateFilterRewrite
+select count(*) filter (where c <> 0) from t;
+-- -> tsql: SELECT COUNT(CASE WHEN c <> 0 THEN 1 END) FROM t
+
+select sum(x) filter (where y > 5) from t;
+-- -> mysql / oracle: SELECT SUM(CASE WHEN y > 5 THEN x END) FROM t
+```
+
+Every `agg(x) FILTER (WHERE p)` rewrites to `agg(CASE WHEN p THEN x
+END)` — the `CASE`'s implicit `ELSE NULL` reproduces "this row is excluded
+from the aggregate" for any aggregate that already ignores `NULL` (`SUM`,
+`COUNT`, `AVG`, `MIN`, `MAX`, …). `COUNT(*) FILTER (WHERE p)` has no column
+to guard, so the `CASE`'s `THEN` branch counts a literal `1` instead.
+
+**Discussion.** T-SQL, MySQL, and Oracle all reject `FILTER` as a syntax
+error at parse time — there is no native spelling to fall back to on any of
+them. The `CASE`-wrap rewrite works because every standard aggregate already
+treats a `NULL` input as "not counted," so feeding it `NULL` on the
+filtered-out rows is exactly equivalent to never seeing those rows at all.
+
+> **Note** faithful — same aggregate value; corpus case
+> `pg-filter-subquery` (`COUNT(*) FILTER` against a correlated-subquery
+> threshold) is the standalone FILTER-alone case this rewrite is built from,
+> and the `bool_or(...) FILTER (...)` entry below composes it with a second,
+> independent rewrite.
+
+**See Also.** [`pg-filter-subquery`](../../tests/fixtures/challenge/challenge_postgresql.sql) · `tests/integration/test_pg_source_wave1.py` (`TestAggregateFilterRewrite`).
+
 ### `bool_or`/`bool_and` value wrapping (PostgreSQL) → T-SQL / Oracle
 
 **Problem.** `(a > 1)::int` and `bool_or(pred)` both need a
@@ -241,39 +279,158 @@ count whenever a given `a` has more than one `b`.
 
 **See Also.** [`pg-distinct-on`](../../tests/fixtures/challenge/challenge_postgresql.sql).
 
-## MySQL NULL-safe division (aggregate-adjacent)
+## Numeric division, cast rounding, and zero-divisor semantics
 
-### `SUM(x) / COUNT(x)` decimal + NULL-safe division (MySQL) → PostgreSQL / T-SQL
+Three related but distinct per-engine divergences around plain arithmetic,
+gathered here because an aggregate divisor (`SUM(x)/COUNT(x)`) is the most
+common place they surface, even though the compensation applies to any
+division or cast, aggregate or not.
 
-**Problem.** MySQL's `/` is always decimal division (two integers
-still give a fractional result) and is NULL-safe: dividing by zero yields
-`NULL` rather than raising.
+### Integer-truncating vs. decimal division (cross-engine)
+
+**Problem.** `/` truncates two integer operands to an integer on
+PostgreSQL and T-SQL (`5 / 2` is `2`), but MySQL and Oracle always return a
+decimal (`5 / 2` is `2.5`) — crossing that line without compensation
+silently changes the value. `AVG` is division in disguise for the same
+purpose: T-SQL's `AVG` returns the argument's own type, so `AVG` over an
+integer column truncates *before* dividing (`AVG(1,2)` = `1`, not `1.5`)
+while MySQL/Oracle/PostgreSQL always average as decimal.
 
 **Solution.**
 
 ```sql
--- corpus case my-sum-div-count
-SELECT SUM(x)/COUNT(x) FROM (SELECT 1 x UNION ALL SELECT 2) t
--- PostgreSQL/T-SQL: SUM(x) * 1.0 / NULLIF(COUNT(x), 0)
+-- literal operands
+SELECT 5 / 2 AS r
+-- postgresql -> mysql:  SELECT (5 DIV 2) AS r;
+-- postgresql -> oracle: SELECT TRUNC(5 / 2) AS r FROM DUAL;
+-- mysql -> postgresql:  SELECT (5 * 1.0 / NULLIF(2, 0)) AS r;
+-- oracle -> tsql:       SELECT (5 * 1.0 / 2) AS r
+
+-- declared integer variables (test_func_compensation.py::test_integer_division_declared_variables_procedural)
+CREATE PROCEDURE p AS BEGIN DECLARE @a INT; DECLARE @b INT; DECLARE @r INT; SET @r = @a / @b; END
+-- tsql -> oracle: V_R := TRUNC(V_A / V_B);
+-- tsql -> mysql:  SET v_r = (v_a DIV v_b);
+
+-- corpus case my-avg-int / pg-avg-int
+SELECT AVG(x) FROM (SELECT 1 x UNION SELECT 2) t
+-- mysql/postgresql -> tsql: SELECT AVG((x) * 1.0) FROM (...) t
 ```
 
-The dividend is forced to decimal (`* 1.0`) and the
-divisor is wrapped in `NULLIF(…, 0)`, giving
-`SUM(x) * 1.0 / NULLIF(COUNT(x), 0)`. The `NULLIF` wrap is applied to every
-MySQL-source `/` reaching a non-safe target (PostgreSQL/T-SQL/Oracle), not
-only aggregate divisors.
+Going from an integer-truncating source to a decimal-only engine
+compensates by truncating the *target* too (`DIV` on MySQL, `TRUNC(...)` on
+Oracle); going the other way forces the dividend decimal (`* 1.0`) so the
+target's own truncation never fires. The same `* 1.0` promotion is applied
+to an `AVG` argument whenever the source always averages as decimal and the
+target is T-SQL. MySQL's `/` also never raises on a zero divisor (`x / 0` is
+`NULL`, not an error); that NULL-safety is preserved on every other target
+by wrapping the divisor in `NULLIF(divisor, 0)`, independent of whether the
+division is an aggregate's own divisor or an ordinary expression — the two
+compensations combine additively when both apply:
 
-**Discussion.** PostgreSQL and T-SQL truncate the
-division of two integer operands (`SUM(x)/COUNT(x)` would silently floor to
-an integer), and both **raise** on division by zero instead of returning
-`NULL`. This is expression-level arithmetic, but it surfaces most often
-around an aggregate divisor (`COUNT`), so it lives here rather than in
-`dml.md`.
+```sql
+-- corpus case my-sum-div-count
+SELECT SUM(x)/COUNT(x) FROM (SELECT 1 x UNION ALL SELECT 2) t
+-- mysql -> postgresql/tsql: SUM(x) * 1.0 / NULLIF(COUNT(x), 0)
 
-> **Note** faithful — live-verified `1.5`.
+-- test_challenge.py::TestMysqlSafeDivision
+SELECT a / b FROM t
+-- mysql -> oracle: SELECT a / NULLIF(b, 0) FROM t;              -- Oracle already divides as decimal, only the guard is needed
+-- mysql -> tsql:   SELECT (a * 1.0 / NULLIF(b, 0)) FROM t       -- T-SQL truncates too, so both compensations apply
+```
 
-**See Also.** [`my-sum-div-count`](../../tests/fixtures/challenge/challenge_mysql.sql) · `tests/integration/test_challenge.py`
-(`TestMysqlDecimalDivision`, `TestMysqlSafeDivision`).
+**Discussion.** Three independent per-engine behaviors compose here:
+whether `/` truncates or floats (PostgreSQL and T-SQL truncate; MySQL and
+Oracle always float), whether `AVG` inherits its argument's type (T-SQL
+only) or always averages as decimal (the other three), and whether division
+by zero raises (PostgreSQL/T-SQL/Oracle) or returns `NULL` (MySQL only).
+Each is read off the source dialect and compensated independently per
+target; for a literal-operand division no schema is needed, and inside a
+procedure body the same compensation applies to a declared integer
+*variable* once its type is known from the `DECLARE`.
+
+> **Note** faithful — `my-sum-div-count` live-verified `1.5`;
+> `test_func_compensation.py`'s literal and declared-variable division tests
+> pin the exact value on both sides of the truncating/decimal split;
+> `TestMysqlSafeDivision` pins the NULL-safety preservation (and the
+> guardrail-7 unread-args false-warning this also silences); `my-avg-int` /
+> `pg-avg-int` / `my-avg-precision2` pin the `AVG` promotion.
+
+**See Also.** [`my-sum-div-count`](../../tests/fixtures/challenge/challenge_mysql.sql), [`my-avg-int`](../../tests/fixtures/challenge/challenge_mysql.sql), [`my-avg-precision2`](../../tests/fixtures/challenge/challenge_mysql.sql), [`pg-avg-int`](../../tests/fixtures/challenge/challenge_postgresql.sql) ·
+`tests/integration/test_func_compensation.py` (`test_integer_division_literals_preserved`, `test_integer_division_declared_variables_procedural`) ·
+`tests/integration/test_challenge.py` (`TestMysqlDecimalDivision`, `TestMysqlSafeDivision`, `TestTsqlAvgIntegerPromotion`).
+
+### `CAST(... AS <integer type>)` rounding vs. truncation trade (PostgreSQL / MySQL) → T-SQL
+
+**Problem.** Casting a fractional value to an integer type rounds
+half-away-from-zero on PostgreSQL (`CAST(2.7 AS INT)` = `3`, `7.5::int` =
+`8`) and on MySQL's `SIGNED` cast (`CAST(2.7 AS SIGNED)` = `3`); T-SQL's
+`CAST`/`CONVERT` to an integer type always **truncates** (a plain
+`CAST(2.7 AS INT)` would give `2`).
+
+**Solution.**
+
+```sql
+-- corpus case pg-cast-int / pg-cast-round-half
+SELECT CAST(2.7 AS INT) AS r    -- postgresql -> tsql: SELECT CAST(ROUND(2.7, 0) AS INT) AS r
+SELECT 7.5 :: int AS r          -- postgresql -> tsql: SELECT CAST(ROUND(7.5, 0) AS INT) AS r
+
+-- corpus case my-cast-int
+SELECT CAST(2.7 AS SIGNED) AS r -- mysql -> tsql: SELECT CAST(ROUND(2.7, 0) AS BIGINT) AS r
+```
+
+Every fractional-literal `CAST(... AS <integer type>)` reaching a T-SQL
+target is wrapped in `ROUND(x, 0)` before the cast (T-SQL's own `ROUND`
+rounds half-away-from-zero, matching the source). A non-fractional literal
+(`CAST(5 AS INT)`) is left untouched — no `ROUND` wrapper when there is
+nothing to compensate.
+
+**Discussion.** This is the mirror image of the division split above, but
+for the cast operator instead of `/`: PostgreSQL's and MySQL's
+numeric-to-integer casts round, T-SQL's truncates, and there is no `CAST`
+variant on T-SQL that rounds instead — `ROUND` has to be composed in by
+hand ahead of the truncating cast.
+
+> **Note** faithful — live-verified `3`, not `2` (and `8`, not `7`,
+> for the exact-half case).
+
+**See Also.** [`pg-cast-int`](../../tests/fixtures/challenge/challenge_postgresql.sql), [`pg-cast-round-half`](../../tests/fixtures/challenge/challenge_postgresql.sql), [`my-cast-int`](../../tests/fixtures/challenge/challenge_mysql.sql) ·
+`tests/integration/test_challenge.py` (`TestTsqlCastIntRounds`).
+
+### `MOD`/`%` by a zero divisor (MySQL) → PostgreSQL / T-SQL / Oracle
+
+**Problem.** MySQL's `MOD`/`%` returns `NULL` when the divisor is `0`
+(`5 MOD 0` is `NULL`, not an error); PostgreSQL and T-SQL raise a
+division-by-zero error, and Oracle's `MOD` returns the **dividend**
+unchanged (`MOD(5, 0)` = `5`) — three different behaviors for the same
+input, all different from MySQL's.
+
+**Solution.**
+
+```sql
+-- corpus case my-mod-zero
+SELECT 5 MOD 0 IS NULL AS r
+-- mysql -> oracle: CASE WHEN 0 = 0 THEN NULL ELSE MOD(5, 0) END IS NULL AS r
+-- mysql -> tsql:   CASE WHEN 0 = 0 THEN NULL ELSE 5 % 0 END IS NULL AS r
+```
+
+The divisor is tested first: `CASE WHEN <divisor> = 0 THEN NULL ELSE
+<native MOD/%> END`. The native operator only ever runs on a non-zero
+divisor, so MySQL's `NULL` result is reproduced on every other target —
+including Oracle, where the un-guarded native `MOD(5,0)` would otherwise
+silently return `5`, flipping `IS NULL` from true to false.
+
+**Discussion.** The guard is unconditional, even when the divisor is a
+literal the transpiler could in principle prove non-zero at compile time
+(`my-mod-edge`'s `MOD(0, 5)`, whose divisor is `5`) — a single uniform rule
+that always emits the `CASE` is simpler than one that special-cases a
+provably-safe literal, at the cost of one dead branch on those inputs.
+
+> **Note** faithful — live-verified `5 MOD 0 IS NULL` is `1` on
+> Oracle.
+
+**See Also.** [`my-mod-zero`](../../tests/fixtures/challenge/challenge_mysql.sql), [`my-mod-edge`](../../tests/fixtures/challenge/challenge_mysql.sql) ·
+`tests/integration/test_challenge.py` (`TestMysqlModByZero`) ·
+`tests/integration/test_challenge_assertions_mysql.py`.
 
 ## Topics left out for lack of source support
 
