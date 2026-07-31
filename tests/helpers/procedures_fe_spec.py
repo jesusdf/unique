@@ -18,10 +18,11 @@ Oracle RAW GUIDs, T-SQL ``IDENTITY_INSERT``) live in typed helpers here so the
 specs stay branch-free; the actual execution + comparison is in
 ``tests/integration/test_procedures_fe_live.py``.
 
-Scope is the A10-P1 start set (audit ``2026-07-31-a10p-procedures-fe-design.md``):
-scalar-return, OUT-param, and single-table / cascade **table-state** routines.
-Result-set routines, the ``func1``-freeze report procs, the trigger, and the TVF
-stay out (brief A10-P2/P3) — every one of them is named on the exclusions ledger
+Scope is the A10-P1 start set plus A10-P2 result-set capture (audit
+``2026-07-31-a10p-procedures-fe-design.md``): scalar-return, OUT-param,
+single-table / cascade **table-state**, and **result-set** routines. The
+``func1``-freeze report procs, the trigger, and the TVF stay out (brief A10-P3) —
+every one of them is named on the exclusions ledger
 (``procedures_fe_exclusions.py``), so ``enrolled + ledger == total`` holds with no
 silent gap.
 """
@@ -95,12 +96,14 @@ class RoutineCase:
     """One enrolled routine and how to exercise + observe it on any engine.
 
     ``kind`` selects the capture path: ``scalar`` (a function — ``SELECT fn(...)``),
-    ``out`` (a procedure with OUT params, read per driver), or ``table_state`` (a
-    procedure run for effect, observed by ``probes``). ``args`` maps SOURCE-dialect
-    parameter names to fixed inputs (missing params default to NULL, and
-    ``@col_2`` is always NULL so the ROWCOUNT branch is a no-op). ``probes`` are
-    portable ``SELECT ... ORDER BY`` statements valid on every engine, projecting
-    away the surrogate key / GUID whose cross-engine representation differs.
+    ``out`` (a procedure with OUT params, read per driver), ``resultset`` (a
+    procedure whose bare ``SELECT``s stream ``result_sets`` result sets back), or
+    ``table_state`` (a procedure run for effect, observed by ``probes``). ``args``
+    maps SOURCE-dialect parameter names to fixed inputs (missing params default to
+    NULL, and ``@col_2`` is always NULL so the ROWCOUNT branch is a no-op).
+    ``probes`` are portable ``SELECT ... ORDER BY`` statements valid on every
+    engine, projecting away the surrogate key / GUID whose cross-engine
+    representation differs.
     """
 
     name: str
@@ -110,6 +113,7 @@ class RoutineCase:
     scalar_args: tuple[Any, ...] = ()
     probes: tuple[str, ...] = ()
     out_params: tuple[str, ...] = ()
+    result_sets: int = 1  # kind="resultset": number of result sets the body emits
 
     @property
     def object_kind(self) -> str:
@@ -421,6 +425,81 @@ ROUTINE_CASES: tuple[RoutineCase, ...] = (
             "SELECT col_93, col_31 FROM tbl_8 ORDER BY col_93",
             "SELECT col_7 FROM tbl_3 ORDER BY col_7",
         ),
+    ),
+    # -- result sets (A10-P2) ------------------------------------------------ #
+    # A bare T-SQL result SELECT is lowered differently per target (a SYS_REFCURSOR
+    # OUT on Oracle, a refcursor INOUT on PG since B56, a direct result set on
+    # MySQL); the capture path in test_procedures_fe_live handles each. Enrolled
+    # once B56 made the PG form runnable (it compiled but threw 42601 on CALL).
+    #
+    # proc_1: TOP(1) over a 4-table join UNION ALL a literal row. @col_1 matches no
+    # seeded row (the tables are created empty), so only the literal row survives —
+    # this keeps the observable free of the tbl_3 GUID column, whose driver
+    # representation (RAW bytes / uuid / string) is not cross-engine comparable.
+    RoutineCase(
+        name="proc_1",
+        kind="resultset",
+        seed=(
+            SeedTable("tbl_1"),
+            SeedTable("tbl_2"),
+            SeedTable("tbl_3"),
+            SeedTable("tbl_4"),
+        ),
+        args={"col_1": 42},
+    ),
+    # proc_3: a plain single-table result set (no join, no surrogate key in the
+    # output). @col_30=1 selects two of three seeded rows.
+    RoutineCase(
+        name="proc_3",
+        kind="resultset",
+        seed=(
+            SeedTable(
+                "tbl_5",
+                (
+                    {
+                        "col_23": 1,
+                        "col_24": 10,
+                        "col_26": "a",
+                        "col_28": 5,
+                        "col_30": 1,
+                    },
+                    {
+                        "col_23": 2,
+                        "col_24": 20,
+                        "col_26": "b",
+                        "col_28": 3,
+                        "col_30": 1,
+                    },
+                    {
+                        "col_23": 3,
+                        "col_24": 30,
+                        "col_26": "c",
+                        "col_28": 9,
+                        "col_30": 0,
+                    },
+                ),
+            ),
+        ),
+    ),
+    # proc_5: a 6-table NOLOCK join with two correlated COALESCE subqueries. Seeded
+    # so exactly one row joins through (tbl_6 -> tbl_2 -> tbl_1 -> tbl_10/11/12) and
+    # both subqueries hit (tbl_8.col_39=1; tbl_7 + EXISTS tbl_9). col_50 (a DATETIME
+    # in the output) is left NULL to avoid a per-engine date-literal insert.
+    RoutineCase(
+        name="proc_5",
+        kind="resultset",
+        seed=(
+            SeedTable("tbl_6", ({"col_31": 1, "col_6": _GUID_A},)),
+            SeedTable("tbl_2", ({"col_6": _GUID_A, "col_1": 10},)),
+            SeedTable("tbl_1", ({"col_1": 10, "col_13": 20, "col_58": 30},)),
+            SeedTable("tbl_10", ({"col_13": 20, "col_46": "r46", "col_48": "r48"},)),
+            SeedTable("tbl_11", ({"col_59": 30, "col_60": 40},)),
+            SeedTable("tbl_12", ({"col_59": 40, "col_46": "v46"},)),
+            SeedTable("tbl_8", ({"col_93": 1, "col_31": 1, "col_39": 1},)),
+            SeedTable("tbl_7", ({"col_97": 1, "col_31": 1, "col_23": 1},)),
+            SeedTable("tbl_9", ({"col_30": 1, "col_43": "x"},)),
+        ),
+        args={"col_31": 1},
     ),
 )
 

@@ -20,8 +20,11 @@ Tags (audit ``2026-07-31-a10p-procedures-fe-design.md`` §4, plus
 - ``degrade-output-clause`` — ``UNIQUE-1191`` (OUTPUT ... INTO dropped) makes the
   effect wrong; a real defect that feeds BLUE.
 - ``dynamic-sql`` — ``sp_executesql`` / ``EXEC``-orchestrated body.
-- ``resultset-pg-invalid`` — a bare ``SELECT`` result-set procedure; capture is
-  A10-P2, and its PG output is runtime-invalid (SQLSTATE 42601, backlog B56).
+- ``resultset-pg-invalid`` — a bare ``SELECT`` result-set procedure whose PG
+  output was runtime-invalid (SQLSTATE 42601, backlog B56). RESOLVED at A10-P2:
+  B56 rewrote PG to a ``refcursor INOUT`` and result-set capture landed, so
+  proc_1/3/5 enrolled and no entry carries this tag today (the class is kept
+  documented for history and any future regression).
 - ``tvf-no-pg-equiv`` — inline table-valued function (``UNIQUE-1154``), A10-P3.
 - ``encoding-inherent`` — a genuine cross-engine value divergence with no faithful
   mapping (NVARCHAR/UTF-16 vs UTF-8 hash bytes).
@@ -89,26 +92,9 @@ LEDGER: tuple[Excluded, ...] = (
         reason="STRING_SPLIT inline table-valued function (UNIQUE-1154 on PG); "
         "TVF capture is deferred to A10-P3",
     ),
-    # -- result-set procedures (capture is A10-P2) --------------------------- #
-    Excluded(
-        name="proc_1",
-        tag="resultset-pg-invalid",
-        reason="TOP-1 UNION-ALL result set; capture is A10-P2, and PG emits a "
-        "bare SELECT-in-PROCEDURE that runtime-fails 42601 (backlog B56)",
-    ),
-    Excluded(
-        name="proc_3",
-        tag="resultset-pg-invalid",
-        reason="single-table result set; capture is A10-P2, PG runtime-invalid "
-        "42601 (backlog B56)",
-    ),
-    Excluded(
-        name="proc_5",
-        tag="resultset-pg-invalid",
-        reason="6-table NOLOCK join result set; capture is A10-P2, PG "
-        "runtime-invalid 42601 (backlog B56)",
-    ),
     # -- clock-dependent procedures (func1) ---------------------------------- #
+    # (proc_1/3/5 — the former resultset-pg-invalid entries — enrolled at A10-P2:
+    #  result-set capture landed and B56 made the PG form runnable.)
     Excluded(
         name="proc_2",
         tag="nondeterministic-clock",
@@ -117,7 +103,8 @@ LEDGER: tuple[Excluded, ...] = (
     Excluded(
         name="proc_4",
         tag="nondeterministic-clock",
-        reason="func1() clock; also a result-set tail (A10-P2)",
+        reason="func1() clock is the blocker; its result-set tail is capturable "
+        "since A10-P2 but the clock keeps it out (removable via the P3 freeze lever)",
     ),
     Excluded(
         name="proc_6",
@@ -127,13 +114,13 @@ LEDGER: tuple[Excluded, ...] = (
     Excluded(
         name="proc_25",
         tag="nondeterministic-clock",
-        reason="func1() clock + func5() over a 10-table correlated report "
-        "(A10-P2/P3)",
+        reason="func1() clock + func5() over a 10-table correlated report (A10-P3)",
     ),
     Excluded(
         name="proc_26",
         tag="nondeterministic-clock",
-        reason="func1() clock; also a result-set tail (A10-P2)",
+        reason="func1() clock is the blocker; its result-set tail is capturable "
+        "since A10-P2 but the clock keeps it out (removable via the P3 freeze lever)",
     ),
     # -- generated keys ------------------------------------------------------ #
     Excluded(
