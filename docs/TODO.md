@@ -52,9 +52,26 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
   `precision-policy-pending` cases removed from the ledger
   (`my-num-to-str` retagged `documented-inherent`); floor 43→32. Policy
   documented in the `corpus_diff.py` module docstring.
-- **A10-P** — procedures corpus live-COMPARE (4-dialect same-routine
-  fixtures: call with fixed inputs, compare effects). Needs its own design;
-  highest-value remaining FE gap.
+- **A10-P** — *design DONE 2026-07-31:
+  [`audit/2026-07-31-a10p-procedures-fe-design.md`](../audit/2026-07-31-a10p-procedures-fe-design.md)
+  (33-routine inventory, live-probed effect capture per engine incl. the
+  oracledb refcursor-binding hang gotcha, benign-warning allowlist {1193,
+  1196}, enrolled-floor-up ratchet + no-silent-loss invariant, nightly +3-6
+  min).* Architect decisions taken: PG result-set-proc invalidity = defect
+  (B56, fix not degrade); allowlist approved as designed; func1-freeze
+  approved for P3. Implementation briefs: **A10-P1** (scalar/OUT/table-state
+  start set) → **A10-P2** (result sets after B56) → **A10-P3**
+  (func1-freeze, trigger, TVF).
+- **B56** (P2, found by the A10-P prototype, live-verified) — tsql
+  result-set PROCEDURES → PG emit a bare `SELECT` (no INTO/RETURN) inside a
+  PROCEDURE — runtime SQLSTATE 42601 "no destination for result data";
+  passes the compile gate. Faithful conversion needs the refcursor-OUT
+  pattern PG-side (the same signature rewrite Oracle gets) or an honest
+  degrade — never runtime-invalid.
+- **B57** (P2, same source) — `func4`→PG emits `sha256(text)` (no such
+  function; PG's sha256 takes bytea). B36b's mapping covered the
+  CONVERT_TO(bytea) path in DML shapes; this fixture shape misses the
+  conversion — close the gap and add the missing-leg test.
 - The 29 comparable-but-needs-tables cases enroll later via the `FuncCase`
   probe pattern (5 already curated by NF-1).
 
