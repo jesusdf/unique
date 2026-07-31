@@ -81,15 +81,20 @@ routines-unblocked and severity:*
   `lossy_conversion` warning alongside a correctly-coded parse warning for
   the same carrier (same code twice, cosmetic duplication) — a
   `_warning_covers` shingle-matching limitation, pre-existing.
-- **B41** (P1 — severity-first, found during B37b review; PRE-EXISTING on
-  main) — mysql `SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '…'` →
-  postgresql ships **invalid executable** `SIGNAL AS SQLSTATE;` (raw-sqlglot
-  embedded fallback mangles it; sqlglot's lenient pg parser lets it through
-  the validity gate) with only the generic "review the statement" warning —
-  guardrail-4 violation AND the error message is silently lost (the
-  THROW/RAISERROR-message-must-survive class). Faithful target: `RAISE
-  EXCEPTION '<msg>' USING ERRCODE = '<state>'`; cover RESIGNAL and the
-  oracle/tsql targets too.
+- ~~B41~~ — DONE 2026-07-31: SIGNAL/RESIGNAL parsed into the existing
+  `RaiseErrorStatement` IR (`_parse_mysql_signal`, _plsql.py); MESSAGE_TEXT +
+  MYSQL_ERRNO survive, SQLSTATE carried in the previously-unused `state`
+  field (PG `USING ERRCODE`, MySQL round-trips it). Live-verified on pg
+  (45000/'not one row'), oracle (ORA-20001), mysql (errno 1644). RESIGNAL →
+  bare RAISE;/THROW;. `test_procedural.py::TestMySQLSignalSource` (10).
+  `DECLARE … CONDITION` still parse-degrades whole+warned (honest,
+  pre-existing).
+- **B45** (P2, found during D1-W1, live-verified) — pg/mysql-source
+  `b boolean := true;` → Oracle emits `b boolean := 1;` — **invalid** on live
+  Oracle (`PLS-00382: expression is of wrong type`): the TRUE→1 literal fold
+  is applied even when the declared target type is Oracle PL/SQL's native
+  `BOOLEAN` (where `TRUE` is the correct spelling). Type-aware fold needed
+  (skip the fold for BOOLEAN-declared variables/params on oracle target).
 - **B42** (P3, verified pre-existing) — re-rendered `$$` splits into `$ $`
   inside *commented* degraded-routine carriers (4 occurrences in a fresh
   tsql→pg fixture regeneration); cosmetic, but it keeps the generated
