@@ -5579,3 +5579,125 @@ With both closed the corpus stands at **791 `[fixed]` / 169 `[limit]` /
 step in CI; 18 unit tests. Caught real drift on its first day (twice). Detail
 in the cycle-2 campaign milestone; the warnings catalog re-keys on B32 codes
 when those land.
+
+## 50. Q1 executed — oracle/mysql-source procedural degrades cleared to the standing fronts (2026-07-31, agentic team mode)
+
+The Q1 triage (`audit/2026-07-30-q1-triage.md`) ranked six briefs; all closed
+2026-07-31, plus four severity-graded findings fixed the same day. Fresh
+baseline before the day's work (post-B34/B35/B36/B37, HEAD `7bffad0`):
+oracle→pg 7/32 NEW-degraded routines, mysql→pg 21/31.
+
+- **B34** (`2067942`) — `_find_user_var`/`_find_unknown_sysvar` scrub comment
+  spans as trivia before scanning for `@name`/`@@name`; the 11 mysql routines
+  false-degraded by an inherited carrier comment cleared.
+- **B35** (`8f1f8a4`) — `_split_mysql` counts `CASE…END` so a DELIMITER-less
+  routine body stays whole; the UNIQUE-1219 corruption (routine `$$` body
+  closed early, statements leaked as top-level SQL) gone.
+- **B36** — SYS_REFCURSOR→refcursor type map, FROM-DUAL tail strip in
+  SELECT INTO, NUMTODSINTERVAL/NUMTOYMINTERVAL→PG interval; oracle→pg
+  UNIQUE-1151 16→2.
+- **B37** (`0464c54`) — SQL%ROWCOUNT in expression position hoists a
+  `GET DIAGNOSTICS` capture; corpus 1033 count 8→0, honest degrade for
+  re-evaluated loop conditions.
+- **B37b** — the hoist made spelling-general: `@@ROWCOUNT` maps to
+  `ROW_COUNT()` (was an invalid bare identifier — silent-invalid on the
+  shipped pg fixture, which carried `IF ROW_COUNT <> 1`), MySQL `ROW_COUNT()`
+  consumed, `AlterProcedureStatement` wired in (the tsql `EXEC('CREATE…') +
+  ALTER` stub pattern lands bodies there). mysql→pg rowcount routines 8→0;
+  mysql-source hoists warn the changed-vs-matched divergence (reuses the
+  UNIQUE-1192 rationale). `test_rowcount_hoist_b37b.py`; live-run on pg.
+- **B36b** — `UNIX_TIMESTAMP`→`EXTRACT(EPOCH…)` (niladic FLOOR-wrapped),
+  `RAWTOHEX`→`UPPER(ENCODE(…,'hex'))` **type-aware** (RAW/BLOB columns via
+  the `COLUMN_TYPES` harvest + new `CURRENT_SELECT_TABLE` FROM-scoping;
+  literals/character via `CONVERT_TO`; unknown declines to the honest 1151
+  degrade — the naive first version shipped `CONVERT_TO(bytea)` runtime
+  errors for RAW columns, caught in architect review), `STANDARD_HASH`
+  MD5/SHA256/384/512 byte-identical live vs Oracle; SHA1 (the default) is an
+  honest degrade under new code UNIQUE-1235 (03-unsupported row). The
+  emit-module ratchet held by extracting table-ref/TABLESAMPLE emission from
+  emit.py (3646→3414 lines) into emit_relations.py.
+- **B38** — `_peel_leading_statements` (`_core.py`): a PROCEDURAL batch with
+  folded companion DDL (`CREATE GLOBAL TEMPORARY TABLE` + routine — the
+  T-SQL table-variable conversion shape) peels the leading statements
+  through the DML/DDL pipeline (own validity gate) and parses the routine
+  alone. proc_2/7/8/9 oracle→pg: UNIQUE-1170 gone, all four execute on real
+  PG; mysql-source same shape fixed (compiles on real Oracle). The suspected
+  `_split_generic` CASE-depth neighbor was REFUTED with evidence
+  (`begin_depth` is dead in `_split_oracle`; `_split_postgresql` tracks only
+  dollar-quotes). `test_procedural_leading_ddl.py`.
+- **B39** — procedural parse/transform warnings ship `code=None` and the
+  existing carrier reconciliation backfills the specific code
+  (`PARSE_FALLBACK_WARNING` exact-literal for the parse-fallback case); a
+  per-batch fallback keeps 1230/1231 for genuinely generic warnings. SQL
+  output byte-identical. `test_procedural_warning_codes.py`.
+
+Findings fixed same-day (found by architect review / docs-worker probes):
+
+- **B41** (P1) — mysql `SIGNAL`/`RESIGNAL` fell through to the raw-sqlglot
+  fallback and shipped invalid `SIGNAL AS SQLSTATE;` with the message lost.
+  Now parsed into the existing `RaiseErrorStatement` IR; MESSAGE_TEXT,
+  MYSQL_ERRNO and SQLSTATE survive (PG `USING ERRCODE`; MySQL round-trips);
+  RESIGNAL → native re-raise. Live-verified on pg/oracle/mysql.
+  `TestMySQLSignalSource`.
+- **B45** (P2) — the TRUE/FALSE→1/0 fold applied to Oracle native PL/SQL
+  BOOLEAN contexts (live PLS-00382). Per-target `_is_native_bool_type` hook +
+  `_bool_vars`/`BOOLEAN_VARIABLES` tracking keeps the literals for
+  declares/params/assignments/comparisons/RETURN; live pre-fix INVALID →
+  post-fix VALID. `TestOracleNativeBooleanVars`.
+- **B46** (P2) — value-`RETURN`'s expression capture swallowed a same-line
+  following statement (DML-verb boundary was line-start-gated); boundary now
+  unconditional for T-SQL source per the `_DECLARE_DML_BOUNDARY` precedent,
+  with a `FOR`-preceded exception for `SET @cur = CURSOR … FOR SELECT`.
+  `TestReturnValueBoundary`.
+- Filed for later: B40 (duplicate-warning shingle), B42 (`$$`→`$ $` cosmetic
+  in commented carriers), B43 (rowcount-in-IF toward tsql/oracle, warned),
+  B44 (splitter reads comment text — latent), B47 (bare NUMBER→BIGINT
+  unconditional, maintainer decision), B48 (mysql column-alias-list gate
+  over-conservative).
+
+## 51. D1 executed — the rationale docs-gap wave (2026-07-31, 10 worker waves)
+
+Source: `audit/2026-07-31-docs-gap-sweep.md` (179 raw gaps → 18 clusters, 10
+HIGH). Every entry follows the R1/R2 traceability method: examples are real
+transpiler output produced by the documenting worker, every claim cites its
+pinning test, `faithful` only with corpus/live proof.
+
+- **W1** — NEW page `docs/rationale/booleans.md`: the value/predicate duality
+  (tri-state CASE wrap, `<> 0` synthesis, Oracle PL/SQL BOOLEAN exception,
+  IS TRUE/FALSE rewrites); 03-unsupported §3.18 now points at it.
+- **W2** — NEW `## Triggers` section in procedural.md (7 entries: row-level→
+  set-based, event predicates, COMPOUND TRIGGER both ways, INSTEAD OF
+  native-on-views/emulated-on-tables, function+trigger decomposition, bare
+  RETURN→RETURN NEW, empty-body no-op) with firing-count divergence callouts.
+- **W3** — `## Loop and cursor desugaring` (7 entries: cursor-variable merge,
+  FOR-loop scaffolds, range-loop→WHILE, RETURN→LEAVE, DECLARE reorder, FOUND
+  flag placed with the cursor-attribute family).
+- **W4** — ddl.md: cross-statement schema-state coercion (BIT→BOOLEAN
+  tracking, ALTER COLUMN nullability re-statement, bare NUMBER→integer),
+  CTAS↔SELECT INTO for plain tables, synthesized identifiers. Corrected the
+  audit's premise on bare-NUMBER (promotion is UNCONDITIONAL → filed B47).
+- **W5** — 03-unsupported guard-family extension (column-existence probes,
+  DROP-TRIGGER pg_trigger probe, Oracle catalog rewrites) + dml.md Oracle
+  source direction (`(+)`, ROWNUM, FROM DUAL both ways), live-verified.
+- **W6** — the ADD_MONTHS CORRECTION (the old "needs no compensation"
+  sentence was false — reverse direction documented with sticky-last-day
+  CASE + PG DATE_TRUNC emulation); `## Error handling` (MySQL DECLARE
+  HANDLER fold) and the expression-argument hoist family.
+- **W7** — aggregates-windows.md: FILTER→CASE generalization; the numeric
+  division/cast-rounding/zero-divisor family (3 clustered entries).
+- **W8** — strings-collation.md: GREATEST/LEAST NULL guards, REPLACE-and-
+  NULL, charset TRIM emulation, OVERLAY/STUFF/INSERT splice family. Two new
+  live-verified divergences documented as Warnings and filed to A10-T4.
+- **W9** — dml.md: multi-join UPDATE per engine (live-verified 4 engines),
+  derived-table ORDER BY strip (confirmed REQUIRED by T-SQL error 1033 —
+  not a bug), VALUES/generate_series row sources, parenthesized unwrap/
+  shield family. Filed B48 (mysql column-alias gate over-conservative).
+- **Recall pass (batch 6b)** — `test_pg_source_wave1.py` read 261/261
+  classes (was 32/261): 16 new gap rows (4 HIGH), zero defects, 5 mis-scoped
+  items corrected; the audit's weakest-recall debt closed.
+- **W10** — the 4 HIGH recall gaps documented: RETURNS void synthesis,
+  IS [NOT] DISTINCT FROM (placed in booleans.md), trigger-context inlining
+  (extends the Triggers section), bare-SELECT→SYS_REFCURSOR signature
+  rewrite (+ a real single-run-registry caveat documented as a Warning).
+
+Residual (filed, pending): the 9 MED + 3 LOW batch-6b rows (D1b).
