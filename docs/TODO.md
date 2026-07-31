@@ -29,7 +29,16 @@ small findings.*
 The harness (A10-H) is live: 496 auto-enrolled cases, 43-case exclusions
 ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
 
-- **A10-T4** — BLUE triage of the ledger's 25 `defect-pending-fix` cases
+- **A10-T4** — *round 1 DONE 2026-07-31 (T4-A): 8 structural cases / 5
+  mechanisms fixed faithfully (boolean-to-char casts, Oracle string→int
+  rounding, unnamed synthesized derived columns, string-date+INTERVAL
+  promotion, unlockable-view FOR UPDATE drop under new `UNIQUE-1237`);
+  ledger 32→24; two lying assertions corrected.* Remaining: the
+  function-semantics family (~16 cases: INSERT()/LEFT()/REPEAT() float/OOB,
+  STUFF/OVERLAY guards on oracle/pg, TO_CHAR masks, base conversion,
+  multibyte CHR/ASCII, COMPRESS container, cast-int-datetime, ts-to-date,
+  frac-seconds, cast-binary padding, REPLACE non-literal NULL) — BLUE
+  triage of the ledger's remaining `defect-pending-fix` cases
   (~27 unwarned wrong-value/runtime-fail pairs named in the report §T4:
   broken CAST emission on tsql/oracle, unnamed derived columns,
   string+INTERVAL arithmetic, INSERT()/LEFT()/REPEAT() float/OOB semantics,
