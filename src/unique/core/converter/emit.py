@@ -2459,11 +2459,16 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
 
     # Set operation
     if node.set_op and node.set_query:
-        # INTERSECT ALL / EXCEPT ALL keep duplicates. MySQL (8.0.31+) and PG
-        # support them; Oracle < 21c has only MINUS/INTERSECT (distinct) and
-        # T-SQL has no ALL form, so those fall back to the distinct spelling
-        # (the ALL cannot be honoured there — a documented version limit).
-        _all_ok = dialect in ("mysql", "postgresql")
+        # INTERSECT ALL / EXCEPT ALL keep duplicates. MySQL (8.0.31+), PG and
+        # Oracle (21c+; live-verified on 23c) support them natively — Oracle
+        # spells the EXCEPT-ALL form ``MINUS ALL``. T-SQL has no ALL form at
+        # all (live-verified: "The 'ALL' version of the INTERSECT operator is
+        # not supported") — ``Transformer`` rewrites or degrades those before
+        # they ever reach this emitter (see ``_gate_tsql_setop_all``), so the
+        # plain-spelling branches below are an unreachable defensive backstop
+        # for T-SQL, never the live behaviour.
+        _all_ok = dialect in ("mysql", "postgresql", "oracle")
+        _is_oracle = dialect == "oracle"
         op_map = {
             SetOperationType.UNION: "UNION",
             SetOperationType.UNION_ALL: "UNION ALL",
@@ -2471,11 +2476,11 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
             SetOperationType.INTERSECT_ALL: (
                 "INTERSECT ALL" if _all_ok else "INTERSECT"
             ),
-            SetOperationType.EXCEPT: "EXCEPT" if dialect != "oracle" else "MINUS",
+            SetOperationType.EXCEPT: "MINUS" if _is_oracle else "EXCEPT",
             SetOperationType.EXCEPT_ALL: (
-                "EXCEPT ALL"
+                ("MINUS ALL" if _is_oracle else "EXCEPT ALL")
                 if _all_ok
-                else ("MINUS" if dialect == "oracle" else "EXCEPT")
+                else ("MINUS" if _is_oracle else "EXCEPT")
             ),
         }
         op = op_map.get(node.set_op, "UNION")

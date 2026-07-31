@@ -180,6 +180,7 @@ engines and indicates the transpilation support status for each.
 | UNION / UNION ALL | ✓ | ✓ | ✓ | ✓ | ✅ |
 | INTERSECT | ✓ | ✓ | ✓ | ✓ (8.0+) | ✅ |
 | EXCEPT / MINUS | ✓ (EXCEPT) | ✓ (MINUS) | ✓ (EXCEPT) | ✓ (8.0+ EXCEPT) | ✅ |
+| INTERSECT ALL / EXCEPT ALL (row-multiset-preserving) | N/A | ✓ (21c+, `MINUS ALL`) | ✓ | ✓ (8.0.31+) | ⚠️ native on Oracle/PG/MySQL; T-SQL has no `ALL` form — rewritten with a `ROW_NUMBER` pairing for the common shape (docs/rationale/dml/intersect-except-all.md), documented carrier for a chained/`SELECT *` shape |
 
 ---
 

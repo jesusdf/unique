@@ -35,11 +35,14 @@ from unique.core.ast_nodes import (
     PassthroughSQL,
     RawSQL,
     SelectStatement,
+    SetOperationType,
     Star,
     SubqueryExpression,
     TableRef,
     UnaryOp,
     UnaryOperator,
+    WindowFunction,
+    WindowSpec,
 )
 from unique.core.mappings import CANONICAL_FUNCTION_NAMES
 
@@ -843,6 +846,7 @@ class Transformer:
         if self.context.target == "tsql":
             result = [self._gate_tsql_temp_view(node) for node in result]
             result = [self._gate_tsql_all_computed_table(node) for node in result]
+            result = [self._gate_tsql_setop_all(node) for node in result]
             result = [self._gate_tsql_agg_distinct(node) for node in result]
             result = [self._gate_tsql_natural_join(node) for node in result]
             result = [self._gate_tsql_nth_value(node) for node in result]
@@ -2417,6 +2421,195 @@ class Transformer:
         self.context.warn(reason, "tsql_all_computed_table")
         self.context.mark_unsupported("all-computed table (T-SQL)")
         return RawSQL(sql=self._preserved_sql(node), reason=reason)
+
+    #: INTERSECT ALL / EXCEPT ALL -> their distinct-dropping plain form.
+    _SETOP_ALL_TO_PLAIN = {
+        SetOperationType.INTERSECT_ALL: SetOperationType.INTERSECT,
+        SetOperationType.EXCEPT_ALL: SetOperationType.EXCEPT,
+    }
+
+    def _gate_tsql_setop_all(self, node: ASTNode) -> ASTNode:
+        """Rewrite/degrade ``INTERSECT ALL`` / ``EXCEPT ALL`` for T-SQL
+        (B50, live-verified on SQL Server: "The 'ALL' version of the
+        INTERSECT operator is not supported" — T-SQL has no ALL form at
+        all, on either operator).
+
+        Every other target keeps the ALL quantifier natively (PG/MySQL
+        always did; Oracle 21c+ does too as of this fix — see
+        ``_emit_select``'s ``_all_ok``). Falling back to the plain
+        INTERSECT/EXCEPT spelling on T-SQL would silently collapse
+        duplicate rows — exactly the row-multiset corruption this rewrite
+        exists to prevent. The classic ROW_NUMBER pairing reproduces the
+        ALL semantics exactly: number each side's rows with
+        ``ROW_NUMBER() OVER (PARTITION BY <every output column>)``, run a
+        plain (DISTINCT) INTERSECT/EXCEPT on the (columns, copy-number)
+        tuples, then project the copy-number column away. A plain
+        INTERSECT/EXCEPT only keeps a (tuple, n) pair present on both (or
+        only the left) side, so this reproduces
+        ``min(count_left, count_right)`` survivors for INTERSECT ALL and
+        ``max(count_left - count_right, 0)`` for EXCEPT ALL.
+
+        Bounded to the shape the rewrite can reach without guessing at
+        chain precedence: an ALL op whose right arm ends the chain, with a
+        known, non-star, non-windowed, CTE-free column list on both sides.
+        A shape outside that (e.g. an ALL op immediately followed by more
+        chained set operations) degrades the WHOLE statement rather than
+        emit the silent dedup.
+        """
+        rewritten = self._rewrite_tsql_setop_all(node)
+        if not self._contains_setop_all(rewritten):
+            # ``node`` is an ASTNode and ``_rewrite_tsql_setop_all`` only
+            # ever replaces an ASTNode with another ASTNode.
+            return cast(ASTNode, rewritten)
+        reason = (
+            "T-SQL has no INTERSECT ALL/EXCEPT ALL and this set-operation "
+            "chain could not be rewritten with the ROW_NUMBER pairing (an "
+            "ALL op immediately followed by more chained set operations); "
+            "the plain INTERSECT/MINUS spelling would silently collapse "
+            "duplicate rows. Statement preserved as a comment"
+        )
+        self.context.warn(reason, "tsql_setop_all")
+        self.context.mark_unsupported("INTERSECT ALL / EXCEPT ALL (T-SQL)")
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
+
+    def _rewrite_tsql_setop_all(self, value: object) -> object:
+        """Recursively rewrite every reachable INTERSECT ALL/EXCEPT ALL arm
+        into its ROW_NUMBER-paired equivalent.
+
+        Each node is checked BEFORE its children are visited (mirroring
+        ``TransformPass``'s visit-then-recurse order) so a chain-shape
+        decision (is the right arm chain-terminal?) reads the ORIGINAL,
+        not-yet-rewritten shape — rewriting children first would make an
+        already-flattened nested chain look chain-terminal and pair it at
+        the wrong precedence level.
+        """
+        if isinstance(value, tuple):
+            return tuple(self._rewrite_tsql_setop_all(item) for item in value)
+        if not isinstance(value, ASTNode):
+            return value
+        node = value
+        if (
+            isinstance(node, SelectStatement)
+            and node.set_op in self._SETOP_ALL_TO_PLAIN
+        ):
+            paired = self._pair_setop_all_arms(node)
+            if paired is not None:
+                node = paired
+        changes: dict[str, object] = {}
+        for f in fields(node):
+            old = getattr(node, f.name)
+            new = self._rewrite_tsql_setop_all(old)
+            if new is not old:
+                changes[f.name] = new
+        return replace(node, **changes) if changes else node  # type: ignore[arg-type]
+
+    def _contains_setop_all(self, value: object) -> bool:
+        """Whether *value* still contains an unrewritten INTERSECT ALL/
+        EXCEPT ALL arm anywhere — the fallback-degrade trigger."""
+        if (
+            isinstance(value, SelectStatement)
+            and value.set_op in self._SETOP_ALL_TO_PLAIN
+        ):
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._contains_setop_all(getattr(value, f.name)) for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._contains_setop_all(item) for item in value)
+        return False
+
+    def _pair_setop_all_arms(self, node: SelectStatement) -> SelectStatement | None:
+        """The bounded ROW_NUMBER-pairing rewrite for one ``node op right``
+        link where ``op`` is INTERSECT_ALL/EXCEPT_ALL. Returns ``None``
+        when the shape is not safely reachable (the caller falls back to a
+        whole-statement degrade)."""
+        right = node.set_query
+        left_cols = node.columns
+        right_cols = right.columns if right is not None else ()
+        if (
+            right is None
+            or right.set_op is not None  # only the chain-terminal case
+            or right.ctes
+            or node.order_by
+            or node.limit
+            or not left_cols
+            or len(left_cols) != len(right_cols)
+            or any(isinstance(c, Star) for c in left_cols)
+            or any(isinstance(c, Star) for c in right_cols)
+            or self._contains_window(left_cols)
+            or self._contains_window(right_cols)
+        ):
+            return None
+
+        plain_op = (
+            None if node.set_op is None else self._SETOP_ALL_TO_PLAIN.get(node.set_op)
+        )
+        if plain_op is None:
+            return None
+        rn_name = "uq_setop_rn"
+
+        def bare(col: ASTNode) -> ASTNode:
+            return col.expression if isinstance(col, Alias) else col
+
+        def out_name(col: ASTNode, idx: int) -> str:
+            if isinstance(col, Alias):
+                return col.name
+            if isinstance(col, ColumnRef):
+                return col.name
+            return f"c{idx + 1}"
+
+        def numbered(cols: tuple[ASTNode, ...]) -> tuple[ASTNode, ...]:
+            partition = tuple(bare(c) for c in cols)
+            aliased = tuple(
+                Alias(expression=e, name=f"uq_setop_c{i}")
+                for i, e in enumerate(partition)
+            )
+            rn_col = Alias(
+                expression=WindowFunction(
+                    function=FunctionCall(name="ROW_NUMBER"),
+                    window=WindowSpec(partition_by=partition),
+                ),
+                name=rn_name,
+            )
+            return aliased + (rn_col,)
+
+        inner_left = replace(
+            node,
+            columns=numbered(left_cols),
+            order_by=(),
+            limit=None,
+            ctes=(),
+            set_op=plain_op,
+            set_query=replace(
+                right, columns=numbered(right_cols), order_by=(), limit=None
+            ),
+        )
+        outer_columns = tuple(
+            Alias(expression=ColumnRef(name=f"uq_setop_c{i}"), name=out_name(c, i))
+            for i, c in enumerate(left_cols)
+        )
+        return SelectStatement(
+            columns=outer_columns,
+            from_clause=SubqueryExpression(query=inner_left, alias="uq_setop_all"),
+            order_by=right.order_by,
+            limit=right.limit,
+            ctes=node.ctes,
+        )
+
+    def _contains_window(self, value: object) -> bool:
+        """Whether *value* contains a WindowFunction anywhere — repeating
+        such an expression inside an enclosing ROW_NUMBER's PARTITION BY
+        would nest window functions, which no engine allows."""
+        if isinstance(value, WindowFunction):
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._contains_window(getattr(value, f.name)) for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._contains_window(item) for item in value)
+        return False
 
     _SETOP_ORDER_AGG_RE = re.compile(r"(?i)\b(MAX|MIN|SUM|COUNT|AVG)\s*\(")
 

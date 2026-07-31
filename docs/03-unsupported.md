@@ -934,6 +934,13 @@ never invalid SQL, never a silent drop.
   arguments take only variables/literals (expression arguments are hoisted
   into typed variables automatically).
 - `SET ROLE` exists everywhere but T-SQL (carrier there only).
+- **`INTERSECT ALL` / `EXCEPT ALL` have no T-SQL form at all** (the server
+  rejects the keyword outright) — a `ROW_NUMBER`-pairing rewrite keeps
+  every duplicate row for the common shape (see
+  [the rationale article](rationale/dml/intersect-except-all.md)); an
+  `ALL` operator immediately followed by more chained set operations, or
+  acting on `SELECT *`, degrades whole rather than guess at operator
+  precedence or an unknown column list.
 
 ### To MySQL
 
