@@ -164,7 +164,7 @@ CREATE TABLE IF NOT EXISTS tbl_8 (
 -- EXEC (N'CREATE PROCEDURE dbo.proc_13 AS SELECT 1')
 CREATE OR REPLACE PROCEDURE proc_13
 (
-    OUT v_where TEXT,
+    INOUT v_where TEXT,
     v_col VARCHAR(200),
     v_op VARCHAR(10),
     v_param VARCHAR(200),
@@ -184,9 +184,9 @@ $$;
 -- EXEC (N'CREATE PROCEDURE dbo.proc_14 AS SELECT 1')
 CREATE OR REPLACE PROCEDURE proc_14
 (
-    OUT v_query TEXT,
+    INOUT v_query TEXT,
     v_filter TEXT,
-    OUT v_page TEXT
+    INOUT v_page TEXT
 )
 LANGUAGE plpgsql
 AS $$
@@ -725,7 +725,7 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_7
 (
-    OUT v_col_6 UUID,
+    INOUT v_col_6 UUID,
     v_col_7 INTEGER DEFAULT NULL,
     v_col_91 VARCHAR(4000) DEFAULT NULL,
     v_col_19 VARCHAR(10) DEFAULT NULL,
@@ -758,7 +758,7 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_8
 (
-    OUT v_col_93 INTEGER,
+    INOUT v_col_93 INTEGER,
     v_col_15 VARCHAR(10) DEFAULT NULL,
     v_col_18 TIMESTAMP DEFAULT NULL,
     v_col_31 INTEGER DEFAULT NULL,
@@ -790,7 +790,7 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_9
 (
-    OUT v_col_31 INTEGER,
+    INOUT v_col_31 INTEGER,
     v_col_6 UUID DEFAULT NULL,
     v_col_32 INTEGER DEFAULT NULL,
     v_col_33 TIMESTAMP DEFAULT NULL,

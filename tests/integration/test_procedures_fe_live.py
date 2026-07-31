@@ -179,11 +179,14 @@ def _call_table_state(conn: Any, engine: str, case: RoutineCase) -> None:
 
 
 def _call_out(conn: Any, engine: str, case: RoutineCase) -> list[tuple]:
-    """Call an OUT-param procedure and read the OUT values, in param order.
+    """Call an OUT/INOUT-param procedure and read the output values, in param order.
 
-    Not reached in A10-P1 (the only OUT routine, proc_13, degrades on 1152 and
-    skips at the warning gate); implemented per the design's per-driver
-    conventions for A10-P2, which enrolls OUT routines that compare.
+    T-SQL ``OUTPUT`` params are INOUT (the caller passes a value in and the
+    routine may read it before overwriting), so an ``out_params`` slot also
+    takes its ``case.args`` input when one is given — that is how proc_14, whose
+    body reads ``@query``, is exercised faithfully (pass ``@query='base'`` in and
+    read ``'base flt'`` back). A slot with no ``args`` entry passes NULL in, i.e.
+    a plain write-only observation.
     """
     order = param_order(case.name)
     out_pos = {order.index(p) for p in case.out_params}
@@ -194,7 +197,7 @@ def _call_out(conn: Any, engine: str, case: RoutineCase) -> list[tuple]:
 
             args = [
                 (
-                    pymssql.output(str)
+                    pymssql.output(str, call_argument(case.args.get(p), engine))
                     if i in out_pos
                     else call_argument(case.args.get(p), engine)
                 )
@@ -210,6 +213,9 @@ def _call_out(conn: Any, engine: str, case: RoutineCase) -> list[tuple]:
             for i, p in enumerate(order):
                 if i in out_pos:
                     v = cur.var(oracledb.STRING, 4000)
+                    in_val = call_argument(case.args.get(p), engine)
+                    if in_val is not None:  # IN OUT: seed the caller's input value
+                        v.setvalue(0, in_val)
                     outvars[i] = v
                     binds.append(v)
                 else:
@@ -218,20 +224,18 @@ def _call_out(conn: Any, engine: str, case: RoutineCase) -> list[tuple]:
             values = tuple(outvars[i].getvalue() for i in sorted(out_pos))
         elif engine == "mysql":
             args = [
-                None if i in out_pos else case.args.get(p) for i, p in enumerate(order)
-            ]
+                call_argument(case.args.get(p), engine) for p in order
+            ]  # INOUT slots seed @_proc_i with the input value
             cur.callproc(case.name, tuple(args))
             selects = ", ".join(f"@_{case.name}_{i}" for i in sorted(out_pos))
             cur.execute(f"SELECT {selects}")
             values = tuple(cur.fetchone())
         else:  # postgresql
             placeholders = ", ".join(["%s"] * len(order))
-            binds = [
-                None if i in out_pos else case.args.get(p) for i, p in enumerate(order)
-            ]
+            binds = [call_argument(case.args.get(p), engine) for p in order]
             cur.execute(f"CALL {case.name}({placeholders})", binds)
             row = cur.fetchone()
-            # plpgsql returns OUT params in declared order among themselves.
+            # plpgsql returns INOUT params in declared order among themselves.
             values = tuple(row[k] for k in range(len(sorted(out_pos))))
     finally:
         cur.close()

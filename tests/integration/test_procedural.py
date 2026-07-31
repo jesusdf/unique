@@ -2239,3 +2239,78 @@ class TestLeadingCommentRelocation:
     def test_relocation_holds_for_postgresql_target(self) -> None:
         out = Transpiler().transpile(self._SQL, source="tsql", target="postgresql").sql
         assert "Calculates monthly totals" in out
+
+
+class TestOutputParamIsInout:
+    """T-SQL ``OUTPUT`` parameters are semantically **INOUT** — the caller
+    passes a value in and the routine may read it before overwriting. Emitting
+    a write-only ``OUT`` on the target silently drops the caller's input, so a
+    body that reads its OUTPUT param computes on NULL instead (UNIQUE B58).
+
+    The faithful mapping is unconditional: every T-SQL OUTPUT param becomes
+    ``IN OUT`` (Oracle) / ``INOUT`` (PostgreSQL, MySQL), whether or not the body
+    reads it (a T-SQL caller can always pass a value in either way)."""
+
+    _READS_OUTPUT = (
+        "CREATE PROCEDURE dbo.build_q\n"
+        "    @query  NVARCHAR(MAX) OUTPUT,\n"
+        "    @filter NVARCHAR(MAX)\n"
+        "AS\n"
+        "BEGIN\n"
+        "    SET @query = @query + N' ' + @filter\n"
+        "END\n"
+    )
+
+    def test_oracle_reads_output_param_is_in_out(self) -> None:
+        out = _transpile(self._READS_OUTPUT, "tsql", "oracle")
+        assert "V_QUERY IN OUT" in out.upper(), out
+        # a write-only OUT would drop the caller's input
+        assert re.search(r"V_QUERY\s+OUT\b", out.upper()) is None, out
+
+    def test_postgresql_reads_output_param_is_inout(self) -> None:
+        out = _transpile(self._READS_OUTPUT, "tsql", "postgresql")
+        assert "INOUT v_query" in out, out
+        assert re.search(r"\bOUT v_query", out) is None, out
+
+    def test_mysql_reads_output_param_is_inout(self) -> None:
+        out = _transpile(self._READS_OUTPUT, "tsql", "mysql")
+        assert "INOUT v_query" in out, out
+        assert re.search(r"\bOUT v_query", out) is None, out
+
+    def test_roundtrip_back_to_tsql_keeps_output(self) -> None:
+        # OUTPUT -> INOUT -> OUTPUT must survive the round trip (place + presence).
+        oracle = _transpile(self._READS_OUTPUT, "tsql", "oracle")
+        back = _transpile(oracle, "oracle", "tsql")
+        assert re.search(r"@?query[^\n,]*OUTPUT", back, re.I), back
+
+    def test_write_only_output_param_also_inout(self) -> None:
+        # A write-only OUTPUT param (never read) is INOUT too: unconditional and
+        # faithful (a T-SQL caller can still pass a value in), and INOUT never
+        # changes the observable effect of a write-only param.
+        sql = (
+            "CREATE PROCEDURE dbo.set_p\n"
+            "    @p NVARCHAR(MAX) OUTPUT\n"
+            "AS\n"
+            "BEGIN\n"
+            "    SET @p = NULL\n"
+            "END\n"
+        )
+        assert "V_P IN OUT" in _transpile(sql, "tsql", "oracle").upper()
+        assert "INOUT v_p" in _transpile(sql, "tsql", "postgresql")
+        assert "INOUT v_p" in _transpile(sql, "tsql", "mysql")
+
+    def test_multiple_output_params_all_inout(self) -> None:
+        sql = (
+            "CREATE PROCEDURE dbo.two_out\n"
+            "    @a NVARCHAR(MAX) OUTPUT,\n"
+            "    @b INT,\n"
+            "    @c NVARCHAR(MAX) OUTPUT\n"
+            "AS\n"
+            "BEGIN\n"
+            "    SET @a = @a + N'x'\n"
+            "    SET @c = NULL\n"
+            "END\n"
+        )
+        out = _transpile(sql, "tsql", "mysql")
+        assert "INOUT v_a" in out and "INOUT v_c" in out, out
+        assert "IN v_b" in out, out

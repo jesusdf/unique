@@ -374,7 +374,7 @@ engines and indicates the transpilation support status for each.
 | CREATE / ALTER / DROP PROCEDURE (incl. T-SQL `PROC` abbreviation, `CREATE OR ALTER`) | ✓ | ✓ | ✓ | ✓ | ✅ T-SQL `PROC` normalized to `PROCEDURE` (never leaked); `CREATE OR ALTER` ↔ `CREATE OR REPLACE` |
 | CREATE FUNCTION (scalar) | ✓ | ✓ | ✓ | ✓ | ✅ |
 | CREATE FUNCTION (table-valued) | ✓ | ✓ (pipelined) | ✓ (RETURNS TABLE) | N/A | ⚠️ → a T-SQL string-split TVF becomes an Oracle `SYS.ODCIVARCHAR2LIST` function (`TABLE(fn(…))` callers); other shapes carrier |
-| IN / OUT / INOUT params | ✓ | ✓ | ✓ | ✓ | ✅ |
+| IN / OUT / INOUT params | ✓ | ✓ | ✓ | ✓ | ✅ T-SQL `OUTPUT` is INOUT (the caller passes a value in and the body may read it) → Oracle `IN OUT`, PostgreSQL/MySQL `INOUT` |
 | Default parameter values | ✓ | ✓ | ✓ | N/A | ⚠️ |
 | Procedure call (`CALL` / T-SQL `EXEC` / SQL*Plus `EXEC proc(args)`) | ✓ | ✓ | ✓ | ✓ | ✅ each target's call form; `name => value` association → T-SQL `@name = value`, MySQL positional (warned) |
 | Top-level anonymous block (`DECLARE…BEGIN…END`) | flattened batch | ✓ | ✓ (DO $$) | N/A | ✅ to T-SQL/Oracle/PG (T-SQL: flattened `DECLARE @x…; <stmts>`); MySQL documented carrier (no top-level procedural code) |

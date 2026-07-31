@@ -251,6 +251,18 @@ ROUTINE_CASES: tuple[RoutineCase, ...] = (
         args={"col": "c", "op": "=", "param": "@p"},  # @val omitted -> NULL
         out_params=("where",),
     ),
+    # proc_14's @query is an OUTPUT param the body READS (@query = @query + ' ' +
+    # @filter): T-SQL OUTPUT is INOUT, so the caller's input must survive to the
+    # target. With @query='base', @filter='flt' the effect is @query='base flt'
+    # (and the write-only @page -> NULL). Before B58 every target emitted a
+    # write-only OUT and returned NULL with zero warnings; enrolled once the
+    # OUTPUT -> IN OUT/INOUT mapping landed.
+    RoutineCase(
+        name="proc_14",
+        kind="out",
+        args={"query": "base", "filter": "flt"},  # @page omitted -> NULL
+        out_params=("query", "page"),
+    ),
     # -- table state: single-table DML (tbl_7 — no identity/GUID) ------------- #
     RoutineCase(
         name="proc_11",

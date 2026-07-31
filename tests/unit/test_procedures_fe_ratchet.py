@@ -24,15 +24,15 @@ from __future__ import annotations
 from tests.helpers.procedures_fe_exclusions import LEDGER, VALID_TAGS
 from tests.helpers.procedures_fe_spec import ENROLLED, discover_routines
 
-# Measured 2026-07-31 (brief A10-P1). Enrolled start set = 12 routines:
-#   func3 (scalar); proc_13 (out, degrades on 1152 -> skipped-with-reason live);
-#   proc_11/10/15 (tbl_7 DML), proc_16/18 (tbl_8), proc_19/21 (tbl_6),
-#   proc_22/24 (tbl_3 GUID), proc_27 (4-table cascade).
-# Ledger = 21 routines (33 - 12): 6 nondeterministic-clock, 3 resultset-pg-invalid,
+# Measured 2026-07-31 (brief A10-P1, +proc_14 at B58). Enrolled set = 13 routines:
+#   func3 (scalar); proc_13/14 (out — proc_13 degrades on 1152 -> skipped live,
+#   proc_14 compares its INOUT @query); proc_11/10/15 (tbl_7 DML), proc_16/18
+#   (tbl_8), proc_19/21 (tbl_6), proc_22/24 (tbl_3 GUID), proc_27 (4-table cascade).
+# Ledger = 20 routines (33 - 13): 6 nondeterministic-clock, 3 resultset-pg-invalid,
 # 4 dynamic-sql, 2 degrade-output-clause, 1 generated-key, 1 encoding-inherent,
-# 1 tvf-no-pg-equiv, 1 trigger-complex, 1 defect-pending-fix (proc_14, OUTPUT
-# INOUT semantics dropped — surfaced live by this harness).
-ENROLLED_FLOOR = 12
+# 1 tvf-no-pg-equiv, 1 trigger-complex. proc_14 (OUTPUT INOUT dropped) left the
+# ledger when the B58 OUTPUT -> IN OUT/INOUT mapping landed and it enrolled.
+ENROLLED_FLOOR = 13
 
 
 def test_enrolled_count_at_or_above_floor() -> None:
@@ -79,9 +79,11 @@ def test_enrolled_has_no_duplicates() -> None:
     assert len(set(ENROLLED)) == len(ENROLLED), "duplicate enrolled routine"
 
 
-def test_defect_pending_fix_count_is_reported() -> None:
-    """A ready-made RED backlog for BLUE (reported, not floored)."""
+def test_defect_pending_fix_harvest_enrolls_when_fixed() -> None:
+    """The ``defect-pending-fix`` ledger is a ready-made RED backlog for BLUE; a
+    fixed defect leaves it and ENROLLS. proc_14 (T-SQL OUTPUT INOUT dropped, B58)
+    was the A10-P1 harvest — once the OUTPUT -> IN OUT/INOUT mapping landed it
+    enrolled and its ledger entry was removed."""
+    assert "proc_14" in ENROLLED
     defects = [e.name for e in LEDGER if e.tag == "defect-pending-fix"]
-    # proc_14 (OUTPUT INOUT dropped) is the A10-P1 harvest; degrade-output-clause
-    # (proc_8/9) and resultset-pg-invalid (B56) are separately tagged real defects.
-    assert "proc_14" in defects
+    assert "proc_14" not in defects
