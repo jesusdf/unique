@@ -9,10 +9,13 @@ The rationale tree is book/MSDN-style: one directory per topic, one file per
 article (see ``scripts/migrate_rationale_split.py`` for how it was split). The
 article/overview pages are the source of truth; this script derives from them:
 
-- ``docs/rationale/<topic>/README.md`` — the topic index: one table per
-  **type** (the article's ``## `` section on the pre-split page), columns
-  ``Article | Direction | Description``. Prefaced by the topic's hand-written
-  ``_intro.md`` partial.
+- ``docs/rationale/<topic>/README.md`` — the topic index: the hand-written
+  ``_intro.md`` partial, then a **by-engine** section (a jump table over the
+  engines that appear in this topic's articles, then per engine-role a
+  sub-nav over that section's types, then the ``Article | Direction |
+  Description`` tables), then an **all articles by type** section (one table
+  per **type** — the article's ``## `` section on the pre-split page — for
+  whole-topic browsing).
 - ``docs/rationale/README.md`` — the master index: a **by-topic** table
   (topic · what it covers · article count) and a **by-engine** index (for each
   of the four engines, the articles where it appears as source and as target).
@@ -270,6 +273,8 @@ def render_topic_readme(topic: str, articles: list[Article]) -> str:
         "above comes from `_intro.md`. The CI freshness gate "
         f"(`{_GEN_CMD} --check`) fails the build if it drifts.\n\n",
     ]
+    parts.append(_topic_by_engine_section(items))
+    parts.append("## All articles by type\n\n")
     for type_name in _types_in_order(items):
         rows: list[tuple[str, ...]] = []
         for a in sorted(
@@ -312,6 +317,24 @@ def _parse_direction(direction: str) -> tuple[set[str], set[str], bool]:
     return expand(direction), set(), False
 
 
+def _slug(text: str) -> str:
+    """GitHub heading anchor: lowercase; drop everything but word chars,
+    spaces and hyphens; spaces -> hyphens. Repeated headings on the same page
+    get ``-1``, ``-2``, ... suffixes — see `_dedup_anchor`."""
+    kept = re.sub(r"[^\w\- ]", "", text.lower())
+    return kept.replace(" ", "-")
+
+
+def _dedup_anchor(slug_seen: dict[str, int], slug: str) -> str:
+    """GitHub's per-page anchor de-duplication: a slug seen again on the same
+    page gets ``-1``, ``-2``, ... appended, in emission order. ``slug_seen``
+    is the caller's running per-page counter, so it must be shared across
+    every heading rendered on that page."""
+    n = slug_seen.get(slug, 0)
+    slug_seen[slug] = n + 1
+    return slug if n == 0 else f"{slug}-{n}"
+
+
 def _by_engine_section(articles: list[Article]) -> str:
     real = [a for a in articles if a.kind == "article"]
     parsed = {a: _parse_direction(a.direction) for a in real}
@@ -321,13 +344,6 @@ def _by_engine_section(articles: list[Article]) -> str:
         "(derived from the `direction` metadata). Cross-engine articles — no "
         "single source/target — are listed once at the end.\n\n"
     )
-
-    def _slug(text: str) -> str:
-        # GitHub heading anchor: lowercase; drop everything but word chars,
-        # spaces and hyphens; spaces -> hyphens. (Repeated headings get -1,
-        # -2, ... suffixes — handled by the dedup counter below.)
-        kept = re.sub(r"[^\w\- ]", "", text.lower())
-        return kept.replace(" ", "-")
 
     jump_rows = [
         (
@@ -366,20 +382,20 @@ def _by_engine_section(articles: list[Article]) -> str:
 
     slug_seen: dict[str, int] = {}
 
-    def _dedup(slug: str) -> str:
-        n = slug_seen.get(slug, 0)
-        slug_seen[slug] = n + 1
-        return slug if n == 0 else f"{slug}-{n}"
-
     # Engine/cross headings also occupy the anchor namespace, in order.
     resolved: list[tuple[str, list[tuple[str, str, str, list[tuple[str, str]]]]]] = []
     for heading, groups in sections:
-        _dedup(_slug(heading))
+        _dedup_anchor(slug_seen, _slug(heading))
         resolved.append(
             (
                 heading,
                 [
-                    (topic, _dedup(_slug(_TOPIC_TITLE[topic])), label, rows)
+                    (
+                        topic,
+                        _dedup_anchor(slug_seen, _slug(_TOPIC_TITLE[topic])),
+                        label,
+                        rows,
+                    )
                     for topic, label, rows in groups
                 ],
             )
@@ -422,6 +438,117 @@ def _group(selected: list[Article]) -> list[tuple[str, str, list[tuple[str, str]
         if rows:
             groups.append((topic, _TOPIC_SHORT[topic], rows))
     return groups
+
+
+# ---------------------------------------------------------------------------
+# Topic README: by-engine section.
+# ---------------------------------------------------------------------------
+
+
+def _group_by_type(
+    items: list[Article],
+) -> list[tuple[str, list[tuple[str, str, str]]]]:
+    """Per-type (type_name, table rows) groups, type order by first appearance."""
+    groups = []
+    for type_name in _types_in_order(items):
+        rows = [
+            (f"[{a.title}]({a.slug}.md)", a.direction, a.description)
+            for a in sorted(
+                (x for x in items if x.type_name == type_name), key=lambda x: x.order
+            )
+        ]
+        groups.append((type_name, rows))
+    return groups
+
+
+def _topic_by_engine_section(items: list[Article]) -> str:
+    """The topic README's ``## By engine`` section: a jump table over the
+    engines that appear (as source and/or target) in this topic, then per
+    engine-role a ``### <Engine> as source|target`` heading with, if the
+    section spans more than one type, its own type sub-nav, then the
+    ``#### <type>`` tables. A ``### Cross-engine / multi-directional``
+    section follows the same shape, last. Engines/roles with no articles are
+    omitted rather than linked to an empty section."""
+    real = [a for a in items if a.kind == "article"]
+    parsed = {a: _parse_direction(a.direction) for a in real}
+    ordered = sorted(real, key=lambda x: x.order)
+
+    sections: list[tuple[str, list[Article]]] = []
+    for eng in _ENGINES:
+        for role, idx in (("as source", 0), ("as target", 1)):
+            selected = [a for a in ordered if eng in parsed[a][idx]]
+            if selected:
+                sections.append((f"{_ENGINE_LABEL[eng]} {role}", selected))
+    cross = [a for a in ordered if parsed[a][2]]
+    if cross:
+        sections.append(("Cross-engine / multi-directional", cross))
+
+    if not sections:
+        return ""
+
+    parts = ["## By engine\n\n"]
+    parts.append(
+        "Each article grouped by the engine it converts **from** and **to** "
+        "(derived from the `direction` metadata). Cross-engine articles — no "
+        "single source/target — are listed once at the end.\n\n"
+    )
+
+    section_headings = {heading for heading, _ in sections}
+    jump_rows = []
+    for eng in _ENGINES:
+        source_heading = f"{_ENGINE_LABEL[eng]} as source"
+        target_heading = f"{_ENGINE_LABEL[eng]} as target"
+        has_source = source_heading in section_headings
+        has_target = target_heading in section_headings
+        if not has_source and not has_target:
+            continue
+        jump_rows.append(
+            (
+                _ENGINE_LABEL[eng],
+                f"[as source](#{_slug(source_heading)})" if has_source else "",
+                f"[as target](#{_slug(target_heading)})" if has_target else "",
+            )
+        )
+    if cross:
+        jump_rows.append(
+            (
+                "Cross-engine",
+                f"[multi-directional](#{_slug('Cross-engine / multi-directional')})",
+                "",
+            )
+        )
+    parts.append(_table(["Engine", "As source", "As target"], jump_rows))
+    parts.append("\n")
+
+    # Pre-compute every section's per-type groups IN EMISSION ORDER, assigning
+    # each repeated `#### <type>` heading its GitHub-deduplicated anchor
+    # (`slug`, `slug-1`, `slug-2`, ...) — the same type can repeat across
+    # engine-role sections and, later, the "all articles by type" tail.
+    slug_seen: dict[str, int] = {}
+    resolved: list[tuple[str, list[tuple[str, str, list[tuple[str, str, str]]]]]] = []
+    for heading, selected in sections:
+        _dedup_anchor(slug_seen, _slug(heading))
+        resolved.append(
+            (
+                heading,
+                [
+                    (type_name, _dedup_anchor(slug_seen, _slug(type_name)), rows)
+                    for type_name, rows in _group_by_type(selected)
+                ],
+            )
+        )
+
+    for heading, groups in resolved:
+        parts.append(f"### {heading}\n\n")
+        if len(groups) > 1:
+            cells = [f"[{type_name}](#{anchor})" for type_name, anchor, _ in groups]
+            parts.append("| " + " | ".join(cells) + " |\n")
+            parts.append("|" + "|".join(["---"] * len(cells)) + "|\n\n")
+        for type_name, _anchor, rows in groups:
+            parts.append(f"#### {type_name}\n\n")
+            parts.append(_table(["Article", "Direction", "Description"], rows))
+            parts.append("\n")
+    return "".join(parts)
 
 
 def render_master_readme(articles: list[Article]) -> str:
