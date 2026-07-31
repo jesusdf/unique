@@ -61,10 +61,11 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
   `ENROLLED_FLOOR = 18` monotonic-up + the `18+15==33` no-silent-loss
   invariant. Deferred P3 remainder: none actionable — every non-enrolled
   routine's blocker is re-verified independent of the harness.
-- **B60** (P2, found during A10-P3, live-verified) — proc_26-shape UPDATE
-  with a self-referencing subquery → MySQL error 1093 at runtime (needs the
-  derived-table wrapper), zero warnings at transpile time. The mysql-target
-  leg of proc_26 is excluded from the harness until fixed.
+- ~~B60~~ — DONE 2026-08-01: the existing SET-only self-ref wrap generalized
+  to a recursive tree-walker (WHERE/IN/EXISTS, DELETE, JOINs, unaliased →
+  synthesized `uq_sr`); live 1093 repros → all execute; proc_26 re-enrolled
+  on all 3 targets (harness 43/0); rationale article shipped same-commit
+  (`dml/mysql-update-delete-self-reference.md`) + new corpus case.
 - ~~B56~~ — DONE 2026-07-31: PG result-set procs get the shared refcursor rewrite (`INOUT refcursor`, argmode-first for sqlglot; Oracle byte-identical); 12 fixture procs now runnable, live-fetched.
 - ~~B57~~ — DONE 2026-07-31: SHA-n over character args wraps CONVERT_TO in the IR path too; runtime error gone; NVARCHAR/UTF-16 divergence documented inherent.
 - The 29 comparable-but-needs-tables cases enroll later via the `FuncCase`
