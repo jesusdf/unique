@@ -107,3 +107,39 @@ def test_genuinely_generic_parse_warning_keeps_fallback_code() -> None:
     assert matching, [(w.code, w.message) for w in result.warnings]
     for w in matching:
         assert w.code == "UNIQUE-1230", (w.code, w.message)
+
+
+def test_unparseable_construct_does_not_duplicate_the_carrier_warning() -> None:
+    """B40 (found during B39): when the whole routine falls back to
+    ``_parse_fallback`` (a genuinely unparseable construct, e.g. a PL/SQL
+    collection-type declaration in a trigger), the parser's own
+    PARSE_FALLBACK_WARNING is already stamped ``UNIQUE-1170`` at construction
+    (exact-literal match, not the shingle heuristic) — the SAME fact the
+    carrier reconciliation loop reports. Its wording ("Could not parse
+    procedural construct; preserved as a documented carrier for manual
+    review") differs enough from the carrier's own text ("could not
+    translate; preserved for review") that ``_warning_covers``'s 3-word-
+    shingle overlap check sees no match, so the "no warning covers this
+    carrier" path synthesized a SECOND, identically-coded lossy_conversion
+    warning for the exact same carrier — a cosmetic but confusing
+    duplication of ``result.warnings``.
+    """
+    sql = (
+        "CREATE OR REPLACE TRIGGER my_trg\n"
+        "BEFORE INSERT ON t1\n"
+        "FOR EACH ROW\n"
+        "DECLARE\n"
+        "  TYPE t_tab IS TABLE OF NUMBER;\n"
+        "BEGIN\n"
+        "  NULL;\n"
+        "END;\n"
+        "/\n"
+    )
+    result = Transpiler().transpile(sql, source="oracle", target="postgresql")
+
+    assert "-- UNIQUE-1170:" in result.sql, result.sql
+    matching_1170 = [w for w in result.warnings if w.code == "UNIQUE-1170"]
+    assert len(matching_1170) == 1, [
+        (w.code, w.feature, w.message) for w in matching_1170
+    ]
+    assert matching_1170[0].feature == "procedural_parse"
