@@ -34,14 +34,11 @@ case (`(SELECT 1) t` inside a `SET v = ...` assignment, not a `SELECT
 INTO` tail), which confirms the alias is synthesized regardless of which
 statement shape wraps the derived table.
 
-**Discussion.** Two independent code paths reach this: the IR-first
-pipeline's general derived-table naming (`my-reads-sql`,
-`my-scalar-subquery-assign`) and a dedicated sqlglot-AST pass for the
-`SELECT ... INTO` tail specifically
-(`_name_derived_columns`/`my-select-into-out`, described in the corpus
-case as "the text-path twin of the IR `_name_tsql_derived_columns`") —
-both converge on the same `uq_col1` synthesized name so the two paths
-produce indistinguishable output for a reader of the transpiled script.
+**Discussion.** T-SQL's mandatory-alias rule applies regardless of which
+statement shape wraps the derived table — a function's `RETURN`, a
+procedure's `SELECT ... INTO` output parameter, or a plain assignment all
+need the same synthesized name whenever the projection itself has none, so
+the same `uq_col1` convention is used everywhere the rule applies.
 
 > **Note** faithful — the synthesized alias is never referenced by any
 > other part of the query (these are all single-column, unreferenced

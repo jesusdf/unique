@@ -61,18 +61,15 @@ DECIMAL)` from T-SQL stays `amount DECIMAL`/`NUMERIC` on PostgreSQL,
 confirming the whole mechanism is gated on the Oracle source dialect, not
 on "this looks like a bare decimal."
 
-**Discussion.** The id-vs-value decision is deferred inside
-`src/unique/core/converter/convert.py::_convert_create_table` until the
-column's own constraints have been read, and consults the structural
-signals collected for the statement: the inline `PRIMARY KEY` / `UNIQUE` /
-identity / `REFERENCES` constraints on the column, the table-level
-`FOREIGN KEY` local columns (off this statement's AST), and the cross-
-statement PK/UNIQUE harvest (`PK_UNIQUE_COLUMNS`) for table-level keys. A
-non-id column is emitted as an unbounded `NUMERIC`; the bounded-target
-substitution and its warning live in the DDL emitter's type-gap map
-(`emit_ddl.py::_type_gap_map`, `UNIQUE-1236`), which is the layer that
-knows the concrete target — PostgreSQL keeps `NUMERIC` unbounded, MySQL and
-T-SQL bound it to `DECIMAL(38, 10)` (the same spelling `TO_NUMBER` and the
-numeric casts already use) and warn.
+**Discussion.** The id-vs-value decision consults every structural
+signal available for the column: the inline `PRIMARY KEY` / `UNIQUE` /
+identity / `REFERENCES` constraints on the column itself, the table-level
+`FOREIGN KEY` local columns, and any `PRIMARY KEY`/`UNIQUE` constraint
+declared for the table in a separate statement. A non-id column is emitted
+as an unbounded `NUMERIC` on PostgreSQL, which has an unbounded numeric
+type; MySQL and T-SQL have none, so they get the project's canonical
+bounded `DECIMAL(38, 10)` — the same spelling `TO_NUMBER` and the numeric
+casts already use — with a `UNIQUE-1236` warning that the precision is
+bounded there.
 
 **See Also.** [`TestOracleBareNumberToInteger`](../../../tests/unit/core/test_boolean_timestamp.py).
