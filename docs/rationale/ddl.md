@@ -73,7 +73,246 @@ three-way scope/session/table distinction.
 
 **See Also.** [`ts-identity-funcs`](../../tests/fixtures/challenge/challenge_sqlserver.sql).
 
-## Temporary tables
+## Cross-statement schema-state-driven coercion
+
+The three entries below share one mechanism: a single statement cannot be
+transpiled correctly by looking at its own text alone, because the correct
+output depends on a column's *declared* type or nullability, established
+somewhere earlier in the same script (a `CREATE TABLE`, a prior `ALTER
+TABLE`, even a prior `RENAME COLUMN`) or on the column's role inside the
+*same* `CREATE TABLE`. Unique's converter harvests this column-level state
+across the whole input and carries it forward to every later statement that
+touches the column — including into procedure bodies, whose embedded DML
+goes through the same harvest.
+
+### T-SQL `BIT` `0`/`1` values (defaults, `INSERT`, `UPDATE`, incl. inside procedure bodies) → PostgreSQL `BOOLEAN`
+
+**Problem.** T-SQL's `BIT` type behaves like a 1-bit integer: `0`/`1`
+literals are valid in a `DEFAULT` clause, an `INSERT ... VALUES` list, or an
+`UPDATE ... SET`, with no special casting. PostgreSQL's `BOOLEAN` has no
+implicit integer cast at all — `BOOLEAN DEFAULT 1` and `is_active = 0` are
+both rejected outright (`column "is_active" is of type boolean but
+expression is of type integer`).
+
+**Solution.**
+
+```sql
+-- tests/unit/core/test_boolean_timestamp.py::TestBitDefaultToBoolean
+CREATE TABLE t (is_active BIT NOT NULL DEFAULT 1)
+-- tsql -> postgresql:
+CREATE TABLE t (
+  is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+```
+
+```sql
+-- tests/unit/core/test_boolean_timestamp.py::TestBitLiteralCoercion (SCRIPT)
+CREATE TABLE dbo.product (id INT NOT NULL, qty INT NOT NULL, is_active BIT NOT NULL DEFAULT 1)
+GO
+INSERT INTO dbo.product (id, qty, is_active) VALUES (1, 1, 1)
+GO
+UPDATE dbo.product SET is_active = 0, qty = 0 WHERE id = 1
+GO
+-- tsql -> postgresql:
+INSERT INTO product (id, qty, is_active)
+VALUES (1, 1, TRUE);
+
+UPDATE product
+SET is_active = FALSE, qty = 0
+WHERE id = 1;
+```
+
+The `qty` column (a plain `INT`, not `BIT`) keeps its integer literal on
+every target — only the columns the script itself declared `BIT` are
+rewritten. The same script transpiled `tsql -> mysql` keeps `1`/`0`
+verbatim (`test_mysql_keeps_integer_literals`): MySQL's own `BIT`/`TINYINT`
+already accepts integer literals natively, so no coercion is needed there.
+The coercion also reaches an `INSERT` embedded in a stored procedure body
+(`test_procedure_body_insert_coerced_for_postgresql`), which goes through a
+separate (embedded-DML) code path from top-level statements but consults
+the same harvested column-type map:
+
+```sql
+-- tsql -> postgresql, INSERT inside CREATE PROCEDURE dbo.mk @id INT AS BEGIN ... END
+INSERT INTO invoice (id, is_paid) VALUES (v_id, FALSE);
+```
+
+**Discussion.** A bare `0`/`1` literal carries no type information by
+itself — the only way to know it must become `TRUE`/`FALSE` is to already
+know, from an earlier statement, that the column it is being written to was
+declared `BIT`. Unique's converter harvests every column's declared type as
+it walks the script (`CREATE TABLE`) and keeps consulting that map for
+every later `INSERT`/`UPDATE`/`DEFAULT`, in or out of a procedure body —
+this is why the entry is schema-state-driven rather than a plain per-call
+literal rewrite.
+
+> **Note** faithful — same boolean value, spelled in each target's own
+> literal domain; MySQL is deliberately left untouched because its `BIT`
+> already tolerates the integer spelling (a rewrite there would be
+> unnecessary, not merely harmless).
+
+**See Also.** [`TestBitDefaultToBoolean`, `TestBitLiteralCoercion`](../../tests/unit/core/test_boolean_timestamp.py).
+
+### T-SQL `ALTER COLUMN <c> <type>` re-states the column's last-known nullability → PostgreSQL (both directions)
+
+**Problem.** T-SQL's `ALTER COLUMN <c> <type>` bakes type *and* nullability
+into one clause — omitting a `NULL`/`NOT NULL` keyword does not mean
+"leave nullability alone," it means "make the column nullable," silently
+dropping an existing `NOT NULL` the statement never mentioned.
+PostgreSQL's `ALTER COLUMN` instead separates the two into distinct
+sub-clauses (`TYPE` vs. `SET`/`DROP NOT NULL`), so a PostgreSQL script can
+have a type-only `ALTER COLUMN ... TYPE` statement that says nothing about
+nullability at all. Read that literally into T-SQL and the column loses its
+constraint; read a T-SQL statement literally into PostgreSQL's syntax and
+the two clauses do not exist as one.
+
+**Solution.**
+
+```sql
+-- tests/integration/test_pg_source_wave1.py::TestB10RunningColumnTypeAlterNullability (_N9)
+CREATE TABLE t (a INT NOT NULL, b TEXT);
+ALTER TABLE t ALTER COLUMN a TYPE BIGINT;
+ALTER TABLE t ALTER COLUMN a DROP NOT NULL;
+-- postgresql -> tsql:
+CREATE TABLE t (
+  a INT NOT NULL,
+  b NVARCHAR(MAX)
+)
+GO
+ALTER TABLE t ALTER COLUMN a BIGINT NOT NULL
+GO
+ALTER TABLE t ALTER COLUMN a BIGINT NULL
+```
+
+The first `ALTER COLUMN` (a type-only change on the source) re-states the
+column's known `NOT NULL`; the second (an explicit `DROP NOT NULL`) sees
+the *new* type, `BIGINT`, not the original `INT` — both facts come from the
+same running column-state map, which also survives an intervening `RENAME
+COLUMN` (`test_rename_column_folds_into_running_map`: a column renamed
+`a` → `a2` still carries its `NOT NULL` into a later `ALTER COLUMN a2 TYPE
+BIGINT`). The reverse direction decomposes the other way:
+
+```sql
+-- tests/unit/core/test_transpiler.py::TestTranspiler::test_alter_column_postgres_type_then_nullability
+ALTER TABLE dbo.t ALTER COLUMN c INT NOT NULL
+-- tsql -> postgresql:
+ALTER TABLE t ALTER COLUMN c TYPE INT;
+ALTER TABLE t ALTER COLUMN c SET NOT NULL;
+```
+
+When the column's nullability genuinely cannot be known — the script never
+`CREATE`s or otherwise declares the table being altered — Unique does not
+guess silently; it emits a documented, warned degrade instead
+(`test_unknown_column_warns`):
+
+```sql
+-- postgresql -> tsql, ALTER TABLE wtb10_ext ALTER COLUMN x TYPE BIGINT; (wtb10_ext never CREATEd in-script)
+-- UNIQUE-1010: T-SQL ALTER COLUMN defaults the column to NULL; the script does
+-- not define wtb10_ext.x's nullability, so it cannot be re-stated — verify
+-- the column keeps its constraint
+ALTER TABLE wtb10_ext ALTER COLUMN x BIGINT
+```
+
+**Discussion.** Neither engine's `ALTER COLUMN` grammar maps onto the
+other's one-for-one: T-SQL always restates the full column definition in
+one clause (type + nullability + identity), PostgreSQL always splits type
+changes from constraint changes into separate sub-clauses. A literal,
+context-free rewrite in either direction either drops a constraint the
+statement never mentioned (PostgreSQL → T-SQL) or fails to parse (T-SQL's
+combined clause has no single PostgreSQL equivalent). The fix requires
+tracking column state across the *whole* script, not just the statement
+being converted.
+
+> **Warning** `[limit]`/warned on the PostgreSQL → T-SQL direction only
+> when the column's nullability is genuinely unknown in-script
+> (`UNIQUE-1010`, best-effort `NULL` emitted, verify by hand or supply
+> `--db-url` to harvest live schema). Faithful whenever the column's
+> `CREATE TABLE` (or a prior `ADD COLUMN`/`ALTER`) is present in the same
+> script; faithful and unconditional on the T-SQL → PostgreSQL
+> decomposition (nullability is always explicit in the T-SQL source
+> clause).
+
+**See Also.** [`TestB10RunningColumnTypeAlterNullability`](../../tests/integration/test_pg_source_wave1.py), [`test_alter_column_postgres_type_then_nullability`](../../tests/unit/core/test_transpiler.py) ·
+[`UNIQUE-1010`](../reference/warnings.md#unique-1010).
+
+### Oracle bare `NUMBER` (no precision/scale) → integer type
+
+**Problem.** Oracle's unqualified `NUMBER` — no precision or scale — is
+the idiomatic spelling for an integer id/count column (`id NUMBER
+GENERATED ALWAYS AS IDENTITY`, `customer_id NUMBER` as an FK), but it
+parses, dialect-neutrally, to a bare `DECIMAL`. A bare `DECIMAL` cannot be
+`AUTO_INCREMENT` on MySQL, and does not match an integer primary key for a
+foreign key on PostgreSQL — both fail at `CREATE TABLE` time on the live
+databases.
+
+**Solution.**
+
+```sql
+-- tests/unit/core/test_boolean_timestamp.py::TestOracleBareNumberToInteger (_DDL)
+CREATE TABLE invoice (
+  id NUMBER GENERATED ALWAYS AS IDENTITY,
+  customer_id NUMBER NOT NULL,
+  unit_price NUMBER(10, 2) NOT NULL,
+  CONSTRAINT fk FOREIGN KEY (customer_id) REFERENCES customer (id)
+)
+-- oracle -> mysql:
+CREATE TABLE invoice (
+  id BIGINT AUTO_INCREMENT,
+  customer_id BIGINT NOT NULL,
+  unit_price DECIMAL(10, 2) NOT NULL,
+  CONSTRAINT fk FOREIGN KEY (customer_id) REFERENCES customer (id)
+);
+-- oracle -> postgresql:
+CREATE TABLE invoice (
+  id BIGINT GENERATED ALWAYS AS IDENTITY,
+  customer_id BIGINT NOT NULL,
+  unit_price DECIMAL(10, 2) NOT NULL,
+  CONSTRAINT fk FOREIGN KEY (customer_id) REFERENCES customer (id)
+);
+```
+
+`NUMBER(10, 2)` (qualified — has precision/scale) keeps its `DECIMAL`
+mapping unchanged in both cases; only the bare form is promoted to
+`BIGINT`. A bare `DECIMAL` from a *non*-Oracle source is left completely
+alone (`test_bare_decimal_from_tsql_source_unchanged`): `CREATE TABLE t
+(amount DECIMAL)` from T-SQL stays `amount DECIMAL`/`NUMERIC` on
+PostgreSQL, confirming the promotion is gated on the Oracle source dialect,
+not on "this looks like a bare decimal."
+
+**Discussion — correcting the premise this entry was filed under.** The
+promotion is **not** conditioned on the column's role (PK/FK/identity)
+despite the surrounding code comment motivating it that way. Reading the
+implementation
+(`src/unique/core/converter/convert.py::_convert_create_table`, the
+`source_dialect == "oracle" and dtype.name.upper() in ("DECIMAL",
+"NUMERIC") and not dtype.params` gate, lines ~2440–2445): it fires for
+**every** bare-`NUMBER` column from an Oracle source, unconditionally — the
+constraint/PK/FK/identity resolution in the same function runs *after*
+this type substitution and is never consulted by it. `NUMBER(p,s)` is the
+only escape hatch.
+
+> **Warning** — this is a real, live-checkable divergence risk with **no
+> guard and no warning** today: an ordinary Oracle column that legitimately
+> holds a fractional value but happens to be declared as a bare `NUMBER`
+> (e.g. `discount_pct NUMBER`, no PK/FK/identity role at all) is silently
+> promoted to `BIGINT` on every non-Oracle target, truncating any
+> fractional value it could otherwise hold:
+> ```sql
+> -- probed directly against the transpiler (not corpus/test-pinned — no
+> -- existing test exercises a non-key bare NUMBER column):
+> CREATE TABLE t (discount_pct NUMBER, name VARCHAR2(50))
+> -- oracle -> mysql / postgresql: discount_pct BIGINT   (no warning)
+> ```
+> `TestOracleBareNumberToInteger`'s three tests only exercise identity/PK/FK
+> columns and the cross-dialect guard, so none of them would catch this.
+> Flagged here rather than fixed (this page is docs-only); worth a
+> fix-brief for a future BLUE pass — likely a role check (PK/FK/identity)
+> gating the promotion, falling back to a sized `DECIMAL`/`NUMERIC`
+> otherwise.
+
+**See Also.** [`TestOracleBareNumberToInteger`](../../tests/unit/core/test_boolean_timestamp.py).
+
+## Temporary tables and the `CREATE TABLE AS SELECT` ↔ `SELECT INTO` idiom
 
 ### Session-scoped temp tables (PostgreSQL `TEMP` / T-SQL `#temp` / MySQL `TEMPORARY`) → Oracle `GLOBAL TEMPORARY`
 
@@ -112,6 +351,71 @@ the opposite of the source engines' session-scoped, commit-surviving rows.
 
 **See Also.** [`ts-select-into-temp`](../../tests/fixtures/challenge/challenge_sqlserver.sql), [`pg-select-into-ctas`](../../tests/fixtures/challenge/challenge_postgresql.sql),
 [`pg-temp-oncommit-oracle`](../../tests/fixtures/challenge/challenge_postgresql.sql).
+
+### `CREATE TABLE AS SELECT` ↔ `SELECT ... INTO` for ordinary (non-temporary) tables
+
+**Problem.** This extends the entry above from *temp* tables specifically
+to *any* table: T-SQL has no `CREATE TABLE ... AS SELECT` syntax at all —
+whether or not the table is session-scoped — so any CTAS from another
+source dialect must become a T-SQL `SELECT ... INTO`. The same idiom runs
+in reverse: a plain (non-temp) `SELECT ... INTO newtable` from PostgreSQL or
+T-SQL has no equivalent on MySQL or Oracle, so it becomes their own
+`CREATE TABLE ... AS SELECT`.
+
+**Solution.**
+
+```sql
+-- tests/integration/test_pg_source_wave1.py::TestTsqlCtasBecomesSelectInto
+create temporary table tmp as select a, b from t3;
+-- mysql -> tsql:
+SELECT a, b
+INTO #tmp
+FROM t3
+```
+
+```sql
+-- corpus case ts-select-into
+CREATE TABLE src (id INT);
+GO
+SELECT id INTO dst FROM src
+-- tsql -> oracle:
+CREATE TABLE dst AS SELECT id FROM src;
+```
+
+```sql
+-- tests/integration/test_cross_dialect.py::TestDDLPassthrough::test_select_into_table_to_mysql
+SELECT a, b INTO new_table FROM src WHERE id > 0
+-- tsql -> mysql:
+CREATE TABLE new_table AS SELECT a, b FROM src WHERE id > 0;
+```
+
+A CTAS onto a target that already supports the syntax natively is kept as
+CTAS, not routed through the T-SQL `SELECT INTO` shape at all
+(`test_ctas_kept_on_oracle`: `create table tmp2 as select 1 as x;` from
+MySQL stays `CREATE TABLE tmp2 AS SELECT 1 AS x FROM DUAL` on Oracle), and
+the reverse direction is likewise left alone whenever the target already
+has `SELECT ... INTO` natively
+(`test_select_into_table_preserved`: PostgreSQL and Oracle both keep the
+literal `SELECT ... INTO newtable` form from a T-SQL source).
+
+**Discussion.** Unlike the temp-table entry above — which is about a
+*semantic* mismatch (commit-surviving rows vs. Oracle's transaction-scoped
+default) — this is a pure *syntax-availability* gap: T-SQL simply has no
+`CREATE TABLE ... AS SELECT` grammar production, temp or not, and MySQL/
+Oracle have no `SELECT ... INTO` grammar production. Recognizing "this is a
+table-creating query" and re-spelling it in whichever of the two idioms the
+target actually supports is the same rewrite as the temp-table case above,
+just without the `ON COMMIT` semantics layered on top — hence extending
+this entry rather than filing an unrelated one.
+
+> **Note** faithful — same resulting table and rows on every target; only
+> the surface syntax changes to match whichever of the two idioms
+> (`SELECT ... INTO` / `CREATE TABLE ... AS SELECT`) the target actually
+> supports.
+
+**See Also.** [`ts-select-into`](../../tests/fixtures/challenge/challenge_sqlserver.sql) ·
+[`TestTsqlCtasBecomesSelectInto`](../../tests/integration/test_pg_source_wave1.py) ·
+[`TestDDLPassthrough`](../../tests/integration/test_cross_dialect.py).
 
 ## Foreign-key referential actions
 
@@ -280,6 +584,115 @@ disagree (live-diffed: MySQL `('lo','mid','hi')` vs PostgreSQL
 **See Also.** [`my-enum-order`](../../tests/fixtures/challenge/challenge_mysql.sql) (`[fixed]`) ·
 `transformer.py::_rewrite_enum_ordering` ·
 `emit_ddl.py::_emit_enum_type`.
+
+## Synthesized identifiers for anonymous constructs
+
+T-SQL requires a name in two places where PostgreSQL/MySQL/Oracle happily
+accept an anonymous construct: every derived-table column must have one
+(error 8155), and — outside DDL proper but pinned by the same "T-SQL
+requires a name" family — every index does too. Unique synthesizes a
+deterministic name in both cases rather than erroring or dropping the
+construct.
+
+### Nameless `CREATE INDEX ON t(col)` (PostgreSQL) → T-SQL
+
+**Problem.** PostgreSQL allows `CREATE INDEX ON t (col)` with no index
+name — the server picks one internally (`t_col_idx`-shaped, but never
+surfaced to the script). T-SQL's `CREATE INDEX` grammar has no anonymous
+form at all: an index name is mandatory syntax.
+
+**Solution.**
+
+```sql
+-- tests/unit/core/test_ir_first_families.py::TestZeroPushW2Batch::test_nameless_create_index_in_trigger_gets_name
+create table ddl_t (c1 integer, c2 integer);
+create or replace function ddl_fn() returns trigger as $$
+begin
+  create index on ddl_t (c2);
+  return new;
+end$$ language plpgsql;
+create trigger ddl_fn_t before insert on ddl_t for each row
+  execute procedure ddl_fn();
+-- postgresql -> tsql:
+CREATE TABLE ddl_t (
+  c1 INT,
+  c2 INT
+)
+GO
+
+CREATE TRIGGER ddl_fn_t ON ddl_t
+AFTER INSERT
+AS
+BEGIN
+    CREATE INDEX ddl_t_c2_idx ON dbo.ddl_t (c2);
+END
+```
+
+The synthesized name follows PostgreSQL's own internal convention
+(`<table>_<column>_idx`), so it reads the same way a PostgreSQL DBA
+inspecting the catalog would expect, even though T-SQL never actually
+computes it server-side.
+
+**Discussion.** The rewrite reaches a `CREATE INDEX` even when it appears
+*inside* a PL/pgSQL trigger function body (the example above), not just at
+the top level — the trigger function itself gets inlined into the T-SQL
+trigger (`UNIQUE-1195`, a separate degrade covering PL/pgSQL-function-into-
+trigger inlining, unrelated to the index naming), and the nameless index
+inside that inlined body still needs a name to be valid T-SQL.
+
+> **Note** faithful — an index by any name behaves identically; only a
+> name T-SQL requires but PostgreSQL's grammar doesn't is being supplied.
+
+**See Also.** [`TestZeroPushW2Batch::test_nameless_create_index_in_trigger_gets_name`](../../tests/unit/core/test_ir_first_families.py) ·
+[`UNIQUE-1195`](../reference/warnings.md#unique-1195) (the unrelated trigger-inlining degrade in the same example).
+
+### Unnamed derived-table / `SELECT ... INTO` projections → synthesized `uq_col1` (T-SQL)
+
+**Problem.** `SELECT (SELECT a) t` or `SELECT (SELECT 1) t` — a derived
+table whose single projected column is a bare parameter reference or a
+literal, with no alias — is legal on PostgreSQL/MySQL/Oracle (the column
+gets an engine-assigned display name that nothing else references). T-SQL
+rejects it outright (error 8155, "every column in a derived table must
+have an alias").
+
+**Solution.**
+
+```sql
+-- corpus case my-reads-sql
+CREATE FUNCTION f(a INT) RETURNS INT READS SQL DATA BEGIN RETURN (SELECT COUNT(*) FROM (SELECT a) t); END
+-- mysql -> tsql:
+RETURN (SELECT COUNT(*) FROM (SELECT @a AS uq_col1) t);
+```
+
+```sql
+-- corpus case my-select-into-out
+CREATE PROCEDURE p(OUT c INT) BEGIN SELECT COUNT(*) INTO c FROM (SELECT 1) t; END
+-- mysql -> tsql:
+SELECT @c = COUNT(*) FROM (SELECT 1 AS uq_col1) AS t;
+```
+
+A literal projection (`SELECT 1`) is aliased the same way as a bare
+parameter reference (`SELECT a`) — both are "not a name," so both get
+`uq_col1` — pinned separately by the `my-scalar-subquery-assign` corpus
+case (`(SELECT 1) t` inside a `SET v = ...` assignment, not a `SELECT
+INTO` tail), which confirms the alias is synthesized regardless of which
+statement shape wraps the derived table.
+
+**Discussion.** Two independent code paths reach this: the IR-first
+pipeline's general derived-table naming (`my-reads-sql`,
+`my-scalar-subquery-assign`) and a dedicated sqlglot-AST pass for the
+`SELECT ... INTO` tail specifically
+(`_name_derived_columns`/`my-select-into-out`, described in the corpus
+case as "the text-path twin of the IR `_name_tsql_derived_columns`") —
+both converge on the same `uq_col1` synthesized name so the two paths
+produce indistinguishable output for a reader of the transpiled script.
+
+> **Note** faithful — the synthesized alias is never referenced by any
+> other part of the query (these are all single-column, unreferenced
+> derived tables), so the name itself is arbitrary; only T-SQL's mandatory-
+> alias rule is being satisfied.
+
+**See Also.** [`my-reads-sql`, `my-select-into-out`, `my-scalar-subquery-assign`](../../tests/fixtures/challenge/challenge_mysql.sql).
 
 ## Topics left out for lack of source support
 
