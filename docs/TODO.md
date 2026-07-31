@@ -89,6 +89,11 @@ routines-unblocked and severity:*
   bare RAISE;/THROW;. `test_procedural.py::TestMySQLSignalSource` (10).
   `DECLARE … CONDITION` still parse-degrades whole+warned (honest,
   pre-existing).
+- **B46** (P2, found during D1-W3, probed) — a T-SQL `RETURN NULL` NOT
+  followed by a semicolon swallows the NEXT statement (`SELECT @x`) into its
+  `UNIQUE-1177` discarded-value comment — no-silent-loss violation; the
+  sibling bare-`RETURN` case has a `test_following_statement_not_absorbed`
+  guard, the value-`RETURN` case does not.
 - **B45** (P2, found during D1-W1, live-verified) — pg/mysql-source
   `b boolean := true;` → Oracle emits `b boolean := 1;` — **invalid** on live
   Oracle (`PLS-00382: expression is of wrong type`): the TRUE→1 literal fold
