@@ -41,7 +41,7 @@ This is the narrative companion to two machine-checked sources of truth:
 | [Strings, concatenation and collation](strings-collation/README.md) | concatenation & NULL, LIKE/ESCAPE, character classes, collation/order, Oracle `''` ≡ NULL, byte vs char lengths | 28 |
 | [Aggregates and window functions](aggregates-windows/README.md) | window frames, ordered aggregates, string aggregation, DISTINCT ON, boolean aggregates | 16 |
 | [Booleans: the value/predicate duality](booleans/README.md) | tri-state `CASE` wrap for value position, `<> 0` synthesis for predicate position, boolean-column `IS TRUE`/`IS FALSE` re-spelling | 10 |
-| [DML: PIVOT/UNPIVOT, MERGE, DELETE, row values](dml/README.md) | PIVOT/UNPIVOT, MERGE/upsert lowering, multi-table DELETE, row caps, row-value comparisons | 27 |
+| [DML: PIVOT/UNPIVOT, MERGE, DELETE, row values](dml/README.md) | PIVOT/UNPIVOT, MERGE/upsert lowering, multi-table DELETE, row caps, row-value comparisons | 28 |
 | [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md) | identity/SERIAL, temp tables, FK actions, sequences, storage options | 26 |
 | [Procedural: cursors, dynamic SQL, system procedures, session directives](procedural/README.md) | cursors, error handling, dynamic SQL, system procedures, session directives | 57 |
 
@@ -525,6 +525,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`FROM (VALUES …)` / a quantified bare-`VALUES` subquery (PostgreSQL) → `UNION ALL` chain (every target)](dml/from-values-to-union-all.md) | PostgreSQL's `VALUES (1),(2),(3)` is a first-class row source, usable directly as a `FROM` item, as the operand of a quantified comparison (`n > ALL (VALUES …)`), or with a column-aliased `v(x)`. |
 | [`FROM generate_series(…)` (PostgreSQL) → a synthesized numbers source (every target)](dml/from-generate-series.md) | PostgreSQL's `generate_series(start, stop[, step])` is a set-returning function usable directly as a `FROM` item (or, via an implicit lateral unnest, in the `SELECT` list) — a compact way to manufacture one row per integer (or per date, with an `INTERVAL` step) in a range. |
 | [`GROUP BY 1` (positional ordinal) → the actual `SELECT`-list column name](dml/group-by-ordinal-resolved.md) | PostgreSQL accepts a positional ordinal in `GROUP BY` — `GROUP BY 1` groups by whatever the first `SELECT`-list expression is. |
+| [`INSERT ... ON CONFLICT` / `ON DUPLICATE KEY UPDATE` upsert clause → per-target idiom](dml/upsert-clause-modeled-per-target.md) | PostgreSQL's `INSERT ... ON CONFLICT (key) DO UPDATE/DO NOTHING` and MySQL's `INSERT ... ON DUPLICATE KEY UPDATE` / `INSERT IGNORE` are each one engine's own upsert syntax. |
 
 #### [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md)
 
@@ -715,6 +716,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`FROM DUAL` synthesis and removal (bidirectional)](dml/from-dual.md) | Oracle has no table-less `SELECT` — `SELECT 1` is `ORA-00923` — so every scalar `SELECT` needs a `FROM` clause; Oracle's answer is `DUAL`, a one-row system table. |
 | [Recursive CTE synthesis: `WITH RECURSIVE` keyword, Oracle's required column list, and the `MAXRECURSION` hint](dml/recursive-cte-keyword-and-column-list.md) | A recursive CTE — one whose body queries its own name — needs different declaration syntax on every engine. |
 | [T-SQL `IIF(cond, a, b)` / MySQL `IF(cond, a, b)` → Oracle/PostgreSQL searched `CASE`](dml/iif-to-case-or-native.md) | T-SQL's `IIF(cond, a, b)` and MySQL's `IF(cond, a, b)` are both a three-argument ternary conditional expression — neither function exists on Oracle or PostgreSQL, so carrying either name across verbatim would be an unresolved-function error there. |
+| [`INSERT ... ON CONFLICT` / `ON DUPLICATE KEY UPDATE` upsert clause → per-target idiom](dml/upsert-clause-modeled-per-target.md) | PostgreSQL's `INSERT ... ON CONFLICT (key) DO UPDATE/DO NOTHING` and MySQL's `INSERT ... ON DUPLICATE KEY UPDATE` / `INSERT IGNORE` are each one engine's own upsert syntax. |
 
 #### [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md)
 

@@ -251,8 +251,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### PostgreSQL as source
 
-| [Multi-join `UPDATE`](#multi-join-update-2) | [Row-value comparisons](#row-value-comparisons-2) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-4) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-2) | [Positional GROUP BY resolved to a column name](#positional-group-by-resolved-to-a-column-name-1) |
-|---|---|---|---|---|
+| [Multi-join `UPDATE`](#multi-join-update-2) | [Row-value comparisons](#row-value-comparisons-2) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-4) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-2) | [Positional GROUP BY resolved to a column name](#positional-group-by-resolved-to-a-column-name-1) | [`MERGE` / upsert lowering](#merge--upsert-lowering-3) |
+|---|---|---|---|---|---|
 
 #### Multi-join `UPDATE`
 
@@ -285,9 +285,15 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [`GROUP BY 1` (positional ordinal) → the actual `SELECT`-list column name](group-by-ordinal-resolved.md) | postgresql → tsql | PostgreSQL accepts a positional ordinal in `GROUP BY` — `GROUP BY 1` groups by whatever the first `SELECT`-list expression is. |
 
+#### `MERGE` / upsert lowering
+
+| Article | Direction | Description |
+|---|---|---|
+| [`INSERT ... ON CONFLICT` / `ON DUPLICATE KEY UPDATE` upsert clause → per-target idiom](upsert-clause-modeled-per-target.md) | postgresql/mysql → cross-engine | PostgreSQL's `INSERT ... ON CONFLICT (key) DO UPDATE/DO NOTHING` and MySQL's `INSERT ... ON DUPLICATE KEY UPDATE` / `INSERT IGNORE` are each one engine's own upsert syntax. |
+
 ### PostgreSQL as target
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-4) | [`MERGE` / upsert lowering](#merge--upsert-lowering-3) | [Multi-table `DELETE`](#multi-table-delete-3) | [Multi-join `UPDATE`](#multi-join-update-3) | [`OUTPUT` / `RETURNING`](#output--returning-2) | [Set-operation `ORDER BY`](#set-operation-order-by-2) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-5) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-3) | [Recursive CTE synthesis](#recursive-cte-synthesis-3) | [Conditional expression translation](#conditional-expression-translation-2) | [Literal parsing recovery](#literal-parsing-recovery-2) |
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-4) | [`MERGE` / upsert lowering](#merge--upsert-lowering-4) | [Multi-table `DELETE`](#multi-table-delete-3) | [Multi-join `UPDATE`](#multi-join-update-3) | [`OUTPUT` / `RETURNING`](#output--returning-2) | [Set-operation `ORDER BY`](#set-operation-order-by-2) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-5) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-3) | [Recursive CTE synthesis](#recursive-cte-synthesis-3) | [Conditional expression translation](#conditional-expression-translation-2) | [Literal parsing recovery](#literal-parsing-recovery-2) |
 |---|---|---|---|---|---|---|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
@@ -362,8 +368,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### MySQL as source
 
-| [Multi-table `DELETE`](#multi-table-delete-4) | [Row-value comparisons](#row-value-comparisons-3) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-6) | [Recursive CTE synthesis](#recursive-cte-synthesis-4) | [Conditional expression translation](#conditional-expression-translation-3) |
-|---|---|---|---|---|
+| [Multi-table `DELETE`](#multi-table-delete-4) | [Row-value comparisons](#row-value-comparisons-3) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-6) | [Recursive CTE synthesis](#recursive-cte-synthesis-4) | [Conditional expression translation](#conditional-expression-translation-3) | [`MERGE` / upsert lowering](#merge--upsert-lowering-5) |
+|---|---|---|---|---|---|
 
 #### Multi-table `DELETE`
 
@@ -395,9 +401,15 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [T-SQL `IIF(cond, a, b)` / MySQL `IF(cond, a, b)` → Oracle/PostgreSQL searched `CASE`](iif-to-case-or-native.md) | tsql/mysql → oracle/postgresql | T-SQL's `IIF(cond, a, b)` and MySQL's `IF(cond, a, b)` are both a three-argument ternary conditional expression — neither function exists on Oracle or PostgreSQL, so carrying either name across verbatim would be an unresolved-function error there. |
 
+#### `MERGE` / upsert lowering
+
+| Article | Direction | Description |
+|---|---|---|
+| [`INSERT ... ON CONFLICT` / `ON DUPLICATE KEY UPDATE` upsert clause → per-target idiom](upsert-clause-modeled-per-target.md) | postgresql/mysql → cross-engine | PostgreSQL's `INSERT ... ON CONFLICT (key) DO UPDATE/DO NOTHING` and MySQL's `INSERT ... ON DUPLICATE KEY UPDATE` / `INSERT IGNORE` are each one engine's own upsert syntax. |
+
 ### MySQL as target
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-5) | [`MERGE` / upsert lowering](#merge--upsert-lowering-4) | [Multi-table `DELETE`](#multi-table-delete-5) | [Multi-join `UPDATE`](#multi-join-update-4) | [Set-operation `ORDER BY`](#set-operation-order-by-3) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-7) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-4) | [Recursive CTE synthesis](#recursive-cte-synthesis-5) | [Literal parsing recovery](#literal-parsing-recovery-3) |
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-5) | [`MERGE` / upsert lowering](#merge--upsert-lowering-6) | [Multi-table `DELETE`](#multi-table-delete-5) | [Multi-join `UPDATE`](#multi-join-update-4) | [Set-operation `ORDER BY`](#set-operation-order-by-3) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-7) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-4) | [Recursive CTE synthesis](#recursive-cte-synthesis-5) | [Literal parsing recovery](#literal-parsing-recovery-3) |
 |---|---|---|---|---|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
@@ -505,6 +517,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Conditional `MATCHED` UPDATE+DELETE pair (T-SQL) → Oracle fold](merge-matched-update-delete-fold.md) | tsql → oracle | A T-SQL `MERGE` may carry two conditional `WHEN MATCHED` clauses in sequence — first-match-wins — one `UPDATE`, one `DELETE`. |
 | [A leading CTE feeding `MERGE` (T-SQL) → Oracle / MySQL](merge-with-leading-cte.md) | tsql → oracle/mysql | `WITH src AS (…) MERGE INTO t USING src ON … WHEN MATCHED THEN UPDATE … WHEN NOT MATCHED THEN INSERT …` — the `MERGE`'s `USING` source is itself a named CTE. |
 | [Canonical `MERGE` (T-SQL/Oracle) → MySQL `INSERT … SELECT … ON DUPLICATE KEY UPDATE`](merge-to-mysql-on-duplicate-key.md) | tsql/oracle → mysql | MySQL has no `MERGE` statement at all. |
+| [`INSERT ... ON CONFLICT` / `ON DUPLICATE KEY UPDATE` upsert clause → per-target idiom](upsert-clause-modeled-per-target.md) | postgresql/mysql → cross-engine | PostgreSQL's `INSERT ... ON CONFLICT (key) DO UPDATE/DO NOTHING` and MySQL's `INSERT ... ON DUPLICATE KEY UPDATE` / `INSERT IGNORE` are each one engine's own upsert syntax. |
 
 ## Multi-table `DELETE`
 

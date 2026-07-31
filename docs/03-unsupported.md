@@ -517,9 +517,11 @@ silently:
   a plain literal or `CHR()`).
 - **PostgreSQL array column types** (`TEXT[]`): no cross-engine model (§7) —
   the output gate degrades the statement off PG.
-- **Upsert semantics across engines** (audit B1/N1): the upsert clause is
-  modeled and lowered per target (native PG⟷MySQL, MERGE for T-SQL/Oracle), but
-  two divergences are annotated + warned rather than shipped silently:
+- **Upsert semantics across engines** (audit B1/N1): the upsert clause
+  converts faithfully to each target's own idiom (native PostgreSQL/MySQL,
+  an insert-only MERGE for T-SQL/Oracle) — see
+  [the rationale article](rationale/dml/upsert-clause-modeled-per-target.md).
+  Two divergences are annotated + warned rather than shipped silently:
   - **MySQL `ON DUPLICATE KEY UPDATE` fires on *any* unique/primary key**, not a
     single named conflict target — so a PG `ON CONFLICT (k)` mapped to MySQL, or
     a MySQL-source upsert whose target key had to be assumed from the in-script
