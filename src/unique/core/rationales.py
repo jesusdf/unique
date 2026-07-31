@@ -3068,4 +3068,22 @@ RATIONALES: dict[str, Rationale] = {
             "as an ORA-02014 runtime error; the result set is unchanged."
         ),
     ),
+    "UNIQUE-1238": _R(
+        construct="COMPRESS() / DECOMPRESS() (T-SQL → MySQL)",
+        reason=(
+            "Both engines have COMPRESS/DECOMPRESS functions, but with different "
+            "on-disk containers: SQL Server uses the GZIP format (RFC 1952) while "
+            "MySQL uses raw zlib (RFC 1950) prefixed with a 4-byte little-endian "
+            "uncompressed-length header. The compressed bytes are therefore not "
+            "interchangeable — a blob produced by one engine will not DECOMPRESS "
+            "on the other — and there is no built-in cross-container conversion, "
+            "so the MySQL function is kept but the value is flagged as non-equal."
+        ),
+        example_case="ts-compress",
+        divergence=(
+            "Warned limit — the transpiled COMPRESS runs on MySQL but returns "
+            "different bytes than SQL Server's GZIP output; DECOMPRESS on the "
+            "matching engine still round-trips."
+        ),
+    ),
 }

@@ -1163,4 +1163,10 @@ DIAGNOSTICS: dict[str, Diagnostic] = {
         "DISTINCT / GROUP BY (ORA-02014); the rows are not lockable, so the row "
         "lock is dropped (docs/03-unsupported.md",
     ),
+    "UNIQUE-1238": _D(
+        "expression",
+        "T-SQL COMPRESS/DECOMPRESS use the GZIP container; MySQL's same-named "
+        "functions use zlib with a length prefix — the bytes differ and are not "
+        "interchangeable (docs/03-unsupported.md",
+    ),
 }
