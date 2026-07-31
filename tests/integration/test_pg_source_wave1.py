@@ -2261,10 +2261,12 @@ class TestParseFallbackDegradesCrossDialect:
 class TestTableColumnAliases:
     """wave 53: PG's column-aliased table refs (``x AS xx(xx1, xx2)``)
     silently DROPPED the column list everywhere (7x pg→tsql: the list
-    shipped raw inside joins, and plain refs lost the renames). T-SQL
-    gets the faithful derived-table rewrite ``(SELECT * FROM x) AS
-    xx(xx1, xx2)``; MySQL/Oracle have no spelling without column
-    knowledge — whole-degrade."""
+    shipped raw inside joins, and plain refs lost the renames). T-SQL and
+    MySQL both get the faithful derived-table rewrite ``(SELECT * FROM x)
+    AS xx(xx1, xx2)`` (neither accepts the column-alias list on a plain
+    base-table reference — B48, live-verified MySQL 8 accepts the
+    derived-table spelling); Oracle has no spelling at all (live
+    ORA-03048) and still whole-degrades."""
 
     def test_plain_ref_tsql_derived(self) -> None:
         out = _t("select xx1 from x as xx(xx1, xx2);", "tsql")
@@ -2281,11 +2283,35 @@ class TestTableColumnAliases:
             r"(?is)LEFT JOIN \(SELECT \* FROM x\) (AS )?xx\s*\(xx1, xx2\)", out
         ), out
 
-    def test_mysql_degrades_whole(self) -> None:
+    def test_plain_ref_mysql_derived(self) -> None:
+        import sqlglot
+
+        out = _t("select xx1 from x as xx(xx1, xx2);", "mysql")
+        assert re.search(
+            r"(?is)FROM \(SELECT \* FROM x\) AS xx\s*\(xx1, xx2\)", out
+        ), out
+        assert not re.search(r"(?is)^\s*--", out), out
+        assert "UNIQUE-1003" not in out, out
+        sqlglot.parse(out, read="mysql", error_level=sqlglot.ErrorLevel.RAISE)
+
+    def test_joined_ref_mysql_derived(self) -> None:
+        import sqlglot
+
+        out = _t(
+            "select * from y left join x as xx(xx1, xx2) on y1 = xx1;",
+            "mysql",
+        )
+        assert re.search(
+            r"(?is)LEFT JOIN \(SELECT \* FROM x\) AS xx\s*\(xx1, xx2\)", out
+        ), out
+        assert "UNIQUE-1003" not in out, out
+        sqlglot.parse(out, read="mysql", error_level=sqlglot.ErrorLevel.RAISE)
+
+    def test_oracle_degrades_whole(self) -> None:
         r = Transpiler().transpile(
             "select xx1 from x as xx(xx1, xx2);",
             source="postgresql",
-            target="mysql",
+            target="oracle",
         )
         code = [
             ln
@@ -2293,6 +2319,7 @@ class TestTableColumnAliases:
             if ln.strip() and not ln.strip().startswith("--")
         ]
         assert not code, r.sql
+        assert "UNIQUE-1003" in r.sql, r.sql
 
 
 class TestTsqlInvalidShapesDegrade:
