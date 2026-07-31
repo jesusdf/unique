@@ -69,6 +69,133 @@ describing the semantic loss).
 
 ---
 
+### `GREATEST`/`LEAST` NULL-propagation per engine
+
+**Problem.** MySQL and Oracle's `GREATEST`/`LEAST` return `NULL` if *any*
+argument is `NULL`. PostgreSQL and T-SQL's `GREATEST`/`LEAST` **ignore**
+`NULL` arguments and pick the max/min of the survivors:
+`GREATEST(1, NULL, 3)` is `3` on PostgreSQL/T-SQL, `NULL` on MySQL/Oracle —
+the same propagate-vs-ignore split as `CONCAT`/`||` above, on a different
+function pair.
+
+**Solution.**
+
+```sql
+-- my-greatest-null, mysql → postgresql / tsql
+SELECT GREATEST(1, NULL, 3) AS r;
+-- =>
+SELECT CASE WHEN 1 IS NULL OR NULL IS NULL OR 3 IS NULL THEN NULL ELSE GREATEST(1, NULL, 3) END AS r;
+
+-- reda-ora-greatest-null, oracle → postgresql / tsql
+SELECT GREATEST(1, NULL, 3) AS r FROM DUAL;
+-- => same CASE-guard shape as above, on both targets
+
+-- pg-greatest-null, postgresql → mysql / oracle
+SELECT GREATEST(1, NULL, 3) AS r;
+-- =>
+SELECT GREATEST(1, 3) AS r;
+```
+
+Going **MySQL/Oracle → PostgreSQL/T-SQL**, the call is wrapped in `CASE WHEN
+<arg> IS NULL OR … THEN NULL ELSE GREATEST(…) END` so the propagating
+source's `NULL` survives on a target that would otherwise ignore it. Going
+**PostgreSQL → MySQL/Oracle**, a literal `NULL` argument is instead dropped
+from the call, so MySQL/Oracle's own propagating `GREATEST`/`LEAST` computes
+the max/min of the remaining arguments — the value PostgreSQL's
+NULL-ignoring semantics already produced (a single survivor collapses to
+that value directly, since MySQL rejects a 1-arg `GREATEST`/`LEAST`). A
+target that already shares the source's propagation direction needs no
+rewrite and passes the call through unchanged.
+
+**Discussion.** A straight copy of the call reverses the result on whichever
+side disagrees with the source, exactly as with `CONCAT`/`||`. This was
+filed as a `lying-warning`: the only signal on the Oracle-source →
+PostgreSQL leg was the internal "unread sqlglot arg `ignore_nulls` on
+`Greatest` — may be dropped" tripwire, which does not name the NULL-semantics
+divergence and had no docs entry (`reda-ora-greatest-null`).
+
+> **Note** faithful — live-verified: MySQL/Oracle `GREATEST(1, NULL, 3)` =
+> `NULL`, reproduced as `NULL` by the guarded `CASE` on PostgreSQL/T-SQL (was
+> `3` before the fix); PostgreSQL's own `GREATEST(1, NULL, 3)` = `3`,
+> reproduced as `3` by `GREATEST(1, 3)` after the literal-`NULL` drop on
+> MySQL/Oracle. No warning in either direction.
+
+**See Also.** Corpus [`my-greatest-null`](../../tests/fixtures/challenge/challenge_mysql.sql), [`my-greatest-null2`](../../tests/fixtures/challenge/challenge_mysql.sql), [`my-least-greatest-null`](../../tests/fixtures/challenge/challenge_mysql.sql), [`my-least-null2`](../../tests/fixtures/challenge/challenge_mysql.sql), [`reda-ora-greatest-null`](../../tests/fixtures/challenge/challenge_oracle.sql), [`pg-greatest-null`](../../tests/fixtures/challenge/challenge_postgresql.sql) ·
+[`TestGreatestLeastNullPropagation`](../../tests/integration/test_challenge.py), [`TestGreatestLeastDropsNullFromPg`](../../tests/integration/test_challenge.py) (pinned) · `test_mysql_to_tsql[my-greatest-null]`/`test_mysql_to_postgresql[my-greatest-null]` (`test_challenge_assertions_mysql.py`) · `test_ora_case` (`test_challenge_assertions_oracle.py`, `reda-ora-greatest-null` row) ·
+`emit_functions.py:1644-1678` (docstring).
+
+---
+
+### `REPLACE` and `NULL`: Oracle's 2-arg form vs MySQL's propagation
+
+**Problem.** Two independent `REPLACE`/`NULL` divergences, found in the same
+sweep as the `GREATEST`/`LEAST` case above. Oracle's **2-argument**
+`REPLACE(s, search)` (no replacement string) removes every occurrence of
+`search` and, since Oracle collapses an empty result to `NULL` (see
+`Oracle '' ≡ NULL` below), returns `NULL` when `search` accounts for the
+whole string. Separately, MySQL's `REPLACE` **propagates** `NULL`: any
+`NULL` argument makes the whole call `NULL` — Oracle's `REPLACE`, by
+contrast, ignores a `NULL` search/replace argument and returns the subject
+unchanged.
+
+**Solution.**
+
+```sql
+-- ora-translate3 (REPLACE part), oracle → postgresql / tsql
+SELECT REPLACE('aaa', 'a') AS r FROM DUAL;
+-- =>
+SELECT NULLIF(REPLACE('aaa', 'a', ''), '') AS r;
+
+-- my-replace-null2, mysql → oracle / postgresql / tsql
+SELECT REPLACE('abc', NULL, 'x') IS NULL AS r;
+-- => oracle
+SELECT CASE WHEN NULL IS NULL THEN 1 WHEN NULL IS NOT NULL THEN 0 END AS r
+FROM DUAL;
+-- => postgresql / tsql (the REPLACE call folds away entirely)
+SELECT NULL IS NULL AS r;
+```
+
+Oracle's 2-arg form is rewritten to the 3-arg form everywhere else with an
+explicit `''` replacement, and the whole call wrapped in `NULLIF(…, '')` so
+an all-removed result reproduces Oracle's `NULL` instead of the target's own
+`''`. Going the other way, a MySQL `REPLACE` call carrying a **literal**
+`NULL` argument is folded to a bare `NULL` at transpile time: on
+PostgreSQL/T-SQL, which already propagate `NULL` through a normal `REPLACE`,
+this is a pure constant-fold (no `REPLACE` call survives to translate, as in
+the second example above); on Oracle, whose `REPLACE` ignores a `NULL`
+search/replace and would otherwise return the subject unchanged, the fold is
+load-bearing.
+
+**Discussion.** Oracle has no on-disk distinction driving the 2-arg case —
+it is the same `'' ≡ NULL` collapse documented below, reached through a
+function call instead of a literal. The literal-`NULL` fold for MySQL's
+`REPLACE` mirrors the `CONCAT` literal-`NULL` fold above, but — unlike
+`CONCAT`, which also guards a *non-literal* possibly-`NULL` operand with a
+runtime `CASE` — `REPLACE` only checks for a literal `NULL` argument
+(`emit_functions.py:1750-1760`). Probing a non-literal case live surfaces the
+same hole the `CONCAT` fix closed, still open here: `REPLACE('abc',
+CAST(NULL AS CHAR), 'x')` from MySQL is emitted unchanged on Oracle as
+`REPLACE('abc', CAST(NULL AS VARCHAR2(4000)), 'x')`, which live-evaluates to
+`'abc'` (Oracle ignores the `NULL` search) where the MySQL source is `NULL`.
+PostgreSQL/T-SQL stay correct here only because their own native `REPLACE`
+already propagates `NULL` regardless of what Unique emits — Oracle is the
+one target where this specific gap is live.
+
+> **Note** faithful for the 2-arg Oracle rewrite (`NULLIF` reproduces
+> Oracle's own `NULL`/`'abc45'`, live-verified) and for the MySQL
+> literal-`NULL` fold (`NULL IS NULL` → `1`/true on all three targets,
+> live-verified). **Open, unwarned divergence** — not part of any pinning
+> test, found live while writing this entry: a *non-literal* `NULL` argument
+> to a MySQL-source `REPLACE` reaching an **Oracle** target is not folded and
+> silently returns the wrong (unchanged-subject) value; PostgreSQL/T-SQL are
+> unaffected by accident, not by design.
+
+**See Also.** Corpus [`ora-translate3`](../../tests/fixtures/challenge/challenge_oracle.sql), [`my-replace-null2`](../../tests/fixtures/challenge/challenge_mysql.sql) ·
+[`TestOracleTwoArgReplaceTranslate`](../../tests/integration/test_challenge.py), [`TestMysqlReplaceNullPropagates`](../../tests/integration/test_challenge.py) (pinned) ·
+`emit_functions.py:1726-1738` (2-arg Oracle `REPLACE`), `emit_functions.py:1750-1760` (MySQL literal-`NULL` fold), docstrings.
+
+---
+
 ### Oracle `'' ≡ NULL`
 
 **Problem.** Every other engine stores and compares an empty string
@@ -312,6 +439,133 @@ through unchanged with no warning (`reda-ts-substring-zero-start`, class
 **See Also.** Corpus [`reda-ts-substring-zero-start`](../../tests/fixtures/challenge/challenge_sqlserver.sql), [`pg-substr-zero`](../../tests/fixtures/challenge/challenge_postgresql.sql),
 [`pg-fsubstr`](../../tests/fixtures/challenge/challenge_postgresql.sql) · [`TestPgSubstringZeroStart`](../../tests/integration/test_challenge.py)
 (pinned).
+
+---
+
+### Character-set `TRIM(chars FROM string)` → Oracle
+
+**Problem.** `TRIM([BOTH|LEADING|TRAILING] chars FROM string)` strips every
+occurrence of any character in `chars` from the string (both ends by
+default). MySQL, PostgreSQL and T-SQL (2022+) all accept an arbitrary
+multi-character `chars` set this way; MySQL additionally accepts the same
+call spelled `TRIM(chars, string)`.
+
+**Solution.**
+
+```sql
+-- mysql-corpus wave 188, mysql → oracle
+SELECT TRIM('x' FROM col) FROM t1;
+-- =>
+SELECT LTRIM(RTRIM(col, 'x'), 'x')
+FROM t1;
+
+-- same source, mysql → tsql (native pass-through)
+SELECT TRIM('x' FROM col) FROM t1;
+```
+
+For an Oracle target only, the call is rewritten to nested `LTRIM(RTRIM(col,
+set), set)`; a `LEADING`/`TRAILING`-only call rewrites to a single
+`LTRIM`/`RTRIM` instead. Every other target keeps the native `TRIM(chars
+FROM string)` spelling untouched.
+
+**Discussion.** Oracle's own `TRIM(BOTH char FROM string)` accepts only a
+**single** trim character — a multi-character set raises `ORA-30001` ("this
+function requires a single character trim set"). `LTRIM`/`RTRIM`, by
+contrast, treat their second argument as a genuine multi-character set on
+every engine, matching MySQL/PostgreSQL/T-SQL's `TRIM(chars FROM …)` reading
+exactly — nesting the two sidesteps the Oracle-only single-character
+restriction rather than working around a missing feature. The rewrite is
+keyed only on the **target** being Oracle, not on the source dialect: the
+docs-gap sweep that flagged this cluster attributed it to an "Oracle 3-arg
+`TRIM('x' FROM col)`" source case, but the pinning test and the canonical IR
+(`TRIM(remset, string[, position])`) are MySQL-sourced, and the emitter
+guard tests only `dialect == "oracle"` — noted here as a correction for
+traceability.
+
+> **Note** faithful — live-verified `'hello'` from `TRIM('x' FROM
+> 'xxhelloxx')` on MySQL, reproduced as `'hello'` by `LTRIM(RTRIM('xxhelloxx',
+> 'x'), 'x')` on Oracle. No warning.
+
+**See Also.** [`TestWave188IfBareCondTrimTwoArg::test_two_arg_trim_oracle`](../../tests/integration/test_pg_source_wave1.py)
+(pinned; an inline MySQL-source fixture, not a `challenge_*.sql` corpus case) ·
+`emit_functions.py:2124-2146` (docstring).
+
+---
+
+### Positional string-splice: `OVERLAY`/`STUFF`/`INSERT` (PostgreSQL/T-SQL/MySQL) → all targets
+
+**Problem.** Three engines each have a native "replace `len` characters of
+`string` at 1-based position `start` with `new`" function: PostgreSQL's
+`OVERLAY(string PLACING new FROM start [FOR len])`, T-SQL's `STUFF(string,
+start, len, new)`, MySQL's `INSERT(string, start, len, new)`. None has a
+native form on either of the other two, and Oracle has none of the three.
+
+**Solution.**
+
+```sql
+-- pg-overlay, postgresql → tsql / mysql / oracle
+SELECT OVERLAY('abcdef' PLACING 'XY' FROM 2 FOR 2) AS r;
+-- => tsql
+SELECT STUFF('abcdef', 2, 2, 'XY') AS r;
+-- => mysql
+SELECT INSERT('abcdef', 2, 2, 'XY') AS r;
+-- => oracle
+SELECT SUBSTR('abcdef', 1, (2) - 1) || 'XY' || SUBSTR('abcdef', (2) + (2)) AS r
+FROM DUAL;
+
+-- ts-stuff, tsql → oracle / postgresql / mysql
+SELECT STUFF('abcdef', 2, 3, 'XY') AS r;
+-- => oracle
+SELECT (SUBSTR('abcdef', 1, 2 - 1) || 'XY' || SUBSTR('abcdef', 2 + 3)) AS r
+FROM DUAL;
+-- => postgresql
+SELECT OVERLAY('abcdef' PLACING 'XY' FROM 2 FOR 3) AS r;
+-- => mysql
+SELECT INSERT('abcdef', 2, 3, 'XY') AS r;
+```
+
+Each of the three source forms rewrites to either of the other's native call
+when the target has one, and to an Oracle `SUBSTR(…) || new || SUBSTR(…)`
+splice (head up to `start`, the replacement, tail from `start + len`) when it
+doesn't — the three functions share a single emission path keyed off the
+target dialect.
+
+**Discussion.** Oracle has no positional string-splice built-in at all, so
+the `SUBSTR` concatenation is the only route there; PostgreSQL/T-SQL/MySQL
+each natively have exactly one of the three spellings, so the other two
+always translate to it (`emit_functions.py:2417-2441` for the `OVERLAY`
+source path, `emit_functions.py:3458-3469` for the `STUFF` source path).
+
+*An open, undocumented caveat found while writing this entry.* MySQL's
+`INSERT()` returns the **original string unchanged** when `start` is `0` or
+past the string's end (`my-insert-oob`, `my-insert-zeropos` — live-verified
+`'abc'`/`'abcdef'`). The MySQL → T-SQL path guards this explicitly: T-SQL's
+`STUFF` returns `NULL` for an out-of-range `start` (a different value class,
+the same shape of problem as the REPEAT/REPLICATE clamp above), so the
+emitted `CASE WHEN start < 1 OR start > LEN(s) THEN s ELSE STUFF(…) END`
+(`emit_functions.py:3441-3457`) reproduces MySQL's behavior. The MySQL →
+Oracle/PostgreSQL paths, and the plain `STUFF`/`OVERLAY` → Oracle/PostgreSQL
+paths, carry **no such guard**: live-verified, `INSERT('abc', 10, 1, 'X')`
+(MySQL, `'abc'`) becomes `'abcX'` via the Oracle `SUBSTR` splice, and
+`INSERT('abcdef', 0, 2, 'XY')` (MySQL, `'abcdef'`) becomes `'XYbcdef'` on the
+same splice — both wrong values, silently, no warning. On PostgreSQL the
+`start = 0` case is worse: `OVERLAY('abcdef' PLACING 'XY' FROM 0 FOR 2)`
+raises `negative substring length not allowed` at run time — an invalid
+statement shipped with no warning at all. Neither gap is scored against any
+corpus case (`my-insert-oob`/`my-insert-zeropos` only assert the T-SQL
+guard) and would need a fix brief before a BLUE pass.
+
+> **Warning** faithful for the in-bounds case on every target
+> (live-verified `'aXYef'`/`'QuWhattic'` reproduced identically by all four
+> engines). **Open, unwarned divergence** for an out-of-range `start` on
+> Oracle and PostgreSQL targets (T-SQL alone is guarded) — not a documented
+> limit, found live while writing this entry, not covered by any pinning
+> test.
+
+**See Also.** Corpus [`pg-overlay`](../../tests/fixtures/challenge/challenge_postgresql.sql), [`my-insert2`](../../tests/fixtures/challenge/challenge_mysql.sql), [`my-insert-oob`](../../tests/fixtures/challenge/challenge_mysql.sql), [`my-insert-zeropos`](../../tests/fixtures/challenge/challenge_mysql.sql), [`ts-stuff`](../../tests/fixtures/challenge/challenge_sqlserver.sql) ·
+[`TestOverlay`](../../tests/integration/test_challenge.py), [`TestMysqlInsertBounds`](../../tests/integration/test_challenge.py) (pinned) ·
+`test_mysql_to_tsql[my-insert-oob]`/`test_mysql_to_oracle[my-insert-oob]`/`test_mysql_to_postgresql[my-insert-oob]` (`test_challenge_assertions_mysql.py`) · `test_tsql_case` (`test_challenge_assertions_sqlserver.py`, `ts-stuff` row) ·
+`emit_functions.py:2417-2441` (`OVERLAY`), `emit_functions.py:3441-3469` (`STUFF`/`INSERT`), docstrings.
 
 ---
 
