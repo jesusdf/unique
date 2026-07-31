@@ -1,9 +1,12 @@
 # DML: PIVOT/UNPIVOT, MERGE, DELETE, row values
 
 `PIVOT`/`UNPIVOT` relation rewrites, `MERGE`/upsert lowering, multi-table
-`DELETE`, row caps, row-value comparisons, `OUTPUT`/`RETURNING`,
-set-operation `ORDER BY`, and Oracle's join-mark/`ROWNUM`/`DUAL` idioms as a
-*source*. See [README.md](README.md) for the entry format and sourcing rules.
+`DELETE`, multi-join `UPDATE`, row caps, row-value comparisons,
+`OUTPUT`/`RETURNING`, set-operation `ORDER BY`, Oracle's join-mark/`ROWNUM`/
+`DUAL` idioms as a *source*, PostgreSQL's portable row-source rewrites
+(`VALUES`/`generate_series`), and parenthesized-structure
+unwrapping/shielding in `FROM`. See [README.md](README.md) for the entry
+format and sourcing rules.
 
 ## `PIVOT` / `UNPIVOT`
 
@@ -253,6 +256,118 @@ different mechanism to bound the row count.
 
 **See Also.** [`reda-ts-delete-top`](../../tests/fixtures/challenge/challenge_sqlserver.sql).
 
+## Multi-join `UPDATE`
+
+### Multi-join `UPDATE … FROM … JOIN … JOIN …` (T-SQL / PostgreSQL) → Oracle / MySQL / PostgreSQL
+
+**Problem.** `UPDATE t SET t.total = d.amount + c.fee FROM t JOIN detail d
+ON … JOIN charges c ON … WHERE …` drives the assignment and the row filter
+off two or more joined tables the `UPDATE` itself never lists as its target
+— the sibling mechanism to this page's multi-table `DELETE` above, but for
+`UPDATE`.
+
+**Solution.**
+
+```sql
+-- pinning tests: test_embedded_dml_ir.py::test_multijoin_cross_table_update_rewrites_for_oracle,
+-- test_cross_dialect.py::TestCrossDialectDML, test_ir_first_families.py::TestZeroPushW3Batch
+UPDATE t SET t.total = d.amount + c.fee
+FROM t JOIN detail d ON d.tid = t.id JOIN charges c ON c.did = d.id
+WHERE t.status = 1
+-- Oracle:
+UPDATE t
+SET total = (SELECT d.amount + c.fee FROM detail d INNER JOIN charges c
+             ON c.did = d.id WHERE d.tid = t.id)
+WHERE EXISTS (SELECT 1 FROM detail d INNER JOIN charges c ON c.did = d.id
+              WHERE d.tid = t.id) AND t.status = 1;
+-- MySQL:
+UPDATE t
+INNER JOIN detail d ON d.tid = t.id
+INNER JOIN charges c ON c.did = d.id
+SET t.total = d.amount + c.fee
+WHERE t.status = 1;
+-- PostgreSQL:
+UPDATE t
+SET total = d.amount + c.fee
+FROM detail d, charges c
+WHERE d.tid = t.id AND c.did = d.id AND t.status = 1;
+
+-- Live-verified (seed t(1,_,1) (2,_,1) (3,_,0); detail(10,1,100) (20,2,200);
+-- charges(100,10,5) (200,20,7)): all four engines — Oracle, MySQL,
+-- PostgreSQL and the T-SQL source itself — land on the identical rows
+-- (1, 105, 1), (2, 207, 1), (3, 0, 0); row 3 (status=0) is untouched.
+```
+
+When the source itself spells its extra tables with a comma instead of an
+explicit `JOIN … ON` (PostgreSQL's own `UPDATE v1 SET … FROM city_view v2
+WHERE …`), the MySQL target mirrors that shape too — a comma-joined
+`UPDATE t1, t2 SET …` — rather than always synthesizing an `INNER JOIN`:
+
+```sql
+-- pinning tests: test_ir_first_families.py::TestZeroPushW3Batch
+--   (test_self_join_update_from_mysql_multi_table, test_comma_source_update_from_mysql)
+UPDATE city_view AS v1 SET country_name = v2.country_name
+FROM city_view AS v2 WHERE v2.city_name = 'B' AND v1.city_name = 'L'
+-- MySQL:
+UPDATE city_view v1, city_view v2
+SET v1.country_name = v2.country_name
+WHERE v2.city_name = 'B' AND v1.city_name = 'L';
+```
+
+A related but distinct problem shows up in the *other* direction. Oracle's
+`UPDATE t alias SET …` can carry its own cross-table logic inside a
+correlated scalar subquery (Oracle allows a bare alias with no `AS`), but
+T-SQL's grammar rejects `UPDATE <table> <alias>` outright — the aliased
+form must be spelled `UPDATE <alias> SET … FROM <table> <alias>`. Going
+from Oracle to T-SQL, Unique restructures the statement into that form and
+converts any `ROWNUM = 1` inside the subquery to `TOP 1` on the way:
+
+```sql
+-- pinning test: test_oracle_source_m4_wave.py::TestAliasedSingleTableUpdateOnTsql
+UPDATE t_pue ep
+SET idimp = (SELECT i.idimp FROM t_imp i WHERE i.imp = ep.imp AND ROWNUM = 1)
+WHERE EXISTS (SELECT 1 FROM t_imp i WHERE i.imp = ep.imp)
+-- T-SQL:
+UPDATE ep
+SET idimp = (SELECT TOP 1 i.idimp FROM t_imp i WHERE i.imp = ep.imp)
+FROM t_pue AS ep
+WHERE EXISTS (SELECT 1 FROM t_imp i WHERE i.imp = ep.imp)
+
+-- Live-verified (seed t_pue(1,imp=10) (2,imp=20) (3,imp=30);
+-- t_imp(imp=10,idimp=555) (imp=10,idimp=556) (imp=20,idimp=777)):
+-- T-SQL lands (1,10,555) (2,20,777) (3,30,NULL) — row 1's TOP 1 picks one
+-- of its two matching t_imp rows (arbitrary, no ORDER BY), row 3 has no
+-- match so EXISTS is false and it stays untouched.
+```
+
+**Discussion.** Oracle has no `UPDATE … FROM` at all — the multi-join
+source moves into a correlated scalar subquery in the `SET` list (the same
+join tree evaluated once per candidate row), guarded by a matching `EXISTS`
+in `WHERE` so a row with no join partner keeps its old value instead of
+being set to `NULL`. MySQL's `UPDATE` has its own native multi-table join
+grammar (`UPDATE t1 JOIN t2 ON … SET …`, or the comma form `UPDATE t1, t2
+SET …`), so Unique renders the join tree there directly instead of through
+a subquery — and reuses the source's own join spelling (explicit `JOIN …
+ON` in, `JOIN … ON` out; comma in, comma out) rather than normalizing to
+one shape, since both are valid MySQL `UPDATE`-join forms. PostgreSQL keeps
+its own native `UPDATE … FROM … WHERE` form, needing only the join tree
+flattened into the comma-separated `FROM` list with the `ON` predicates
+folded into `WHERE`.
+
+> **Note** faithful — live-verified identical final rows on Oracle, MySQL,
+> PostgreSQL and T-SQL for the multi-join case (seed above). The
+> Oracle-source aliased single-table form is faithful in the same
+> "arbitrary row" sense as this page's `DELETE TOP (n)` and (below)
+> `ROWNUM <= n` entries: `ROWNUM = 1`/`TOP 1` with no `ORDER BY` picks
+> whichever matching row the engine produces first, not one specific row —
+> live-verified `TOP 1` picks a real matching row on T-SQL.
+
+**See Also.** [`test_embedded_dml_ir.py`](../../tests/integration/test_embedded_dml_ir.py),
+[`test_cross_dialect.py::TestCrossDialectDML`](../../tests/integration/test_cross_dialect.py),
+[`test_ir_first_families.py::TestZeroPushW3Batch`](../../tests/unit/core/test_ir_first_families.py),
+[`test_oracle_source_m4_wave.py::TestAliasedSingleTableUpdateOnTsql`](../../tests/integration/test_oracle_source_m4_wave.py)
+· "Multi-table `DELETE … JOIN`" entry above (sibling mechanism).
+
 ## Row-value comparisons
 
 ### Row-value inequality (PostgreSQL / Oracle / MySQL) → T-SQL
@@ -394,6 +509,53 @@ defect, not an approved limit).
 
 **See Also.** [`reda-ts-setop-orderby`](../../tests/fixtures/challenge/challenge_sqlserver.sql).
 
+### `ORDER BY` inside a joined derived table (any source) → T-SQL: kept only with a row cap
+
+**Problem.** A derived table used as a join operand can carry its own
+`ORDER BY` — e.g. to pick or arrange the rows it contributes — separately
+from any `ORDER BY` on the outer query.
+
+**Solution.**
+
+```sql
+-- pinning tests: test_ir_first_families.py::TestZeroPushW3Batch
+--   (test_join_derived_table_order_by_stripped_tsql,
+--    test_join_derived_table_order_by_kept_with_limit)
+SELECT * FROM a FULL OUTER JOIN (SELECT * FROM b ORDER BY b.i DESC) d ON a.i = d.i
+-- T-SQL:
+SELECT * FROM a FULL OUTER JOIN (SELECT * FROM b) d ON a.i = d.i
+-- (the ORDER BY is dropped — no TOP/OFFSET/FOR XML alongside it)
+
+SELECT * FROM a JOIN (SELECT * FROM b ORDER BY c LIMIT 5) d ON a.x = d.x
+-- T-SQL:
+SELECT * FROM a INNER JOIN (SELECT TOP 5 * FROM b ORDER BY c ASC) d ON a.x = d.x
+-- (kept — TOP makes the ORDER BY legal)
+```
+
+Live-verified: `SELECT * FROM (SELECT 1 AS i ORDER BY i DESC) d` fails on
+SQL Server with error 1033, "The ORDER BY clause is invalid in views,
+inline functions, derived tables, subqueries, and common table expressions,
+unless TOP, OFFSET or FOR XML is also specified." Unique strips a bare
+`ORDER BY` inside a derived table rather than shipping that error, and
+keeps it whenever a `LIMIT`/`TOP`/`OFFSET` travels alongside it.
+
+**Discussion.** T-SQL is the only one of the four target engines with this
+restriction — PostgreSQL, MySQL and Oracle all accept an unqualified
+`ORDER BY` inside a derived table. It is also not a real semantic loss:
+standard SQL never guarantees a subquery's row order survives into its
+consumer without an explicit `TOP`/`LIMIT`/`OFFSET` riding along, so a bare
+`ORDER BY` inside a derived table that is only ever joined (never capped)
+has no observable effect on the final result set on *any* engine — dropping
+it for T-SQL removes dead syntax, not meaning.
+
+> **Note** faithful — live-verified T-SQL syntax error (above) confirms the
+> drop is required, not stylistic; the same "a row cap is what makes an
+> otherwise-meaningless order meaningful" reasoning as this page's
+> `DELETE TOP (n)` entry above and `ROWNUM <= n` entry below, applied here
+> to a derived table instead of a `DELETE`/`SELECT`.
+
+**See Also.** [`test_ir_first_families.py::TestZeroPushW3Batch`](../../tests/unit/core/test_ir_first_families.py).
+
 ## Oracle join syntax and row limits (source direction)
 
 The entries below run **from** Oracle. The rest of this page (and
@@ -529,3 +691,256 @@ added or removed depending on whether the target requires (Oracle), accepts
 > tolerates both forms.
 
 **See Also.** [`tests/unit/core/test_rownum_dual.py::TestFromDual`](../../tests/unit/core/test_rownum_dual.py).
+
+## Portable row-source rewrites (PostgreSQL)
+
+### `FROM (VALUES …)` / a quantified bare-`VALUES` subquery (PostgreSQL) → `UNION ALL` chain (every target)
+
+**Problem.** PostgreSQL's `VALUES (1),(2),(3)` is a first-class row source,
+usable directly as a `FROM` item, as the operand of a quantified comparison
+(`n > ALL (VALUES …)`), or with a column-aliased `v(x)`.
+
+**Solution.**
+
+```sql
+-- corpus case pg-avg-null
+SELECT AVG(x) FROM (VALUES (1),(2),(NULL),(4)) v(x)
+-- T-SQL:
+SELECT AVG((x) * 1.0)
+FROM (SELECT 1 AS x UNION ALL SELECT 2 UNION ALL SELECT NULL UNION ALL SELECT 4) v
+-- Oracle:
+SELECT AVG(x)
+FROM (SELECT 1 AS x FROM DUAL UNION ALL SELECT 2 FROM DUAL
+      UNION ALL SELECT NULL FROM DUAL UNION ALL SELECT 4 FROM DUAL) v;
+-- MySQL:
+SELECT AVG(x)
+FROM (SELECT 1 AS x UNION ALL SELECT 2 UNION ALL SELECT NULL UNION ALL SELECT 4) v;
+
+-- corpus case pg-all-values (quantified form)
+SELECT id FROM t WHERE n > ALL (VALUES (1),(2),(3))
+-- Oracle:
+SELECT id FROM t
+WHERE n > ALL (SELECT 1 FROM DUAL UNION ALL SELECT 2 FROM DUAL UNION ALL SELECT 3 FROM DUAL);
+```
+
+Every `VALUES (…)` row list used as a *relation* (a `FROM` item or a
+quantified-comparison subquery operand — not an `INSERT … VALUES` row list,
+which every target keeps natively) is rewritten to a `SELECT <v1> UNION ALL
+SELECT <v2> UNION ALL …` chain, even on T-SQL and MySQL, which both accept
+`VALUES` as a table constructor natively. (T-SQL's `AVG` also gets its own,
+separate integer-average promotion here; Oracle appends `FROM DUAL` to
+every arm, per the "`FROM DUAL` synthesis" entry above.)
+
+**Discussion.** The `UNION ALL` chain is not a per-engine compensation for
+a missing feature — T-SQL and MySQL both support `VALUES (…)` as a `FROM`
+row source. It is used because a **bare** `VALUES (…)` list is not a valid
+subquery *expression* on MySQL, Oracle or T-SQL: only PostgreSQL treats
+`VALUES` itself as a first-class query the way it treats `SELECT`, so `n >
+ALL (VALUES (1),(2),(3))` — a `VALUES` list used directly as a quantified
+comparison's operand — has no direct spelling on the other three at all.
+The `SELECT … UNION ALL …` chain is a row source every target accepts in
+every position a `VALUES` list can appear (including this one), so Unique
+renders it uniformly rather than special-casing the one or two positions
+(T-SQL/MySQL `FROM`) where a native `VALUES` would actually parse.
+
+> **Note** faithful — corpus `pg-avg-null` is live-verified equal (same
+> value, engine-specific decimal scale — precision-only diff, maintainer
+> policy 2026-07-19); corpus `pg-all-values` is live-executed on
+> T-SQL/Oracle/MySQL.
+
+**See Also.** [`pg-avg-null`, `pg-all-values`](../../tests/fixtures/challenge/challenge_postgresql.sql)
+· "`FROM DUAL` synthesis and removal" entry above.
+
+### `FROM generate_series(…)` (PostgreSQL) → a synthesized numbers source (every target)
+
+**Problem.** PostgreSQL's `generate_series(start, stop[, step])` is a
+set-returning function usable directly as a `FROM` item (or, via an
+implicit lateral unnest, in the `SELECT` list) — a compact way to
+manufacture one row per integer (or per date, with an `INTERVAL` step) in a
+range.
+
+**Solution.**
+
+```sql
+-- corpus case pg-srf-in-select
+SELECT g, g*g FROM generate_series(1,3) g
+-- Oracle:
+SELECT g, g * g
+FROM (SELECT (1) + (LEVEL - 1) AS g FROM DUAL CONNECT BY LEVEL <= (3) - (1) + 1) g;
+-- T-SQL:
+SELECT g, g * g
+FROM (SELECT TOP ((3) - (1) + 1) (1) + (ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1) AS g
+      FROM sys.all_objects) g
+-- MySQL: whole-statement carrier + warning (UNIQUE-1003) — no table functions.
+
+-- corpus case pg-bulk-insert (an INSERT ... SELECT source, same rewrite)
+CREATE TABLE t (a INT); INSERT INTO t SELECT generate_series(1, 1000)
+-- Oracle/T-SQL: the same CONNECT BY / sys.all_objects rewrite, live-executed
+-- — 1000 rows land in t. MySQL: same UNIQUE-1003 carrier.
+```
+
+Oracle: a `CONNECT BY LEVEL <= <count>` walk from `DUAL`, offset by `start +
+(LEVEL - 1)`. T-SQL: a `ROW_NUMBER() OVER (ORDER BY (SELECT NULL))` walk
+over `sys.all_objects` (a system catalog with enough rows to cover any
+practical range), capped with `TOP <count>` and offset the same way. Both
+preserve `WITH ORDINALITY`'s row index as the `ROW_NUMBER()`/`LEVEL` itself
+when requested, and a date-range call (`generate_series(date, date,
+INTERVAL 'n' day)`) gets the same numeric walk with `DATE + (LEVEL-1)*n`
+(Oracle) / `DATEADD(DAY, …, …)` (T-SQL) applied on top. MySQL has no
+table-function/set-returning mechanism at all (`JSON_TABLE` cannot
+manufacture rows from a range) and no recursive-CTE-in-`FROM` fallback, so
+the whole statement degrades to a documented carrier.
+
+**Discussion.** No target has a literal `generate_series` equivalent:
+Oracle's row-generation idiom is the `CONNECT BY LEVEL` walk from `DUAL`;
+T-SQL has no built-in numbers table, so Unique manufactures one from
+`sys.all_objects`; MySQL has neither mechanism usable inline in `FROM`.
+
+> **Note** faithful on Oracle/T-SQL — corpus `pg-srf-in-select` rows
+> (1,1)/(2,4)/(3,9) live-verified; `pg-bulk-insert`'s 1000-row `INSERT …
+> SELECT` live-executed. `[limit]` (warned carrier) on MySQL.
+
+**See Also.** [`pg-srf-in-select`, `pg-bulk-insert`, `pg-gen-series-ord`,
+`pg-gen-series-date`, `pg-generate-series`](../../tests/fixtures/challenge/challenge_postgresql.sql)
+· [`test_challenge.py::TestGenerateSeriesFrom`](../../tests/integration/test_challenge.py).
+
+## Parenthesized-structure unwrapping and shielding
+
+### Parenthesized set-operation arms unwrap; an arm's own `ORDER BY`/`LIMIT` is shielded
+
+**Problem.** `(SELECT …) UNION ALL (SELECT …)` parenthesizes each arm of a
+set operation — often just for readability, but sometimes because one arm
+carries its own `ORDER BY`/`LIMIT` that must apply to *that arm alone*, not
+to the combined result.
+
+**Solution.**
+
+```sql
+-- pinning tests: test_pg_source_wave1.py::TestParenthesizedUnionArms
+(select * from t1) union all (select * from t2);
+-- PostgreSQL:
+SELECT * FROM t1 UNION ALL SELECT * FROM t2;   -- (parens just dropped)
+
+select a from t1 union all (select a from t2 order by a limit 1);
+-- PostgreSQL:
+SELECT a FROM t1
+UNION ALL
+SELECT * FROM (SELECT a FROM t2 ORDER BY a ASC NULLS FIRST LIMIT 1) uq_setarm;
+
+(select a from t1 limit 2) union all (select a from t2) order by a;
+-- PostgreSQL:
+SELECT * FROM (SELECT a FROM t1 LIMIT 2) uq_setarm
+UNION ALL
+SELECT a FROM t2
+ORDER BY a ASC NULLS FIRST;
+```
+
+Live-verified (`t1(3,1)`, `t2(9,2,5)`): the shielded-second-arm example
+returns `(3),(1),(2)` — `t2`'s contribution is exactly its single smallest
+row, proving the `ORDER BY … LIMIT 1` scoped to that arm alone rather than
+to the whole union.
+
+A parenthesized arm with **no** `ORDER BY`/`LIMIT` of its own just has its
+parentheses dropped. An arm that does carry one gets wrapped in a
+synthesized derived table (`uq_setarm`) instead, and the set operation's own
+trailing `ORDER BY`/`LIMIT`, if any, still attaches to the combined result
+as normal.
+
+**Discussion.** A parenthesized arm arrives from sqlglot as a `Subquery`
+wrapping a `Select`; the earlier converter read that wrapper as an empty
+select, shipping `SELECT * UNION ALL SELECT *` with the arm's own `FROM`
+and columns dropped entirely. The fix unwraps the arm's real `FROM`/columns
+— but a plain unwrap is not always safe: an arm's own `ORDER BY`/`LIMIT`,
+once unparenthesized, would bind to the **whole** set operation rather than
+to the arm it belongs to (true on every target: a trailing `ORDER BY`/
+`LIMIT` after the last arm of a `UNION`/`EXCEPT`/`INTERSECT` always scopes
+to the combined result, never to one arm). So an arm carrying one of those
+clauses is wrapped in a derived table instead of unwrapped bare, keeping
+its original per-arm scope.
+
+> **Note** faithful — live-verified above.
+
+**See Also.** [`test_pg_source_wave1.py::TestParenthesizedUnionArms`](../../tests/integration/test_pg_source_wave1.py)
+· "`ORDER BY` inside a joined derived table" entry above (a sibling
+shielding mechanism, different trigger).
+
+### Parenthesized join-relation groups unwrap; a column-aliased table ref wraps into a derived table
+
+**Problem.** Two different `FROM`-clause shapes both need restructuring,
+for opposite reasons: a **parenthesized join group** — `FROM (t1 JOIN t2 ON
+…), t3` — groups a join tree for readability with no semantic effect of its
+own; a **column-aliased table reference** — PostgreSQL's `tbl AS
+alias(col1, col2)` — renames the table's columns positionally, a real
+semantic operation most targets cannot spell against a plain table
+reference at all.
+
+**Solution.**
+
+```sql
+-- pinning tests: test_pg_source_wave1.py::TestParenthesizedJoinRelations
+select * from (t1 as x left join t2 as y using (a)), t3;
+-- T-SQL:
+SELECT * FROM t1 x LEFT JOIN t2 y ON x.a = y.a CROSS JOIN t3
+
+select * from (t1 left join t2 on t1.a = t2.a);
+-- PostgreSQL:
+SELECT * FROM t1 LEFT JOIN t2 ON t1.a = t2.a;
+```
+
+```sql
+-- pinning tests: test_pg_source_wave1.py::TestTableColumnAliases
+select xx1 from x as xx(xx1, xx2);
+-- T-SQL:
+SELECT xx1 FROM (SELECT * FROM x) AS xx(xx1, xx2)
+
+select * from y left join x as xx(xx1, xx2) on y1 = xx1;
+-- T-SQL:
+SELECT * FROM y LEFT JOIN (SELECT * FROM x) AS xx(xx1, xx2) ON y1 = xx1
+
+-- MySQL/Oracle: whole-statement carrier + warning (UNIQUE-1003) —
+-- see Discussion.
+```
+
+Live-verified (T-SQL, `x(c1=7, c2=8)`):
+`SELECT xx1 FROM (SELECT * FROM x) AS xx(xx1, xx2)` returns `7` — the
+renamed `xx1` really is `x`'s first column. Live-verified (T-SQL,
+`t1(1),(2)`, `t2(1)`, `t3(100),(200)`): the unwrapped join-plus-cross-join
+returns the expected 4-row result, `USING` correctly rewritten to `x.a =
+y.a` and the trailing comma-join to `t3` rewritten to an explicit `CROSS
+JOIN`.
+
+**Discussion.** The parenthesized join group arrives from sqlglot as a
+`Subquery` wrapping a `Table`, carrying its own `joins` list the converter
+previously never read — the whole group, `USING` clause included, shipped
+raw and unparsed. Since parentheses around a join tree are semantically
+transparent (they only group; they never scope anything the way a derived
+table's `ORDER BY` does — see the entries above), the fix unwraps the group
+and hoists its table and joins straight into the outer `FROM` list,
+preserving emission order so the surrounding comma-join grouping still
+reads correctly.
+
+The column-aliased table reference is the opposite case: it *is* a real
+rewrite (positional column renaming). T-SQL accepts a derived table's own
+column-alias list, so `tbl AS alias(c1, c2)` becomes `(SELECT * FROM tbl)
+AS alias(c1, c2)` there. Oracle genuinely has no equivalent at all —
+`SELECT xx1 FROM (SELECT * FROM x) xx(xx1, xx2)` is a live `ORA-03048`
+syntax error (verified directly against Oracle) — so the Oracle degrade is
+a real engine limit. **MySQL's degrade, however, does not appear to be
+one**: MySQL 8 accepts the identical derived-table column-alias syntax
+live (`SELECT xx1 FROM (SELECT * FROM x) AS xx(xx1, xx2)` runs and returns
+the aliased column, verified directly against MySQL), yet the current gate
+(`transformer.py::_gate_column_alias_ref`) degrades MySQL together with
+Oracle and its docstring asserts neither engine "has the spelling." That
+docstring claim is accurate for Oracle but not for MySQL as tested here —
+flagged as a discrepancy for a maintainer to evaluate (a possible fix, not
+an approved permanent limit); this entry documents the transpiler's
+current, live behavior rather than asserting the MySQL degrade is required.
+
+> **Note** faithful for the unwrap (live-verified above) and for the T-SQL
+> column-alias rewrite (live-verified above). Oracle's whole-degrade is a
+> genuine engine limit (live `ORA-03048`, verified). MySQL's whole-degrade
+> is the current, live transpiler behavior — not independently verified as
+> *required*; see Discussion.
+
+**See Also.** [`test_pg_source_wave1.py::TestParenthesizedJoinRelations`](../../tests/integration/test_pg_source_wave1.py),
+[`test_pg_source_wave1.py::TestTableColumnAliases`](../../tests/integration/test_pg_source_wave1.py).
