@@ -85,6 +85,18 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
 
 ### Small findings (P3 unless noted)
 
+- **B61** (P2, found during RECLASS-2, probed) — PL/SQL `CONSTANT` variable
+  declarations are dropped on EVERY cross-engine direction including
+  Oracle↔PostgreSQL (both support them); only a same-dialect round-trip
+  keeps them. The old docs claimed Oracle↔PG kept them — corrected; the fix
+  is to thread `CONSTANT` through for targets that support it.
+- **B62** (P2, found during RECLASS-2, probed) — T-SQL cursor `SCROLL` is
+  discarded unconditionally at parse time (`_tsql.py::_parse_tsql_declare`
+  lumps it with LOCAL/FAST_FORWARD hints) — silent, even on a tsql→tsql
+  round-trip and toward PostgreSQL (both support SCROLL; scroll-FETCH forms
+  are a documented [limit] elsewhere, but the DECLARE property itself should
+  survive where the target supports it). PG-source SCROLL threads fine.
+
 - ~~B59~~ — DONE 2026-07-31: pg identity respells canonical HEX back to `TO_HEX`; all 4 directions live-verified lowercase-unpadded.
 
 - ~~B58~~ — DONE 2026-07-31: T-SQL OUTPUT → INOUT at the single parser source point (unconditional faithful; all emitters already spelled it; OUTPUT→INOUT→OUTPUT round-trips). proc_14 enrolled (13), live 'base flt' on all 3 targets.
