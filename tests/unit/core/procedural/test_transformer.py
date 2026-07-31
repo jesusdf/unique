@@ -43,8 +43,12 @@ class TestSystemVariables:
         assert t._transform_system_var("@@ROWCOUNT") == "SQL%ROWCOUNT"
 
     def test_rowcount_to_postgresql(self) -> None:
+        # PostgreSQL has no inline row-count expression; the mapped
+        # ``ROW_COUNT()`` spelling is what the B37b hoist lifts into a
+        # ``GET DIAGNOSTICS`` capture (a bare ``ROW_COUNT`` identifier would
+        # be invalid standalone PL/pgSQL).
         t = ProceduralTransformer("tsql", "postgresql")
-        assert t._transform_system_var("@@ROWCOUNT") == "ROW_COUNT"
+        assert t._transform_system_var("@@ROWCOUNT") == "ROW_COUNT()"
 
     def test_unknown_system_var_commented(self) -> None:
         t = ProceduralTransformer("tsql", "oracle")

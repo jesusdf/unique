@@ -10,6 +10,7 @@ import dataclasses
 import re
 
 from unique.core.ast_nodes import (
+    AlterProcedureStatement,
     AnonymousBlock,
     ASTNode,
     CommentStatement,
@@ -45,7 +46,11 @@ class PostgresTransformer(ProceduralTransformer):
 
     def _system_var_map(self) -> dict[str, str]:
         return {
-            "@@ROWCOUNT": "ROW_COUNT",
+            # PostgreSQL has no inline row-count expression — a bare
+            # ``ROW_COUNT`` identifier is not valid standalone PL/pgSQL. Map to
+            # the function-shaped ``ROW_COUNT()`` spelling that the B37b hoist
+            # (below) recognizes and lifts into a ``GET DIAGNOSTICS`` capture.
+            "@@ROWCOUNT": "ROW_COUNT()",
             "@@IDENTITY": "LASTVAL()",
             # SQLSTATE is only available inside an EXCEPTION handler in plpgsql,
             # so it cannot stand in for an inline @@ERROR check.
@@ -55,27 +60,37 @@ class PostgresTransformer(ProceduralTransformer):
             ),
         }
 
-    # -- Implicit-cursor SQL%ROWCOUNT in expression position (B37) -----------
+    # -- Implicit row-count in expression position (B37 / B37b) --------------
     #
     # PostgreSQL reads the last statement's row count only through the
     # ``GET DIAGNOSTICS x = ROW_COUNT`` *statement* — it has no inline form,
-    # so ``emit.py`` degrades an inline ``SQL%ROWCOUNT`` to this carrier. Where
+    # so ``emit.py`` degrades an inline ``SQL%ROWCOUNT`` to a carrier. Where
     # the reference is single-evaluated (an assignment, an ``IF`` condition, a
     # call argument, a ``RETURN``) we hoist a ``GET DIAGNOSTICS`` capturing the
     # row count into a declared local immediately before the referencing
-    # statement, then substitute the local. Oracle's ``SQL%ROWCOUNT`` names the
-    # last executed DML; in straight-line code that DML is the previous
-    # statement, so a capture placed right before the use (``GET DIAGNOSTICS``
-    # does not itself alter ROW_COUNT) reads exactly the value the source would.
-    # A re-evaluated loop/exit condition cannot be captured once — it degrades
-    # honestly, keeping the existing UNIQUE-1033 carrier.
-    #: The reference to substitute: either emit.py's degrade carrier (the
-    #: usual case, e.g. an IF condition) or the raw source spelling that some
-    #: positions ship untouched (a CALL argument's text). The carrier
-    #: alternative is listed first so it consumes the whole ``0 /* … */`` span —
-    #: the source spelling nested inside the comment is never matched on its own.
+    # statement, then substitute the local. The source names the last executed
+    # DML; in straight-line code that DML is the previous statement, so a
+    # capture placed right before the use (``GET DIAGNOSTICS`` does not itself
+    # alter ROW_COUNT) reads exactly the value the source would. A re-evaluated
+    # loop/exit condition cannot be captured once — it degrades honestly,
+    # keeping the existing carrier.
+    #
+    # The hoist is spelling-general (B37b): all three source spellings of the
+    # implicit row count reach PostgreSQL in a form the recognizer below
+    # matches — Oracle's ``SQL%ROWCOUNT`` (carrier or raw), MySQL's
+    # ``ROW_COUNT()`` (left as-is, no pg inline form), and T-SQL's
+    # ``@@ROWCOUNT`` (mapped to ``ROW_COUNT()`` by ``_system_var_map``).
+    #: The reference to substitute: emit.py's degrade carrier (the usual case,
+    #: e.g. an IF condition), the raw Oracle source spelling that some positions
+    #: ship untouched (a CALL argument's text), or the ``ROW_COUNT()`` function
+    #: spelling (MySQL source / mapped T-SQL global). The carrier alternative is
+    #: listed first so it consumes the whole ``0 /* … */`` span — the source
+    #: spelling nested inside the comment is never matched on its own.
     _ROWCOUNT_CARRIER_RE = re.compile(
-        r"0\s*/\*\s*UNIQUE-1033:[^*]*\*/|\bSQL\s*%\s*ROWCOUNT\b", re.IGNORECASE
+        r"0\s*/\*\s*UNIQUE-1033:[^*]*\*/"
+        r"|\bSQL\s*%\s*ROWCOUNT\b"
+        r"|\bROW_COUNT\s*\(\s*\)",
+        re.IGNORECASE,
     )
     _ROWCOUNT_TMP = "uq_rowcount"
     #: Fields whose value is a nested statement body (recursed into so a
@@ -91,6 +106,13 @@ class PostgresTransformer(ProceduralTransformer):
 
     def _transform_procedure(self, node: CreateProcedureStatement) -> ASTNode:
         return self._hoist_implicit_rowcount(super()._transform_procedure(node))
+
+    def _transform_alter_procedure(self, node: AlterProcedureStatement) -> ASTNode:
+        # T-SQL's idempotent ``EXEC('CREATE PROCEDURE … AS SELECT 1') … ALTER
+        # PROCEDURE`` stub pattern lands the real body on an ALTER node, so the
+        # hoist must cover it too (else ``@@ROWCOUNT`` ships an invalid inline
+        # ``ROW_COUNT()``).
+        return self._hoist_implicit_rowcount(super()._transform_alter_procedure(node))
 
     def _transform_function(self, node: CreateFunctionStatement) -> ASTNode:
         return self._hoist_implicit_rowcount(super()._transform_function(node))
@@ -113,6 +135,13 @@ class PostgresTransformer(ProceduralTransformer):
         new_body = self._inject_rowcount(body)
         if not self._rowcount_hoisted:
             return node
+        if self._source == "mysql":
+            # MySQL's ROW_COUNT() counts rows CHANGED by the last DML; the
+            # PostgreSQL ``GET DIAGNOSTICS ROW_COUNT`` it hoists to counts rows
+            # MATCHED (base.py N11/B12) — a value-wise no-op UPDATE diverges.
+            # Warn (do not ship silently). Oracle/T-SQL sources count matched
+            # rows too, so they do not diverge.
+            self._warn_mysql_rowcount_divergence()
         decl = DeclareStatement(
             name=self._ROWCOUNT_TMP, data_type=DataType(name="bigint")
         )
