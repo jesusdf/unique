@@ -100,7 +100,15 @@ from tests.helpers.corpus_diff import is_comparable
 # (lowercase) becomes LOWER(HEX(x)) (MySQL HEX is uppercase). 1 removed: 1
 # defect-pending-fix (my-agg-boolean), 9 documented-inherent, 2 session-dependent
 # = 12.
-LEDGER_SIZE_FLOOR = 12
+#
+# 2026-07-31 (brief T4-B cont.): MySQL aggregates a boolean predicate as 0/1, but
+# T-SQL/PG reject a predicate as an aggregate value (8114 / "function sum(boolean)
+# does not exist"); SUM/AVG/MIN/MAX/COUNT over a comparison now materialize the
+# predicate as a tri-state 0/1 CASE (NULL predicate -> NULL, preserving COUNT/AVG
+# semantics) on those targets (my-agg-boolean; Oracle 23c takes it natively). 1
+# removed: 0 defect-pending-fix, 9 documented-inherent, 2 session-dependent = 11.
+# The entire defect-pending-fix family from the A10-T4 harvest is now cleared.
+LEDGER_SIZE_FLOOR = 11
 
 
 def _eligible_cases() -> list[CorpusEntry]:

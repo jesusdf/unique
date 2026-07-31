@@ -112,12 +112,6 @@ LEDGER: tuple[Excluded, ...] = (
         sql="SELECT USER AS r FROM DUAL",
     ),
     Excluded(
-        id="my-agg-boolean",
-        tag="defect-pending-fix",
-        reason="SUM/AVG over boolean predicate unsupported/precision on targets",
-        sql="SELECT SUM(x>1), COUNT(x>1), AVG(x>1), MAX(x>1) FROM (SELECT 1 x UNION ALL SELECT 2 UNION ALL SELECT 3) t",
-    ),
-    Excluded(
         id="ora-interval-out",
         tag="documented-inherent",
         reason=(

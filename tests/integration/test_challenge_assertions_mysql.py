@@ -94,8 +94,25 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
         "oracle": {"degrade": True},
         "postgresql": {"degrade": True},
     },
+    # MySQL aggregates a boolean predicate as 0/1; T-SQL/PG reject a predicate as
+    # an aggregate value, so each is materialized as a tri-state 0/1 CASE (a NULL
+    # predicate stays NULL, preserving COUNT/AVG semantics). Oracle 23c takes the
+    # boolean directly (omitted — identity-ish).
     "my-agg-boolean": {
-        "tsql": {"present": ["AVG((x > 1) * 1.0)"], "absent": ["AVG(x > 1)"]},
+        "tsql": {
+            "present": [
+                "SUM(CASE WHEN x > 1 THEN 1 WHEN NOT (x > 1) THEN 0 END)",
+                "AVG((CASE WHEN x > 1 THEN 1 WHEN NOT (x > 1) THEN 0 END) * 1.0)",
+            ],
+            "absent": ["SUM(x > 1)", "AVG(x > 1)"],
+        },
+        "postgresql": {
+            "present": [
+                "SUM(CASE WHEN x > 1 THEN 1 WHEN NOT (x > 1) THEN 0 END)",
+                "MAX(CASE WHEN x > 1 THEN 1 WHEN NOT (x > 1) THEN 0 END)",
+            ],
+            "absent": ["SUM(x > 1)"],
+        },
     },
     "my-arr-json": {
         "tsql": {"degrade": True},

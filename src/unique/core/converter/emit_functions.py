@@ -935,6 +935,85 @@ def _emit_mysql_dayofweek(node: FunctionCall, dialect: str) -> str:
     }.get(dialect, f"DAYOFWEEK({v})")
 
 
+def _emit_compress_degrade(
+    node: FunctionCall, fn_name: str, dialect: str
+) -> str | None:
+    """T-SQL COMPRESS/DECOMPRESS -> MySQL: a warned carrier, or None.
+
+    T-SQL COMPRESS/DECOMPRESS use the GZIP container; MySQL's same-named
+    functions use raw zlib with a 4-byte little-endian length prefix, so the
+    bytes differ and are NOT interchangeable (a T-SQL blob won't DECOMPRESS on
+    MySQL). No faithful cross-container mapping exists — keep MySQL's own function
+    but flag the value as non-equal (Oracle/PG have no COMPRESS and degrade via
+    the validity gate already).
+    """
+    if (
+        fn_name not in ("COMPRESS", "DECOMPRESS")
+        or SOURCE_DIALECT.get() != "tsql"
+        or dialect != "mysql"
+        or len(node.args) != 1
+    ):
+        return None
+    _cx = _emit_expression(node.args[0], dialect)
+    return (
+        f"{fn_name}({_cx}) /* UNIQUE-1238: T-SQL {fn_name} uses the GZIP "
+        f"container; MySQL {fn_name} uses zlib with a length prefix — the "
+        "bytes differ and are not interchangeable (docs/03-unsupported.md) */"
+    )
+
+
+def _emit_pg_charcode_to_mysql(
+    node: FunctionCall, fn_name: str, dialect: str
+) -> str | None:
+    """PG ascii()/to_hex() -> MySQL, matching the source value, or None.
+
+    PG ascii() returns the Unicode CODE POINT of the first character while MySQL
+    ASCII returns the first BYTE (ascii('é')=233 vs 195); read the code point via
+    ORD over a UTF-32 conversion (each char becomes 4 big-endian bytes, ASCII
+    range too). PG to_hex() renders LOWERCASE hex while MySQL HEX() is uppercase;
+    fold to lowercase.
+    """
+    if (
+        SOURCE_DIALECT.get() != "postgresql"
+        or dialect != "mysql"
+        or len(node.args) != 1
+    ):
+        return None
+    if fn_name == "ASCII":
+        return f"ORD(CONVERT({_emit_expression(node.args[0], dialect)} USING utf32))"
+    if fn_name == "HEX":
+        return f"LOWER(HEX({_emit_expression(node.args[0], dialect)}))"
+    return None
+
+
+def _emit_bool_predicate_agg(
+    node: FunctionCall, fn_name: str, dialect: str
+) -> str | None:
+    """A MySQL-source SUM/AVG/MIN/MAX/COUNT over a boolean predicate, or None.
+
+    MySQL treats a boolean predicate as 0/1, so ``SUM(x>1)`` aggregates the 1s
+    and 0s; T-SQL and PG reject a predicate as an aggregate value (T-SQL 8114 /
+    ``function sum(boolean) does not exist``). Materialize the predicate as a
+    tri-state 0/1 integer — a NULL predicate stays NULL, so COUNT (ignores it)
+    and AVG (excludes it) keep MySQL's semantics. AVG on T-SQL additionally needs
+    the ``* 1.0`` decimal promotion. Oracle 23c takes the boolean directly.
+    """
+    if (
+        fn_name not in ("SUM", "AVG", "MIN", "MAX", "COUNT")
+        or SOURCE_DIALECT.get() != "mysql"
+        or dialect not in ("tsql", "postgresql")
+        or len(node.args) != 1
+        or not _is_predicate_node(node.args[0])
+    ):
+        return None
+    _bp = _emit_expression(node.args[0], dialect)
+    _bnum = f"CASE WHEN {_bp} THEN 1 WHEN NOT ({_bp}) THEN 0 END"
+    _bdist = "DISTINCT " if node.distinct else ""
+    if fn_name == "AVG" and dialect == "tsql":
+        return f"AVG({_bdist}({_bnum}) * 1.0)"
+    return f"{fn_name}({_bdist}{_bnum})"
+
+
 def _emit_bool_agg(node: FunctionCall, fn_name: str, dialect: str) -> str | None:
     """Boolean aggregate (bool_or/bool_and/every) per target, or None.
 
@@ -1399,24 +1478,17 @@ def _emit_week_year_field(part: str, value: str, dialect: str) -> str | None:
 def _emit_function(node: FunctionCall, dialect: str) -> str:
     """Emit a function call."""
     fn_name = node.name.upper()
-    # T-SQL COMPRESS/DECOMPRESS use the GZIP container; MySQL's same-named
-    # functions use raw zlib with a 4-byte little-endian length prefix, so the
-    # bytes differ and are NOT interchangeable (a T-SQL blob won't DECOMPRESS on
-    # MySQL). No faithful cross-container mapping exists — keep MySQL's own
-    # function but flag the value as non-equal (Oracle/PG have no COMPRESS and
-    # degrade via the validity gate already).
-    if (
-        fn_name in ("COMPRESS", "DECOMPRESS")
-        and SOURCE_DIALECT.get() == "tsql"
-        and dialect == "mysql"
-        and len(node.args) == 1
+    # Early source/target-scoped rewrites that either degrade or rebuild the whole
+    # call; each returns None when it does not apply (keeps this function's branch
+    # budget flat — architecture ratchet).
+    for _early in (
+        _emit_compress_degrade,
+        _emit_pg_charcode_to_mysql,
+        _emit_bool_predicate_agg,
     ):
-        _cx = _emit_expression(node.args[0], dialect)
-        return (
-            f"{fn_name}({_cx}) /* UNIQUE-1238: T-SQL {fn_name} uses the GZIP "
-            f"container; MySQL {fn_name} uses zlib with a length prefix — the "
-            "bytes differ and are not interchangeable (docs/03-unsupported.md) */"
-        )
+        _early_sql = _early(node, fn_name, dialect)
+        if _early_sql is not None:
+            return _early_sql
     # Single-mechanism scalar mappings (regex match, scalar JSON extract, integer
     # division, MySQL DAYOFWEEK) each dispatch to a helper; grouped in one lookup
     # so the per-mechanism logic stays out of this function's branch budget.
@@ -1734,28 +1806,6 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if SOURCE_DIALECT.get() == "postgresql":
             return f"COALESCE(ASCII(TO_NCHAR({_asc_x})), 0)"
         return f"COALESCE(ASCII({_asc_x}), 0)"
-
-    # PG's ascii() returns the Unicode CODE POINT of the first character; MySQL
-    # ASCII returns the first BYTE (ASCII('é') = 195, the first UTF-8 byte, not
-    # 233). Read the code point via ORD over a UTF-32 conversion — each character
-    # becomes 4 big-endian bytes, so ORD yields the code point (ASCII range too).
-    if (
-        fn_name == "ASCII"
-        and SOURCE_DIALECT.get() == "postgresql"
-        and len(node.args) == 1
-        and dialect == "mysql"
-    ):
-        return f"ORD(CONVERT({_emit_expression(node.args[0], dialect)} USING utf32))"
-
-    # PG to_hex() renders lowercase hex digits ('ff'); MySQL HEX() renders
-    # uppercase ('FF'). Fold to lowercase to match the source value.
-    if (
-        fn_name == "HEX"
-        and SOURCE_DIALECT.get() == "postgresql"
-        and len(node.args) == 1
-        and dialect == "mysql"
-    ):
-        return f"LOWER(HEX({_emit_expression(node.args[0], dialect)}))"
 
     # MySQL CONCAT returns NULL if ANY argument is NULL (it propagates NULL);
     # PG/Oracle/T-SQL CONCAT ignore NULL. When a MySQL CONCAT has a literal NULL
