@@ -81,6 +81,7 @@ _CURATED_STOPWORDS: tuple[str, ...] = (
     "parent_object_id",
     "schemas",
     "updlock",
+    "result_cursor",
     "returncode",
     "untranslated",
     "yyyymmdd",

@@ -33,6 +33,7 @@ Both pipelines share this data (audit doc 03): the procedural pipeline rewrites 
 | `NVARCHAR2` | `VARCHAR` |
 | `PLS_INTEGER` | `INTEGER` |
 | `RAW` | `BYTEA` |
+| `SYS_REFCURSOR` | `REFCURSOR` |
 | `TIMESTAMP` | `TIMESTAMP` |
 | `VARCHAR2` | `VARCHAR` |
 | `XMLTYPE` | `XML` |
