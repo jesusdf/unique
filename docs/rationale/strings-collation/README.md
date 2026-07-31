@@ -19,7 +19,7 @@ built and its entry format.
 | Article | Direction | Description |
 |---|---|---|
 | [`GREATEST`/`LEAST` NULL-propagation per engine](greatest-least-null-propagation.md) | cross-engine | MySQL and Oracle's `GREATEST`/`LEAST` return `NULL` if *any* argument is `NULL`. |
-| [`REPLACE` and `NULL`: Oracle's 2-arg form vs MySQL's propagation](replace-and-null.md) | cross-engine | Two independent `REPLACE`/`NULL` divergences, found in the same sweep as the `GREATEST`/`LEAST` case above. |
+| [`REPLACE` and `NULL`: Oracle's 2-arg form vs MySQL's propagation](replace-and-null.md) | cross-engine | Two independent `REPLACE`/`NULL` divergences. |
 | [Oracle `'' ≡ NULL`](oracle-empty-string-is-null.md) | oracle → all | Every other engine stores and compares an empty string `''` as a distinct, zero-length value: `'' IS NULL` is false, `COALESCE('', 'x')` is `''`. |
 
 ## LIKE and pattern matching

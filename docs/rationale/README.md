@@ -634,7 +634,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|
 | [CONCAT / `\|\|` NULL-propagation per engine](strings-collation/concat-null-propagation.md) | MySQL's `CONCAT(a, b, …)` **propagates** `NULL`: any `NULL` argument makes the whole result `NULL`. |
 | [`GREATEST`/`LEAST` NULL-propagation per engine](strings-collation/greatest-least-null-propagation.md) | MySQL and Oracle's `GREATEST`/`LEAST` return `NULL` if *any* argument is `NULL`. |
-| [`REPLACE` and `NULL`: Oracle's 2-arg form vs MySQL's propagation](strings-collation/replace-and-null.md) | Two independent `REPLACE`/`NULL` divergences, found in the same sweep as the `GREATEST`/`LEAST` case above. |
+| [`REPLACE` and `NULL`: Oracle's 2-arg form vs MySQL's propagation](strings-collation/replace-and-null.md) | Two independent `REPLACE`/`NULL` divergences. |
 | [LIKE … ESCAPE mapping](strings-collation/like-escape-mapping.md) | `LIKE pattern ESCAPE 'c'` is SQL-standard: `c` escapes a following `%`/`_` so it matches literally. |
 | [T-SQL LIKE character classes (`'[A-C]%'`) → SIMILAR TO / REGEXP / REGEXP_LIKE](strings-collation/tsql-like-character-classes.md) | T-SQL's `LIKE` supports bracketed **character classes**: `'[A-C]%'` matches any string starting with `A`, `B` or `C`. |
 | [Negative/zero REPEAT/REPLICATE clamps](strings-collation/repeat-replicate-clamps.md) | PostgreSQL `repeat(s, n)` and MySQL `REPEAT(s, n)` with `n <= 0` return an empty string `''`. |
@@ -665,7 +665,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Description |
 |---|---|
 | [Auto-incrementing key columns (PostgreSQL `SERIAL` / T-SQL `IDENTITY` / Oracle `GENERATED … AS IDENTITY` / MySQL `AUTO_INCREMENT`)](ddl/auto-incrementing-keys.md) | Each engine spells "the database assigns this column's value from an internal counter" differently: PostgreSQL `SERIAL`/`BIGSERIAL` (sugar for an integer + an owned sequence + a default), T-SQL `IDENTITY(seed, step)`, Oracle `GENERATED ALWAYS\|BY DEFAULT AS IDENTITY [(START WITH s INCREMENT BY i …)]`, MySQL `AUTO_INCREMENT` (a single table-level counter, no per-column seed/step). |
-| [Oracle bare `NUMBER` (no precision/scale) → role-aware numeric (B47)](ddl/oracle-bare-number-role-aware.md) | Oracle's unqualified `NUMBER` — no precision or scale — is overloaded. |
+| [Oracle bare `NUMBER` (no precision/scale) → role-aware numeric](ddl/oracle-bare-number-role-aware.md) | Oracle's unqualified `NUMBER` — no precision or scale — is overloaded. |
 | [`CREATE TABLE AS SELECT` ↔ `SELECT ... INTO` for ordinary (non-temporary) tables](ddl/ctas-vs-select-into.md) | This extends the entry above from *temp* tables specifically to *any* table: T-SQL has no `CREATE TABLE ... |
 | [Unnamed derived-table / `SELECT ... INTO` projections → synthesized `uq_col1` (T-SQL)](ddl/unnamed-projection-synthesized-name.md) | `SELECT (SELECT a) t` or `SELECT (SELECT 1) t` — a derived table whose single projected column is a bare parameter reference or a literal, with no alias — is legal on PostgreSQL/MySQL/Oracle (the column gets an engine-assigned display name that nothing else references). |
 

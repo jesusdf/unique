@@ -23,7 +23,7 @@ See [README.md](../README.md) for the entry format and sourcing rules.
 | [Cross-statement schema-state-driven coercion](cross-statement-coercion-overview.md) | overview | The three entries below share one mechanism: a single statement cannot be transpiled correctly by looking at its own text alone, because the correct output depends on a column's *declared* type or nullability, established somewhere earlier in the same script (a `CREATE TABLE`, a prior `ALTER TABLE`, even a prior `RENAME COLUMN`) or on the column's role inside the *same* `CREATE TABLE`. |
 | [T-SQL `BIT` `0`/`1` values (defaults, `INSERT`, `UPDATE`, incl. inside procedure bodies) → PostgreSQL `BOOLEAN`](tsql-bit-to-postgresql-boolean.md) | tsql → postgresql | T-SQL's `BIT` type behaves like a 1-bit integer: `0`/`1` literals are valid in a `DEFAULT` clause, an `INSERT ... |
 | [T-SQL `ALTER COLUMN <c> <type>` re-states the column's last-known nullability → PostgreSQL (both directions)](alter-column-nullability.md) | tsql → postgresql | T-SQL's `ALTER COLUMN <c> <type>` bakes type *and* nullability into one clause — omitting a `NULL`/`NOT NULL` keyword does not mean "leave nullability alone," it means "make the column nullable," silently dropping an existing `NOT NULL` the statement never mentioned. |
-| [Oracle bare `NUMBER` (no precision/scale) → role-aware numeric (B47)](oracle-bare-number-role-aware.md) | cross-engine | Oracle's unqualified `NUMBER` — no precision or scale — is overloaded. |
+| [Oracle bare `NUMBER` (no precision/scale) → role-aware numeric](oracle-bare-number-role-aware.md) | cross-engine | Oracle's unqualified `NUMBER` — no precision or scale — is overloaded. |
 
 ## Temporary tables and the `CREATE TABLE AS SELECT` ↔ `SELECT INTO` idiom
 
@@ -69,4 +69,4 @@ See [README.md](../README.md) for the entry format and sourcing rules.
 
 | Article | Direction | Description |
 |---|---|---|
-| [Topics left out for lack of source support](topics-left-out.md) | overview | - **PostgreSQL `SET`-type MySQL columns** (unordered multi-value combination) are covered by the same `_emit_enum_type` function as `ENUM` (degraded to a `VARCHAR` wide enough for all values plus a documented note), but no challenge-corpus case exercises `SET` specifically, so no dedicated entry is made to avoid inventing an example. |
+| [Topics left out for lack of source support](topics-left-out.md) | overview | - **PostgreSQL `SET`-type MySQL columns** (unordered multi-value combination) degrade the same way `ENUM` does (to a `VARCHAR` wide enough for all values plus a documented note), but no challenge-corpus case exercises `SET` specifically, so no dedicated entry is made to avoid inventing an example. |
