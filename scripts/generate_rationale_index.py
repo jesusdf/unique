@@ -138,12 +138,22 @@ class Article:
 # ---------------------------------------------------------------------------
 
 
+_CODE_SPAN_RE = re.compile(r"`[^`]*`")
+
+
 def _first_sentence(text: str) -> str:
     """First sentence of *text* — up to a period that ends a sentence, guarding
-    the common ``e.g.``/``i.e.`` abbreviations."""
+    the common ``e.g.``/``i.e.`` abbreviations, ellipses, and periods inside
+    inline code spans (cutting mid-span leaves unbalanced backticks and can
+    amputate a link)."""
     text = " ".join(text.split())
+    spans = [m.span() for m in _CODE_SPAN_RE.finditer(text)]
     for m in re.finditer(r"\.(?:\s|$)", text):
+        if any(s <= m.start() < e for s, e in spans):
+            continue
         head = text[: m.start()]
+        if head.endswith(".."):
+            continue
         last = head.rsplit(" ", 1)[-1].lower()
         if last in {"e.g", "i.e", "cf", "vs", "etc", "no"}:
             continue
@@ -151,17 +161,34 @@ def _first_sentence(text: str) -> str:
     return text
 
 
+def _delink(text: str) -> str:
+    """Replace markdown links with their text — an article's relative links
+    would break when its Problem sentence is copied into an index table.
+    A link whose *entire* match sits inside an inline code span (backticked
+    T-SQL like ``[nvarchar](50)``) is left untouched; a real link may carry
+    backticks inside its text, so spans are checked positionally instead of
+    masking the string first."""
+    spans = [m.span() for m in _CODE_SPAN_RE.finditer(text)]
+
+    def _replace(m: re.Match[str]) -> str:
+        if any(s <= m.start() and m.end() <= e for s, e in spans):
+            return m.group(0)
+        return m.group(1)
+
+    return re.sub(r"\[([^\]]*)\]\([^)]+\)", _replace, text)
+
+
 def _description(body: str) -> str:
     """Description column: first sentence of the ``**Problem.**`` paragraph, or
     of the first prose paragraph for overview pages (no Problem)."""
     m = re.search(r"\*\*Problem\.\*\*\s*(.+?)(?:\n\s*\n|\Z)", body, re.DOTALL)
     if m:
-        return _first_sentence(m.group(1))
+        return _first_sentence(_delink(m.group(1)))
     # overview: first non-heading, non-blank paragraph
     for para in re.split(r"\n\s*\n", body):
         para = para.strip()
         if para and not para.startswith(("#", "|", ">", "```")):
-            return _first_sentence(para)
+            return _first_sentence(_delink(para))
     return ""
 
 
@@ -443,7 +470,21 @@ def check_links() -> list[str]:
     for path in sorted(_RATIONALE.rglob("*.md")):
         in_fence = False
         fence_tok: str | None = None
+        in_span = False  # an inline code span left open across a newline
         for line in path.read_text(encoding="utf-8").split("\n"):
+            if in_span:
+                # Interior/closing line of a multi-line code span: mask up to
+                # the closing backtick (or the whole line if it stays open).
+                if "`" in line:
+                    line = "``" + line[line.index("`") + 1 :]
+                    in_span = False
+                else:
+                    continue
+            line = _CODE_SPAN_RE.sub("``", line)
+            if line.count("`") % 2 == 1:
+                # A span opens here and closes on a later line; mask the tail.
+                line = line[: line.rindex("`")]
+                in_span = True
             m = _FENCE_RE.match(line)
             if m:
                 tok = m.group(1)[0] * 3

@@ -21,7 +21,7 @@ See [README.md](../README.md) for the entry format and sourcing rules.
 | Article | Direction | Description |
 |---|---|---|
 | [Cross-statement schema-state-driven coercion](cross-statement-coercion-overview.md) | overview | The three entries below share one mechanism: a single statement cannot be transpiled correctly by looking at its own text alone, because the correct output depends on a column's *declared* type or nullability, established somewhere earlier in the same script (a `CREATE TABLE`, a prior `ALTER TABLE`, even a prior `RENAME COLUMN`) or on the column's role inside the *same* `CREATE TABLE`. |
-| [T-SQL `BIT` `0`/`1` values (defaults, `INSERT`, `UPDATE`, incl. inside procedure bodies) → PostgreSQL `BOOLEAN`](tsql-bit-to-postgresql-boolean.md) | tsql → postgresql | T-SQL's `BIT` type behaves like a 1-bit integer: `0`/`1` literals are valid in a `DEFAULT` clause, an `INSERT ... |
+| [T-SQL `BIT` `0`/`1` values (defaults, `INSERT`, `UPDATE`, incl. inside procedure bodies) → PostgreSQL `BOOLEAN`](tsql-bit-to-postgresql-boolean.md) | tsql → postgresql | T-SQL's `BIT` type behaves like a 1-bit integer: `0`/`1` literals are valid in a `DEFAULT` clause, an `INSERT ... VALUES` list, or an `UPDATE ... SET`, with no special casting. |
 | [T-SQL `ALTER COLUMN <c> <type>` re-states the column's last-known nullability → PostgreSQL (both directions)](alter-column-nullability.md) | tsql → postgresql | T-SQL's `ALTER COLUMN <c> <type>` bakes type *and* nullability into one clause — omitting a `NULL`/`NOT NULL` keyword does not mean "leave nullability alone," it means "make the column nullable," silently dropping an existing `NOT NULL` the statement never mentioned. |
 | [Oracle bare `NUMBER` (no precision/scale) → role-aware numeric](oracle-bare-number-role-aware.md) | cross-engine | Oracle's unqualified `NUMBER` — no precision or scale — is overloaded. |
 
@@ -30,7 +30,7 @@ See [README.md](../README.md) for the entry format and sourcing rules.
 | Article | Direction | Description |
 |---|---|---|
 | [Session-scoped temp tables (PostgreSQL `TEMP` / T-SQL `#temp` / MySQL `TEMPORARY`) → Oracle `GLOBAL TEMPORARY`](session-temp-tables-to-oracle.md) | tsql/postgresql/mysql → oracle | A PostgreSQL `TEMP`/`TEMPORARY` table, a T-SQL `#temp` table, and a MySQL `TEMPORARY` table are all **session-scoped**: their definition and rows live only for the current connection, and — critically — their rows **survive an intervening `COMMIT`**. |
-| [`CREATE TABLE AS SELECT` ↔ `SELECT ... INTO` for ordinary (non-temporary) tables](ctas-vs-select-into.md) | cross-engine | This extends the entry above from *temp* tables specifically to *any* table: T-SQL has no `CREATE TABLE ... |
+| [`CREATE TABLE AS SELECT` ↔ `SELECT ... INTO` for ordinary (non-temporary) tables](ctas-vs-select-into.md) | cross-engine | This extends the entry above from *temp* tables specifically to *any* table: T-SQL has no `CREATE TABLE ... AS SELECT` syntax at all — whether or not the table is session-scoped — so any CTAS from another source dialect must become a T-SQL `SELECT ... INTO`. |
 
 ## Foreign-key referential actions
 

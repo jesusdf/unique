@@ -46,7 +46,7 @@ built and its entry format.
 | Article | Direction | Description |
 |---|---|---|
 | [Character-set `TRIM(chars FROM string)` → Oracle](trim-chars-from-string-to-oracle.md) | cross-engine | `TRIM([BOTH\|LEADING\|TRAILING] chars FROM string)` strips every occurrence of any character in `chars` from the string (both ends by default). |
-| [Oracle `LTRIM(s, chars)`/`RTRIM(s, chars)` → `TRIM(LEADING/TRAILING chars FROM s)`](oracle-ltrim-rtrim-charset-reverse.md) | oracle → tsql/postgresql/mysql | This is the reverse of [Character-set `TRIM(chars FROM string)` → Oracle](trim-chars-from-string-to-oracle.md): Oracle's own `LTRIM`/`RTRIM` already accept a multi-character trim set as their second argument natively. |
+| [Oracle `LTRIM(s, chars)`/`RTRIM(s, chars)` → `TRIM(LEADING/TRAILING chars FROM s)`](oracle-ltrim-rtrim-charset-reverse.md) | oracle → tsql/postgresql/mysql | This is the reverse of Character-set `TRIM(chars FROM string)` → Oracle: Oracle's own `LTRIM`/`RTRIM` already accept a multi-character trim set as their second argument natively. |
 
 ## Length and encoding
 

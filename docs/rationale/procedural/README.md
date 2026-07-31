@@ -68,7 +68,7 @@ and sourcing rules.
 | [Return-type and signature synthesis](return-type-synthesis-overview.md) | overview | Two shapes where a routine's own declared **signature** has to change shape to satisfy the target grammar, not just its body: a PostgreSQL function that declares no return value at all, and a procedure whose body streams a result set that PL/SQL cannot express without an extra parameter. |
 | [`RETURNS void` (PostgreSQL) → neutral scalar return type + synthesized `RETURN` (MySQL / T-SQL / Oracle)](returns-void-signature-synthesis.md) | postgresql → tsql/oracle/mysql | A PostgreSQL function declared `RETURNS void` returns nothing — per the corpus's own count, the single most common plpgsql function shape (62 occurrences), typically a side-effecting helper invoked for its `INSERT`/`UPDATE`, never for a value. |
 | [A bare result `SELECT` inside a procedure body (MySQL / PostgreSQL / T-SQL) → a ref-cursor parameter (Oracle `SYS_REFCURSOR` OUT, PostgreSQL `refcursor` INOUT), propagated to `CALL` sites](bare-result-select-to-refcursor.md) | tsql/mysql/postgresql → oracle/postgresql | A MySQL or T-SQL procedure can hand back a result set simply by running a `SELECT` with no `INTO` target partway through the body. |
-| [T-SQL scalar function: synthesized trailing `RETURN NULL` after an all-branches-return `IF`/`ELSE`](scalar-function-trailing-return-null.md) | postgresql/oracle → tsql | T-SQL requires a scalar function's **last statement** to literally *be* a `RETURN` (error 455 otherwise) — even when the function's body already returns a value on every possible branch, such as an `IF ... |
+| [T-SQL scalar function: synthesized trailing `RETURN NULL` after an all-branches-return `IF`/`ELSE`](scalar-function-trailing-return-null.md) | postgresql/oracle → tsql | T-SQL requires a scalar function's **last statement** to literally *be* a `RETURN` (error 455 otherwise) — even when the function's body already returns a value on every possible branch, such as an `IF ... ELSE` where both arms end in `RETURN`. |
 
 ## Other `[limit]` procedural entries
 
@@ -89,7 +89,7 @@ and sourcing rules.
 | [Triggers](triggers-overview.md) | overview | The firing-mode surface that differs between engines: row-level (`FOR EACH ROW`, `NEW`/`OLD`) vs. statement-level (T-SQL's `inserted`/`deleted`), timing (`INSTEAD OF`), and each engine's own trigger-declaration shape. |
 | [Row-level trigger body (`SET NEW.col = expr`) → T-SQL statement-level `UPDATE ... WHERE ... IN (SELECT ... FROM inserted)`](row-level-trigger-body-to-tsql.md) | cross-engine | A MySQL/PL-SQL row-level trigger (`FOR EACH ROW`) runs once per affected row, with `NEW`/`OLD` bound to that single row. |
 | [Oracle event predicates (`INSERTING`/`DELETING`/`UPDATING('col')`) → per-engine rewrite](oracle-trigger-event-predicates.md) | cross-engine | An Oracle trigger body asks, inline, "did this statement INSERT/DELETE/UPDATE, and did this specific column change" via `INSERTING`/`DELETING`/`UPDATING('col')`. |
-| [PL/pgSQL trigger context variables (`TG_NAME`/`TG_TABLE_NAME`/`TG_OP`/`TG_WHEN`/`TG_LEVEL`, `TG_ARGV`/`TG_NARGS`) → compile-time constants once the function inlines](plpgsql-trigger-context-variables.md) | cross-engine | Inside a plpgsql trigger function, `TG_NAME`/`TG_TABLE_NAME`/ `TG_OP`/`TG_WHEN`/`TG_LEVEL` are implicit variables PostgreSQL's trigger machinery populates at fire time, and `TG_ARGV[n]`/`TG_NARGS` read the argument list supplied by the specific `CREATE TRIGGER ... |
+| [PL/pgSQL trigger context variables (`TG_NAME`/`TG_TABLE_NAME`/`TG_OP`/`TG_WHEN`/`TG_LEVEL`, `TG_ARGV`/`TG_NARGS`) → compile-time constants once the function inlines](plpgsql-trigger-context-variables.md) | cross-engine | Inside a plpgsql trigger function, `TG_NAME`/`TG_TABLE_NAME`/ `TG_OP`/`TG_WHEN`/`TG_LEVEL` are implicit variables PostgreSQL's trigger machinery populates at fire time, and `TG_ARGV[n]`/`TG_NARGS` read the argument list supplied by the specific `CREATE TRIGGER ... EXECUTE FUNCTION fn(arg1, arg2, ...)` that invoked it. |
 | [PG named transition tables (`REFERENCING ... TABLE AS alias`) → T-SQL `inserted`/`deleted` alias rename](pg-named-transition-tables.md) | cross-engine | A PostgreSQL statement trigger can name its transition tables (`REFERENCING NEW TABLE AS newtab`), and the inlined function body reads rows through that chosen alias. |
 | [Row-level trigger re-reading its own table (MySQL/PostgreSQL) ↔ Oracle `COMPOUND TRIGGER`](trigger-reading-own-table.md) | postgresql/mysql ↔ oracle | A row-level trigger that aggregates a parent row from its children (`UPDATE invoice SET total = (SELECT SUM(...) FROM invoice_line WHERE invoice_id = NEW.invoice_id) WHERE id = NEW.invoice_id`) re-reads the table it's attached to. |
 | [T-SQL `INSTEAD OF` trigger → PostgreSQL (native on views, emulated on tables)](tsql-instead-of-trigger.md) | tsql → postgresql | T-SQL allows `INSTEAD OF` on both views *and* base tables — the trigger body runs **instead of** the attempted INSERT/UPDATE/DELETE, which is never applied on its own. |
@@ -102,7 +102,7 @@ and sourcing rules.
 | Article | Direction | Description |
 |---|---|---|
 | [Loop and cursor desugaring](loop-cursor-desugaring-overview.md) | overview | T-SQL cursor *variables*, PL/SQL/Oracle cursor `FOR` loops, and numeric range `FOR` loops all bind their query/bounds and their iteration into a single declarative statement. |
-| [T-SQL cursor-variable binding (`SET @cur = CURSOR ... FOR q; OPEN @cur;`) → PostgreSQL / Oracle / MySQL](tsql-cursor-variable-binding.md) | tsql → oracle/postgresql/mysql | T-SQL lets a cursor be bound to a *variable* in two steps: a bare `DECLARE @cur CURSOR;` (no query yet), then `SET @cur = CURSOR ... |
+| [T-SQL cursor-variable binding (`SET @cur = CURSOR ... FOR q; OPEN @cur;`) → PostgreSQL / Oracle / MySQL](tsql-cursor-variable-binding.md) | tsql → oracle/postgresql/mysql | T-SQL lets a cursor be bound to a *variable* in two steps: a bare `DECLARE @cur CURSOR;` (no query yet), then `SET @cur = CURSOR ... FOR <query>` to attach the query, then a bare `OPEN @cur;`. |
 | [PL/SQL `FOR rec IN cur LOOP` (Oracle) → T-SQL explicit cursor scaffold](cursor-for-loop-to-tsql.md) | oracle → tsql | A PL/SQL cursor `FOR` loop declares nothing: it implicitly opens the cursor, fetches one row per iteration into a record `rec`, and closes it when the cursor is exhausted — `rec.col` reads that iteration's column. |
 | [PL/SQL cursor `FOR` loop (Oracle) → MySQL explicit cursor scaffold](cursor-for-loop-to-mysql.md) | oracle → mysql | The same implicit fetch-and-bind PL/SQL construct as above, but onto MySQL, whose procedural dialect additionally requires every `DECLARE` to sit at the very top of its enclosing `BEGIN` block (MySQL error 1337) and has no `WHILE @@FETCH_STATUS` equivalent — loop termination is driven by a `CONTINUE HANDLER FOR NOT FOUND`. |
 | [Numeric range `FOR i IN a..b LOOP` (Oracle) → MySQL / T-SQL explicit `WHILE` + counter](numeric-range-for-loop.md) | oracle → tsql/mysql | `FOR i IN 1..13 LOOP` (optionally `REVERSE`) is Oracle's counting loop — no cursor at all, just an integer range. |
@@ -132,7 +132,7 @@ and sourcing rules.
 
 | Article | Direction | Description |
 |---|---|---|
-| [Oracle top-level anonymous block (`DECLARE … BEGIN … END;`) → a plain T-SQL batch](anonymous-block-flattens-to-tsql.md) | oracle → tsql | Oracle's top-level anonymous block — `DECLARE ... |
+| [Oracle top-level anonymous block (`DECLARE … BEGIN … END;`) → a plain T-SQL batch](anonymous-block-flattens-to-tsql.md) | oracle → tsql | Oracle's top-level anonymous block — `DECLARE ... BEGIN ... END; /` — is a PL/SQL shell with its own `DECLARE` section and `BEGIN`/`END` delimiters. |
 
 ## Subquery-in-expression assignment restructuring
 
@@ -180,7 +180,7 @@ and sourcing rules.
 
 | Article | Direction | Description |
 |---|---|---|
-| [`SELECT ... INTO :NEW.col1, :NEW.col2` (Oracle trigger) → PostgreSQL `NEW.col`, MySQL session variables](pseudo-row-into-mysql-session-vars.md) | oracle → postgresql/mysql | An Oracle row-level trigger can `SELECT ... |
+| [`SELECT ... INTO :NEW.col1, :NEW.col2` (Oracle trigger) → PostgreSQL `NEW.col`, MySQL session variables](pseudo-row-into-mysql-session-vars.md) | oracle → postgresql/mysql | An Oracle row-level trigger can `SELECT ... INTO :NEW.col1, :NEW.col2` directly — assigning query results straight into the pseudo-row's columns. |
 
 ## Package ref-cursor type resolution and usage-inferred mode
 
