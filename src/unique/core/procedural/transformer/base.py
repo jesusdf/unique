@@ -692,6 +692,14 @@ class ProceduralTransformer:
     # adapting. T-SQL and MySQL return result sets directly, so the hook returns
     # None there and the whole rewrite is a no-op.
 
+    def _adapt_refcursor_call_site(
+        self, node: CallStatement, callee: str, n: int
+    ) -> RawSQL | None:
+        """Adapt a CALL of a routine whose converted signature gained
+        refcursor params (per-target override; None = no adaptation)."""
+        del node, callee, n
+        return None
+
     def _result_refcursor_param(self, name: str) -> ParameterDefinition | None:
         """The ref-cursor OUT/INOUT parameter appended to a procedure's
         signature per bare result ``SELECT`` it carries, or None when the
@@ -3444,41 +3452,10 @@ class ProceduralTransformer:
         registry = DEGRADED_ROUTINES.get() or set()
         callee = node.name.split(".")[-1].strip('`"[]').lower()
         rc_procs = REFCURSOR_PROCS.get() or {}
-        if self._target == "oracle" and callee in rc_procs:
-            # The converted signature gained SYS_REFCURSOR OUT params;
-            # adapt the call with local cursor variables.
-            n = rc_procs[callee]
-            names = [f"uq_rc{i + 1}" for i in range(n)]
-            decls = "\n".join(f"    {c} SYS_REFCURSOR;" for c in names)
-            args = node.args.strip()
-            all_args = ", ".join(filter(None, [args, ", ".join(names)]))
-            return RawSQL(
-                sql=(
-                    f"DECLARE\n{decls}\nBEGIN\n" f"    {node.name}({all_args});\nEND;"
-                ),
-                reason="refcursor call-site adapter",
-            )
-        if self._target == "postgresql" and callee in rc_procs:
-            # The converted signature gained INOUT refcursor params; pass a
-            # named portal literal per cursor so the arity matches, then FETCH
-            # the rows the callee OPENed. Runs inside a transaction (a refcursor
-            # portal does not outlive its transaction) — flagged, not silent.
-            n = rc_procs[callee]
-            portals = [f"{callee}_rc{i + 1}" for i in range(n)]
-            args = node.args.strip()
-            all_args = ", ".join(
-                filter(None, [args, ", ".join(f"'{p}'" for p in portals)])
-            )
-            fetches = "\n".join(f"FETCH ALL FROM {p};" for p in portals)
-            self._warnings.append(
-                f"CALL of {node.name} gained {n} refcursor argument(s): the "
-                "callee returns its result set(s) through a cursor the caller "
-                "FETCHes; run inside a transaction block"
-            )
-            return RawSQL(
-                sql=f"CALL {node.name}({all_args});\n{fetches}",
-                reason="refcursor call-site adapter",
-            )
+        if callee in rc_procs:
+            adapted = self._adapt_refcursor_call_site(node, callee, rc_procs[callee])
+            if adapted is not None:
+                return adapted
         if callee in registry:
             reason = (
                 f"CALL of routine {node.name} whose definition could not be "

@@ -17,6 +17,7 @@ from unique.core.ast_nodes import (
     AlterProcedureStatement,
     AssignmentStatement,
     ASTNode,
+    CallStatement,
     CreateFunctionStatement,
     CreateProcedureStatement,
     DataType,
@@ -321,6 +322,21 @@ class OracleTransformer(ProceduralTransformer):
             elif hasattr(val, "__dataclass_fields__"):
                 changes[f.name] = self._rename_idents(val, renames)
         return dataclasses.replace(node, **changes) if changes else node
+
+    def _adapt_refcursor_call_site(
+        self, node: CallStatement, callee: str, n: int
+    ) -> RawSQL | None:
+        # The converted signature gained SYS_REFCURSOR OUT params; adapt the
+        # call with local cursor variables.
+        del callee
+        names = [f"uq_rc{i + 1}" for i in range(n)]
+        decls = "\n".join(f"    {c} SYS_REFCURSOR;" for c in names)
+        args = node.args.strip()
+        all_args = ", ".join(filter(None, [args, ", ".join(names)]))
+        return RawSQL(
+            sql=(f"DECLARE\n{decls}\nBEGIN\n" f"    {node.name}({all_args});\nEND;"),
+            reason="refcursor call-site adapter",
+        )
 
     def _result_refcursor_param(self, name: str) -> ParameterDefinition:
         # A bare result SELECT returns rows only through a SYS_REFCURSOR OUT

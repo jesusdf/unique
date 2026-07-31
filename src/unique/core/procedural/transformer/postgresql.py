@@ -13,6 +13,7 @@ from unique.core.ast_nodes import (
     AlterProcedureStatement,
     AnonymousBlock,
     ASTNode,
+    CallStatement,
     CommentStatement,
     CreateFunctionStatement,
     CreateProcedureStatement,
@@ -128,6 +129,27 @@ class PostgresTransformer(ProceduralTransformer):
         if isinstance(node, CreateProcedureStatement):
             return self._result_selects_to_refcursors(node)
         return node
+
+    def _adapt_refcursor_call_site(
+        self, node: CallStatement, callee: str, n: int
+    ) -> RawSQL | None:
+        # The converted signature gained INOUT refcursor params; pass a named
+        # portal literal per cursor so the arity matches, then FETCH the rows
+        # the callee OPENed. Runs inside a transaction (a refcursor portal does
+        # not outlive its transaction) — flagged, not silent.
+        portals = [f"{callee}_rc{i + 1}" for i in range(n)]
+        args = node.args.strip()
+        all_args = ", ".join(filter(None, [args, ", ".join(f"'{p}'" for p in portals)]))
+        fetches = "\n".join(f"FETCH ALL FROM {p};" for p in portals)
+        self._warnings.append(
+            f"CALL of {node.name} gained {n} refcursor argument(s): the "
+            "callee returns its result set(s) through a cursor the caller "
+            "FETCHes; run inside a transaction block"
+        )
+        return RawSQL(
+            sql=f"CALL {node.name}({all_args});\n{fetches}",
+            reason="refcursor call-site adapter",
+        )
 
     def _result_refcursor_param(self, name: str) -> ParameterDefinition:
         # A bare result SELECT returns rows only through a refcursor the caller

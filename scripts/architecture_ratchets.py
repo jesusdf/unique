@@ -57,7 +57,7 @@ FLOORS: dict[str, int] = {
     # to_hex(x) PG->tsql/oracle mapping needs exactly one source-dialect
     # guard (``SOURCE_DIALECT.get() != "postgresql"``) to gate a genuine new
     # per-engine correctness fix — not a re-grown cascade.
-    "shared_dialect_compares": 924,
+    "shared_dialect_compares": 923,
     # Functions over cyclomatic complexity 10 across src/ (F4/F5).
     "c901_offenders": 114,
 }
