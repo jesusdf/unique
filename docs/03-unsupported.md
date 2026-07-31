@@ -661,22 +661,15 @@ point beyond Oracle `NCHR`'s 16-bit range — see
 
 ### 3.15 Error-Tolerant Cast (`DEFAULT … ON CONVERSION ERROR`)
 
-Oracle's `CAST(x AS T DEFAULT d ON CONVERSION ERROR)` returns `d` when the
-conversion fails instead of raising. It is translated so the fallback is never
-silently dropped: T-SQL uses `COALESCE(TRY_CAST(x AS T), d)`; PostgreSQL and MySQL
-have no error-safe cast, so a **numeric** target is guarded with a validation
-`CASE` (`x ~`/`REGEXP` a number pattern, else `d`). A **literal** operand is folded
-at transpile time — a valid number casts, a non-numeric one becomes `d` — because
-PostgreSQL constant-folds the `THEN` branch during planning and would raise on a
-bad constant before the guard runs. A non-numeric target with a fallback keeps the
-plain cast and flags the dropped default with a carrier.
-
-T-SQL `TRY_CAST`/`TRY_CONVERT` (which yield `NULL` on a bad value) use the same
-mechanism: over a **column** — where nothing can be folded — a numeric target is
-wrapped in the runtime guard with `ELSE NULL` (`INT`-family targets guard on an
-integer-only pattern; `DECIMAL`/`FLOAT` on the general numeric one), so a
-non-numeric row yields `NULL` instead of a MySQL `0` or a PostgreSQL runtime abort.
-A string-type `TRY` cast never fails and stays a faithful plain `CAST`.
+Oracle's `CAST(x AS T DEFAULT d ON CONVERSION ERROR)` and T-SQL's
+`TRY_CAST`/`TRY_CONVERT` translate faithfully across engines (T-SQL
+`COALESCE(TRY_CAST(x AS T), d)`; a validation-guarded `CASE` on
+PostgreSQL/MySQL, which have no error-safe cast at all) — see
+[the rationale article](rationale/dml/error-tolerant-cast-lowering.md). A
+**non-numeric** target type has no failure mode to guard on PostgreSQL/MySQL
+(a string cast never fails), so a fallback paired with one keeps the plain,
+valid cast and flags the dropped default with a carrier instead — the
+genuine remaining limit.
 
 ### 3.14 Case-Insensitive Collation Under DISTINCT / ORDER BY
 

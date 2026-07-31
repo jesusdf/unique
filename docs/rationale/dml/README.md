@@ -26,8 +26,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### T-SQL as source
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot) | [`MERGE` / upsert lowering](#merge--upsert-lowering) | [Multi-table `DELETE`](#multi-table-delete) | [Multi-join `UPDATE`](#multi-join-update) | [`OUTPUT` / `RETURNING`](#output--returning) | [Set-operation `ORDER BY`](#set-operation-order-by) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction) | [Recursive CTE synthesis](#recursive-cte-synthesis) | [Conditional expression translation](#conditional-expression-translation) | [Literal parsing recovery](#literal-parsing-recovery) |
-|---|---|---|---|---|---|---|---|---|---|
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot) | [`MERGE` / upsert lowering](#merge--upsert-lowering) | [Multi-table `DELETE`](#multi-table-delete) | [Multi-join `UPDATE`](#multi-join-update) | [`OUTPUT` / `RETURNING`](#output--returning) | [Set-operation `ORDER BY`](#set-operation-order-by) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction) | [Recursive CTE synthesis](#recursive-cte-synthesis) | [Conditional expression translation](#conditional-expression-translation) | [Literal parsing recovery](#literal-parsing-recovery) | [Error-tolerant cast lowering](#error-tolerant-cast-lowering) |
+|---|---|---|---|---|---|---|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
 
@@ -94,6 +94,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [T-SQL bare money literal (`$12.50`) → the numeric literal it means](money-literal-shorthand.md) | tsql → oracle/postgresql/mysql | T-SQL accepts a bare currency-prefixed literal like `$12.50` or `$100` as a numeric constant, but the underlying parser mis-reads it as a `table.column` reference instead — `$12.50` becomes `Column(this=Literal(50), table=Identifier($12))`, a nonsense "column `50` of table `$12`" — because the digits after the dot look like a member access, not a decimal point. |
 
+#### Error-tolerant cast lowering
+
+| Article | Direction | Description |
+|---|---|---|
+| [Error-tolerant cast (Oracle `DEFAULT … ON CONVERSION ERROR` / T-SQL `TRY_CAST`/`TRY_CONVERT`) → cross-engine guard](error-tolerant-cast-lowering.md) | oracle/tsql → cross-engine | Oracle's `CAST(x AS T DEFAULT d ON CONVERSION ERROR)` returns `d` instead of raising when the conversion fails; T-SQL's `TRY_CAST`/ `TRY_CONVERT` return `NULL` the same way. |
+
 ### T-SQL as target
 
 | [`PIVOT` / `UNPIVOT`](#pivot--unpivot-1) | [Multi-table `DELETE`](#multi-table-delete-1) | [Row-value comparisons](#row-value-comparisons) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-1) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql) | [Recursive CTE synthesis](#recursive-cte-synthesis-1) | [Positional GROUP BY resolved to a column name](#positional-group-by-resolved-to-a-column-name) |
@@ -145,8 +151,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### Oracle as source
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-2) | [Row-value comparisons](#row-value-comparisons-1) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-2) | [`MERGE` / upsert lowering](#merge--upsert-lowering-1) |
-|---|---|---|---|
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-2) | [Row-value comparisons](#row-value-comparisons-1) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-2) | [`MERGE` / upsert lowering](#merge--upsert-lowering-1) | [Error-tolerant cast lowering](#error-tolerant-cast-lowering-1) |
+|---|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
 
@@ -173,6 +179,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [Canonical `MERGE` (T-SQL/Oracle) → MySQL `INSERT … SELECT … ON DUPLICATE KEY UPDATE`](merge-to-mysql-on-duplicate-key.md) | tsql/oracle → mysql | MySQL has no `MERGE` statement at all. |
+
+#### Error-tolerant cast lowering
+
+| Article | Direction | Description |
+|---|---|---|
+| [Error-tolerant cast (Oracle `DEFAULT … ON CONVERSION ERROR` / T-SQL `TRY_CAST`/`TRY_CONVERT`) → cross-engine guard](error-tolerant-cast-lowering.md) | oracle/tsql → cross-engine | Oracle's `CAST(x AS T DEFAULT d ON CONVERSION ERROR)` returns `d` instead of raising when the conversion fails; T-SQL's `TRY_CAST`/ `TRY_CONVERT` return `NULL` the same way. |
 
 ### Oracle as target
 
@@ -605,3 +617,9 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [T-SQL bare money literal (`$12.50`) → the numeric literal it means](money-literal-shorthand.md) | tsql → oracle/postgresql/mysql | T-SQL accepts a bare currency-prefixed literal like `$12.50` or `$100` as a numeric constant, but the underlying parser mis-reads it as a `table.column` reference instead — `$12.50` becomes `Column(this=Literal(50), table=Identifier($12))`, a nonsense "column `50` of table `$12`" — because the digits after the dot look like a member access, not a decimal point. |
+
+## Error-tolerant cast lowering
+
+| Article | Direction | Description |
+|---|---|---|
+| [Error-tolerant cast (Oracle `DEFAULT … ON CONVERSION ERROR` / T-SQL `TRY_CAST`/`TRY_CONVERT`) → cross-engine guard](error-tolerant-cast-lowering.md) | oracle/tsql → cross-engine | Oracle's `CAST(x AS T DEFAULT d ON CONVERSION ERROR)` returns `d` instead of raising when the conversion fails; T-SQL's `TRY_CAST`/ `TRY_CONVERT` return `NULL` the same way. |
