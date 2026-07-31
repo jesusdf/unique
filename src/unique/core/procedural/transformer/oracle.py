@@ -449,6 +449,13 @@ class OracleTransformer(ProceduralTransformer):
     def _trigger_forces_or_replace(self) -> bool:
         return True
 
+    def _is_native_bool_type(self, dt: DataType) -> bool:
+        # Oracle's PL/SQL BOOLEAN is native (kept only when the source's
+        # own boolean maps to it — a pg-source ``boolean``; mysql-source's
+        # BOOLEAN always maps to NUMBER(1), see PROCEDURAL_TYPE_MAPS).
+        # PLS-00382 rejects a 1/0 literal against it (wave B45).
+        return dt.name.upper() == "BOOLEAN"
+
     # No _transform_try_catch override: the old one rebuilt an ExceptionBlock
     # from the CATCH body alone and silently DROPPED the TRY body (the node
     # has no body slot). The base keeps the TryCatchBlock with transformed

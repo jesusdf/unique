@@ -274,6 +274,17 @@ INTEGER_VARIABLES: contextvars.ContextVar[frozenset[str] | None] = (
     contextvars.ContextVar("integer_variables", default=None)
 )
 
+# Names (lowercased) of procedural variables/parameters whose TARGET type is
+# Oracle's own native PL/SQL BOOLEAN. Only reachable from a pg-source
+# ``boolean`` (the type map keeps it as-is there); mysql-source's BOOLEAN
+# always maps to NUMBER(1) for an Oracle target, so it never appears here.
+# Oracle's BOOLEAN rejects a 1/0 literal (PLS-00382) — the shared
+# TRUE/FALSE -> 1/0 fold (correct for NUMBER-typed contexts) must not apply
+# to a comparison against one of these names (wave B45).
+BOOLEAN_VARIABLES: contextvars.ContextVar[frozenset[str] | None] = (
+    contextvars.ContextVar("boolean_variables", default=None)
+)
+
 # Aliases defined by the statement being emitted (set per emit_node): the
 # temp-table qualifier rename must not capture them.
 DEFINED_ALIASES: contextvars.ContextVar[frozenset[str] | None] = contextvars.ContextVar(
@@ -1090,6 +1101,7 @@ __all__ = [
     "FETCH_STATUS_FORMS",
     "DATE_VARIABLES",
     "INTEGER_VARIABLES",
+    "BOOLEAN_VARIABLES",
     "DEFINED_ALIASES",
     "SOURCE_DIALECT",
     "IR_EMBEDDED",
