@@ -95,17 +95,27 @@ routines-unblocked and severity:*
   bare RAISE;/THROW;. `test_procedural.py::TestMySQLSignalSource` (10).
   `DECLARE … CONDITION` still parse-degrades whole+warned (honest,
   pre-existing).
+- **B47** (P2, found during D1-W4, live-probed; **maintainer decision**) —
+  Oracle bare `NUMBER` → `BIGINT` promotion is **unconditional** (`convert.py
+  _convert_create_table` ~2428; the PK/identity logic later in the function is
+  never consulted): a non-key fractional column (`discount_pct NUMBER`)
+  silently becomes `BIGINT` — truncation risk, no warning. Faithful map would
+  be PG `NUMERIC` (arbitrary precision) or a role-aware promotion (id-like →
+  BIGINT); either changes a long-pinned mapping
+  (`TestOracleBareNumberToInteger`) and the shipped fixtures → needs the
+  maintainer's call before a fix-brief. Documented with a Warning callout in
+  `docs/rationale/ddl.md` meanwhile.
 - **B46** (P2, found during D1-W3, probed) — a T-SQL `RETURN NULL` NOT
   followed by a semicolon swallows the NEXT statement (`SELECT @x`) into its
   `UNIQUE-1177` discarded-value comment — no-silent-loss violation; the
   sibling bare-`RETURN` case has a `test_following_statement_not_absorbed`
   guard, the value-`RETURN` case does not.
-- **B45** (P2, found during D1-W1, live-verified) — pg/mysql-source
-  `b boolean := true;` → Oracle emits `b boolean := 1;` — **invalid** on live
-  Oracle (`PLS-00382: expression is of wrong type`): the TRUE→1 literal fold
-  is applied even when the declared target type is Oracle PL/SQL's native
-  `BOOLEAN` (where `TRUE` is the correct spelling). Type-aware fold needed
-  (skip the fold for BOOLEAN-declared variables/params on oracle target).
+- ~~B45~~ — DONE 2026-07-31: `_is_native_bool_type` per-target hook +
+  `_bool_vars` tracking keeps `TRUE`/`FALSE` for Oracle native-BOOLEAN
+  declares/params/assignments/comparisons/RETURN (`BOOLEAN_VARIABLES`
+  ContextVar for the shared comparison emitter); mysql-source still folds
+  (BOOLEAN→NUMBER(1), pinned). Live: pre-fix PLS-00382 INVALID → post-fix
+  VALID. `TestOracleNativeBooleanVars` + live test.
 - **B42** (P3, verified pre-existing) — re-rendered `$$` splits into `$ $`
   inside *commented* degraded-routine carriers (4 occurrences in a fresh
   tsql→pg fixture regeneration); cosmetic, but it keeps the generated
