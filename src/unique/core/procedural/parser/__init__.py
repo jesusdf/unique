@@ -13,7 +13,12 @@ dialect-specific statement parsers, combined here into the public class.
 
 from __future__ import annotations
 
-from unique.core.procedural.parser._base import ParseError, ParserBase, ParseResult
+from unique.core.procedural.parser._base import (
+    PARSE_FALLBACK_WARNING,
+    ParseError,
+    ParserBase,
+    ParseResult,
+)
 from unique.core.procedural.parser._plsql import PlsqlStatementsMixin
 from unique.core.procedural.parser._tsql import TsqlStatementsMixin
 
@@ -23,6 +28,7 @@ class ProceduralParser(TsqlStatementsMixin, PlsqlStatementsMixin):
 
 
 __all__ = [
+    "PARSE_FALLBACK_WARNING",
     "ParseError",
     "ParseResult",
     "ParserBase",
