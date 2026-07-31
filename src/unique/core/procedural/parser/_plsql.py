@@ -486,6 +486,12 @@ class PlsqlStatementsMixin(ParserBase):
         if (
             self._dialect == "mysql"
             and tok.type in (TokenType.IDENTIFIER, TokenType.KEYWORD)
+            and tok.upper_value in ("SIGNAL", "RESIGNAL")
+        ):
+            return self._parse_mysql_signal()
+        if (
+            self._dialect == "mysql"
+            and tok.type in (TokenType.IDENTIFIER, TokenType.KEYWORD)
             and tok.upper_value in ("LEAVE", "ITERATE")
             and self._peek(1).type == TokenType.IDENTIFIER
         ):
@@ -792,6 +798,102 @@ class PlsqlStatementsMixin(ParserBase):
             conditions=tuple(conditions),
             body=(action,) if action else (),
         )
+
+    def _parse_mysql_signal(self) -> ASTNode:
+        """Parse MySQL ``SIGNAL`` / ``RESIGNAL`` into a RaiseErrorStatement.
+
+        ``SIGNAL SQLSTATE [VALUE] '<state>' [SET item = value, ...]``
+        ``SIGNAL <condition_name> [SET ...]``
+        ``RESIGNAL [ ... ]`` — a bare ``RESIGNAL;`` re-raises the active
+        condition.
+
+        MESSAGE_TEXT becomes the raise message and MYSQL_ERRNO folds into the
+        shared RAISERROR/THROW argument blob as the error number, so every
+        target emitter (RAISE EXCEPTION, RAISE_APPLICATION_ERROR, RAISERROR,
+        SIGNAL) renders it through the existing ``_raise_parts`` machinery
+        instead of the raw-sqlglot fallback (which shipped the invalid,
+        message-losing ``SIGNAL AS SQLSTATE;``).
+        """
+        kw = self._advance().upper_value  # SIGNAL | RESIGNAL
+
+        # A bare ``RESIGNAL;`` (or ``SIGNAL;``) re-raises the active condition;
+        # every target has a native re-raise spelling.
+        if self._current().type == TokenType.SEMICOLON:
+            self._advance()
+            return RaiseErrorStatement(reraise=True)
+
+        state = self._parse_signal_condition()
+        message_text, errno = self._parse_signal_set_items()
+        self._match_type(TokenType.SEMICOLON)
+
+        if kw == "RESIGNAL" and message_text is None and errno is None:
+            return RaiseErrorStatement(reraise=True, state=state)
+
+        blob_parts = [p for p in (message_text, errno) if p is not None]
+        message: ASTNode | None = None
+        if blob_parts:
+            message = RawSQL(sql=", ".join(blob_parts), reason="mysql signal")
+        return RaiseErrorStatement(message=message, state=state)
+
+    def _parse_signal_condition(self) -> ASTNode | None:
+        """Parse a SIGNAL condition value: ``SQLSTATE [VALUE] '<state>'`` (the
+        state is kept) or a named condition (its SQLSTATE is not resolvable
+        here — consumed, re-raised under the generic user state)."""
+        if self._current().upper_value == "SQLSTATE":
+            self._advance()
+            if self._current().upper_value == "VALUE":
+                self._advance()
+            if self._current().type == TokenType.STRING:
+                code = self._advance().value.strip("'\"")
+                return RawSQL(sql=f"'{code}'", reason="mysql sqlstate")
+        elif (
+            self._current().type in (TokenType.IDENTIFIER, TokenType.KEYWORD)
+            and self._current().upper_value != "SET"
+        ):
+            self._advance()  # named condition
+        return None
+
+    def _parse_signal_set_items(self) -> tuple[str | None, str | None]:
+        """Parse a SIGNAL ``SET item = value, …`` clause, returning
+        ``(message_text, mysql_errno)``. Other items (CLASS_ORIGIN, …) carry no
+        cross-engine channel and are dropped."""
+        message_text: str | None = None
+        errno: str | None = None
+        if self._current().upper_value != "SET":
+            return message_text, errno
+        self._advance()
+        while not self._at_end() and self._current().type != TokenType.SEMICOLON:
+            item = self._advance().upper_value
+            if self._current().value == "=":
+                self._advance()
+            value = self._capture_signal_value()
+            if item == "MESSAGE_TEXT":
+                message_text = value
+            elif item == "MYSQL_ERRNO":
+                errno = value
+            if not self._match_type(TokenType.COMMA):
+                break
+        return message_text, errno
+
+    def _capture_signal_value(self) -> str:
+        """Capture a SIGNAL ``SET item = value`` right-hand side up to the next
+        comma / semicolon, keeping parenthesised expressions and quoted strings
+        intact."""
+        parts: list[str] = []
+        depth = 0
+        while not self._at_end():
+            tok = self._current()
+            if depth == 0 and tok.type in (TokenType.COMMA, TokenType.SEMICOLON):
+                break
+            if tok.type == TokenType.LPAREN:
+                depth += 1
+            elif tok.type == TokenType.RPAREN:
+                if depth == 0:
+                    break
+                depth -= 1
+            parts.append(self._flat_value(tok))
+            self._advance()
+        return " ".join(parts).strip()
 
     def _parse_mysql_repeat(self) -> ASTNode:
         """MySQL ``REPEAT … UNTIL cond END REPEAT`` — a post-test loop:

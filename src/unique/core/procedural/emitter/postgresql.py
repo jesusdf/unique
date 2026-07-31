@@ -147,6 +147,14 @@ class PostgresEmitter(ProceduralEmitter):
         if node.reraise:
             return "RAISE;"
         msg = self._emit_node(node.message) if node.message else "'Error'"
+        # A MySQL SIGNAL SQLSTATE '<state>' carries its state in ``node.state``;
+        # PostgreSQL keeps it faithfully as ``USING ERRCODE = '<state>'``
+        # (a raw five-character SQLSTATE is a valid ERRCODE).
+        using = (
+            f" USING ERRCODE = {self._emit_node(node.state)}"
+            if node.state is not None
+            else ""
+        )
         # A RAISERROR printf substitution (``'value is %d today', …, 42``) maps
         # directly onto PostgreSQL's RAISE format args, which use ``%`` for
         # every placeholder — dropping the args shipped the literal ``%d`` and
@@ -155,13 +163,13 @@ class PostgresEmitter(ProceduralEmitter):
         lit, fmt_args = self._raise_format_substitution(msg)
         if lit is not None:
             pg_msg = self._TSQL_FMT_SPEC.sub("%", lit)
-            return f"RAISE EXCEPTION {pg_msg}, {', '.join(fmt_args)};"
+            return f"RAISE EXCEPTION {pg_msg}, {', '.join(fmt_args)}{using};"
         # Keep the human-readable message, not the error number (audit
         # 2026-07-02, S2-2). The '%%'-format form is safe for texts that
         # contain literal % characters.
         text, number, _ = self._raise_parts(msg)
         payload = text or number or msg
-        return f"RAISE EXCEPTION '%', {payload};"
+        return f"RAISE EXCEPTION '%', {payload}{using};"
 
     def _procedure_header(self, name: str, or_replace: bool) -> str:
         prefix = "CREATE OR REPLACE " if or_replace else "CREATE "

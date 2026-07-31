@@ -388,7 +388,7 @@ engines and indicates the transpilation support status for each.
 | TRY…CATCH | ✓ | N/A | N/A | N/A | ⚠️ → BEGIN…EXCEPTION / HANDLER; also at **batch level** (`BEGIN TRY…END CATCH` outside a routine) → PG `DO $$…EXCEPTION $$`, Oracle `BEGIN…EXCEPTION…END;`, MySQL documented carrier |
 | EXCEPTION block | N/A | ✓ | ✓ | N/A | ⚠️ → TRY…CATCH / HANDLER |
 | DECLARE HANDLER | N/A | N/A | N/A | ✓ | ⚠️ |
-| RAISERROR / RAISE | ✓ | RAISE_APPLICATION_ERROR | RAISE | SIGNAL | ✅ |
+| RAISERROR / RAISE / SIGNAL | ✓ | RAISE_APPLICATION_ERROR | RAISE | SIGNAL / RESIGNAL | ✅ bidirectional — MySQL-source `SIGNAL SQLSTATE '…' SET MESSAGE_TEXT = …[, MYSQL_ERRNO = …]` and `RESIGNAL` map into the raise IR (message + SQLSTATE preserved; SQLSTATE kept as PG `USING ERRCODE`) |
 | Error variables (@@ERROR, SQLCODE) | ✓ | ✓ | ✓ | ✓ | ⚠️ |
 
 ### 6.5 Cursors

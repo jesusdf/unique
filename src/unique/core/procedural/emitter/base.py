@@ -1795,6 +1795,10 @@ class ProceduralEmitter:
         # state)" is invalid there. Keep the human-readable message AND the
         # error number when both exist (audit 2026-07-02, S2-2).
         text, number, rest = self._raise_parts(msg)
+        # A MySQL-source SIGNAL carries its own SQLSTATE in ``node.state``;
+        # honour it so a round-trip keeps the state (the reverse THROW/RAISERROR
+        # direction leaves it unset and falls back to the generic user state).
+        state = self._emit_node(node.state) if node.state is not None else "'45000'"
         if number is not None:
             # MYSQL_ERRNO takes an unsigned 1..65535 literal; Oracle's
             # RAISE_APPLICATION_ERROR codes are negative (-20000..-20999) —
@@ -1809,18 +1813,18 @@ class ProceduralEmitter:
             if not (text.startswith(("'", '"', "@")) or re.fullmatch(r"\w+", text)):
                 return (
                     f"SET @uq_errmsg = {text};\n"
-                    f"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @uq_errmsg{errno};"
+                    f"SIGNAL SQLSTATE {state} SET MESSAGE_TEXT = @uq_errmsg{errno};"
                 )
-            sig = f"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = {text}{errno}"
+            sig = f"SIGNAL SQLSTATE {state} SET MESSAGE_TEXT = {text}{errno}"
         elif number is not None:
             # A numeric message id only — MySQL can't resolve a message-id to
             # text, so use it as the error number and document it.
             sig = (
-                f"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = "
+                f"SIGNAL SQLSTATE {state} SET MESSAGE_TEXT = "
                 f"'Application error', MYSQL_ERRNO = {number}"
             )
         else:
-            sig = f"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = {msg}"
+            sig = f"SIGNAL SQLSTATE {state} SET MESSAGE_TEXT = {msg}"
         comment = ""
         if rest:
             comment = (

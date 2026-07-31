@@ -1362,6 +1362,128 @@ class TestRaiserrorToMySQLSignal:
         assert "RAISE_APPLICATION_ERROR(-20001, 'boom')" in out
 
 
+class TestMySQLSignalSource:
+    """MySQL ``SIGNAL``/``RESIGNAL`` in a routine body must parse into the
+    RaiseErrorStatement IR (the same node the reverse THROW/RAISERROR ->
+    SIGNAL direction emits from) so every target renders its native raise
+    with the message text and SQLSTATE preserved — not the mangled,
+    message-losing ``SIGNAL AS SQLSTATE;`` the raw-sqlglot fallback shipped.
+    """
+
+    def _proc(self, body: str) -> str:
+        return (
+            "CREATE PROCEDURE p1(IN v INT)\n"
+            "BEGIN\n"
+            "    IF v <> 1 THEN\n"
+            f"        {body}\n"
+            "    END IF;\n"
+            "END"
+        )
+
+    def test_signal_to_postgresql(self) -> None:
+        src = self._proc("SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'not one row';")
+        out = _transpile(src, "mysql", "postgresql")
+        assert "RAISE EXCEPTION '%', 'not one row'" in out
+        assert "USING ERRCODE = '45000'" in out
+        # The source idiom and the mangled fallback are gone.
+        assert "SIGNAL" not in out.upper()
+        assert "AS SQLSTATE" not in out.upper()
+        import sqlglot
+
+        sqlglot.parse(out, read="postgres", error_level=sqlglot.ErrorLevel.RAISE)
+
+    def test_signal_to_oracle(self) -> None:
+        src = self._proc("SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'not one row';")
+        out = _transpile(src, "mysql", "oracle")
+        assert "RAISE_APPLICATION_ERROR(-20001, 'not one row')" in out
+        assert "SIGNAL" not in out.upper()
+
+    def test_signal_to_tsql(self) -> None:
+        src = self._proc("SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'not one row';")
+        out = _transpile(src, "mysql", "tsql")
+        assert "RAISERROR('not one row', 16, 1)" in out
+        assert "SIGNAL" not in out.upper()
+
+    def test_signal_with_mysql_errno(self) -> None:
+        src = self._proc(
+            "SIGNAL SQLSTATE '45000' "
+            "SET MESSAGE_TEXT = 'bad row', MYSQL_ERRNO = 1264;"
+        )
+        # MySQL target keeps both the message and the error number.
+        my = _transpile(src, "mysql", "mysql")
+        assert "MESSAGE_TEXT = 'bad row'" in my
+        assert "MYSQL_ERRNO = 1264" in my
+        # The message survives on every other engine too.
+        assert "'bad row'" in _transpile(src, "mysql", "postgresql")
+        assert "'bad row'" in _transpile(src, "mysql", "oracle")
+        assert "'bad row'" in _transpile(src, "mysql", "tsql")
+
+    def test_signal_errno_only_no_message(self) -> None:
+        # Neighbor: SET carries only MYSQL_ERRNO, no MESSAGE_TEXT.
+        src = self._proc("SIGNAL SQLSTATE '45000' SET MYSQL_ERRNO = 1264;")
+        my = _transpile(src, "mysql", "mysql")
+        assert "MYSQL_ERRNO = 1264" in my
+        assert "SIGNAL SQLSTATE '45000'" in my
+
+    def test_signal_roundtrip_mysql_identity(self) -> None:
+        src = self._proc("SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'not one row';")
+        out = _transpile(src, "mysql", "mysql")
+        assert "SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'not one row'" in out
+
+    def test_signal_roundtrip_via_postgresql(self) -> None:
+        # mysql SIGNAL -> pg -> mysql comes back as a SIGNAL with the message
+        # intact (no silent loss).
+        src = self._proc("SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'not one row';")
+        pg = _transpile(src, "mysql", "postgresql")
+        back = _transpile(pg, "postgresql", "mysql")
+        assert "SIGNAL" in back.upper()
+        assert "not one row" in back
+
+    def test_resignal_reraise_per_engine(self) -> None:
+        # Neighbor: a bare RESIGNAL inside a handler re-raises; every target
+        # has a native spelling.
+        src = (
+            "CREATE PROCEDURE p2()\n"
+            "BEGIN\n"
+            "    DECLARE EXIT HANDLER FOR SQLEXCEPTION\n"
+            "    BEGIN\n"
+            "        RESIGNAL;\n"
+            "    END;\n"
+            "    SELECT 1;\n"
+            "END"
+        )
+        assert "RAISE;" in _transpile(src, "mysql", "postgresql")
+        assert "RAISE;" in _transpile(src, "mysql", "oracle")
+        assert "THROW;" in _transpile(src, "mysql", "tsql")
+
+    def test_two_signals_one_routine(self) -> None:
+        # Neighbor: two SIGNALs in one routine both convert.
+        src = (
+            "CREATE PROCEDURE p3(IN v INT)\n"
+            "BEGIN\n"
+            "    IF v < 0 THEN\n"
+            "        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'too low';\n"
+            "    END IF;\n"
+            "    IF v > 9 THEN\n"
+            "        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'too high';\n"
+            "    END IF;\n"
+            "END"
+        )
+        out = _transpile(src, "mysql", "postgresql")
+        assert "'too low'" in out
+        assert "'too high'" in out
+        assert "SIGNAL" not in out.upper()
+
+    def test_signal_not_silently_lost(self) -> None:
+        # Guardrail 4: the pre-fix output shipped the invalid, message-losing
+        # ``SIGNAL AS SQLSTATE;`` with only the generic embedded-DML warning.
+        src = self._proc("SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'not one row';")
+        for target in ("postgresql", "oracle", "tsql"):
+            out = _transpile(src, "mysql", target)
+            assert "SIGNAL AS SQLSTATE" not in out
+            assert "not one row" in out
+
+
 class TestTableValuedFunctionInFrom:
     """A table-valued function used in FROM is invalid on MySQL (no TVFs);
     such a statement is commented out with a note. JSON_TABLE and the
