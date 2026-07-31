@@ -824,87 +824,39 @@ only partially supported:
   documented binding limits — the placeholder spelling belongs to the target's
   execution form, so the content is not statically re-translated. Nested
   embedded translation is capped at depth 2 (warned beyond).
-- **`IF [NOT] EXISTS(…)` DDL guards** (idempotent migration scripts): a
-  *system-catalog* existence guard (`IF [NOT] EXISTS(SELECT … FROM sys.…)` /
-  `OBJECT_ID`). The catalog query has no faithful cross-engine form, so on most
-  targets the condition is dropped and the guarded DDL is emitted (PostgreSQL/MySQL
-  use their own `CREATE … IF NOT EXISTS` where available). On **Oracle** the guard
-  is kept idempotently and portably: a guarded `CREATE` becomes a `user_objects`
-  existence probe + `EXECUTE IMMEDIATE` — `BEGIN FOR _ IN (SELECT 1 FROM DUAL WHERE
-  NOT EXISTS(SELECT 1 FROM user_objects WHERE object_name='X' AND object_type='…'))
-  LOOP EXECUTE IMMEDIATE q'[<ddl>]'; END LOOP; END; /`. This is the idiomatic Oracle
-  form (DDL cannot be a conditional statement inline, so `EXECUTE IMMEDIATE` is
-  required; `q'[…]'` avoids escaping) and works on every version — unlike `CREATE …
-  IF NOT EXISTS` (23ai+). A re-run no longer fails with `ORA-00955`. (A guarded
-  `DROP` maps to `DROP … IF EXISTS` / a tolerant block.)
-- **Column-existence DDL guards** (a narrower catalog probe than the
-  object-existence guard above): `IF NOT EXISTS(SELECT 1 FROM sys.columns
-  WHERE object_id = OBJECT_ID('t') AND name = 'c' AND …) ALTER TABLE t
-  ADD/ALTER COLUMN c …` cannot fall back to "drop the condition, use the
-  target's native `IF NOT EXISTS`" the way the object-existence guard does —
-  no target has an `ADD COLUMN IF NOT EXISTS`/`ALTER COLUMN` guard clause, so
-  dropping the probe would raise "column already exists" (or double-apply a
-  default) on a re-run. Every target instead gets a full synthesized probe
-  against its own catalog, keeping the guard's condition: **PostgreSQL** a
-  `DO $$ IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE
-  table_name = lower('t') AND column_name = lower('c') AND …) THEN ALTER
-  TABLE … END IF; END $$;` block; **MySQL** (no anonymous blocks, no `IF`
-  outside a routine) a three-statement `SET @unique_guard_sql = (SELECT
-  IF(NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='t'
-  AND column_name='c' AND …), '<ddl>', 'DO 0')); PREPARE unique_guard_stmt
-  FROM @unique_guard_sql; EXECUTE unique_guard_stmt; DROP PREPARE
-  unique_guard_stmt;`; **Oracle** the same compact `FOR unique_guard IN
-  (SELECT 1 FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM user_tab_columns WHERE
-  table_name = UPPER('t') AND column_name = UPPER('c') AND …)) LOOP EXECUTE
-  IMMEDIATE '<ddl>'; END LOOP;` idiom the object-existence guard uses. An
-  `ELSE` branch is supported when its body is a diagnostic `PRINT` (rewritten
-  to `RAISE NOTICE`/`DBMS_OUTPUT.PUT_LINE`/a MySQL `CONCAT`-built alternate
-  statement); any other `ELSE` body, or a probe predicate outside the
-  recognized set (plain existence, `default_object_id <> 0`, `is_identity`),
-  falls back to the honest warned drop rather than being guessed at. The same
-  catalog-probe treatment covers a guarded `DROP TRIGGER` targeting
-  PostgreSQL, for a different reason: PostgreSQL's `DROP TRIGGER` syntax
-  requires `ON <table>`, which a T-SQL `OBJECT_ID(name, 'TR')` guard never
-  names, so the table is resolved from a `pg_trigger` probe inside the `DO $$`
-  block instead of dropping the statement.
-  (`tests/unit/core/test_guard_translation.py::TestFaithfulColumnProbeGuard`,
-  `::TestGuardElseBranch`, `::TestTrailingCommentOnGuardLine` — note: these
-  live in `tests/unit/core/`, not `tests/integration/`.)
+- **`IF [NOT] EXISTS(…)` DDL guards** (idempotent migration scripts) and the
+  narrower **column-existence guard** (`sys.columns`-gated `ALTER TABLE ...
+  ADD`/`ALTER COLUMN`) both convert — the catalog condition drops to the
+  target's own native `IF NOT EXISTS` where one exists, or is rebuilt as a
+  synthesized per-target probe (PostgreSQL `DO $$`, MySQL `PREPARE`/`EXECUTE`,
+  Oracle a compact `FOR` loop over `DUAL`) where none does — see
+  [the rationale article](rationale/ddl/tsql-existence-guard-catalog-probes.md).
+  An unrecognized `ELSE` body or probe predicate outside the known set still
+  falls back to the honest warned drop rather than being guessed at.
 - **Oracle-source catalog probes rewritten per target** (the mirror
-  direction): an Oracle guard or dynamic-DDL idiom that queries
-  `user_indexes` (to resolve an index's owning table before a table-less
-  `DROP INDEX`, which T-SQL requires by name — error 159) or
-  `user_tab_cols`/`user_tab_columns` (to gate an `ALTER TABLE … MODIFY`) gets
-  its catalog probe rewritten to the target's own system view with matching
-  semantics, not carried verbatim: T-SQL `sys.indexes`/`sys.columns` +
-  `OBJECT_NAME(object_id)`, PostgreSQL `information_schema.columns` (with a
-  `lower(...)` compare, since Oracle identifiers default to upper case).
-  (`tests/integration/test_oracle_source_m4_wave.py::TestOracleCatalogOnTsql.
-  test_table_less_drop_index_resolves_table`,
-  `::TestWave11Classes.test_alter_modify_inside_guard`.)
+  direction): an Oracle guard or dynamic-DDL idiom querying `user_indexes` or
+  `user_tab_cols`/`user_tab_columns` converts too, rewritten to the target's
+  own system view with matching semantics — see
+  [the rationale article](rationale/ddl/oracle-catalog-probe-rewritten-per-target.md).
 - **Non-catalog `IF EXISTS(…) BEGIN … END` control flow**: a **real-data**
-  condition (e.g. `IF EXISTS (SELECT NULL FROM t …)
-  BEGIN … END`, common in migration scripts) is control flow — dropping its guard
-  would silently change semantics. On **Oracle**, where `IF EXISTS(subquery)` is
-  invalid PL/SQL (PLS-00204), it is **emulated with a cursor FOR loop** over a
-  one-row probe — `FOR … IN (SELECT 1 FROM DUAL WHERE [NOT] EXISTS(<subquery>))
-  LOOP <body> END LOOP` — so the body runs once iff the subquery returns a row; a
-  top-level block is wrapped in an anonymous `BEGIN … END; /`. An **`ELSE`** is a
-  second FOR over the *negated* probe (`EXISTS` ⟷ `NOT EXISTS`, mutually exclusive
-  — exactly one body fires). A T-SQL session directive such as `SET NOEXEC ON`
-  inside the block has no Oracle equivalent and is carried.
+  condition (e.g. `IF EXISTS (SELECT NULL FROM t …) BEGIN … END`, common in
+  migration scripts) converts too — on Oracle, where `IF EXISTS(subquery)` is
+  invalid PL/SQL (PLS-00204), it is emulated with a cursor `FOR` loop over a
+  one-row probe — see
+  [the rationale article](rationale/procedural/if-exists-control-flow-to-oracle-for-loop.md).
+  A T-SQL session directive such as `SET NOEXEC ON` inside the block has no
+  Oracle equivalent and is carried as a documented carrier + warning.
 - **Set-based trigger pseudo-tables** (`FROM inserted JOIN deleted`): T-SQL
-  triggers are statement-level with `inserted`/`deleted` row sets. Column
-  qualifiers (`inserted.col`) map to the row-level `NEW`/`OLD` (`:NEW`/`:OLD`).
-  A **purely set-based** trigger (using `inserted`/`deleted` only via
-  `FROM`/`JOIN`, with no row-level qualifier or `UPDATE(col)` predicate) is now
-  **rewritten to a PostgreSQL statement-level trigger** with `REFERENCING NEW
-  TABLE AS inserted OLD TABLE AS deleted` + `FOR EACH STATEMENT`. Oracle and
-  MySQL keep documenting it with a `-- UNIQUE:` note: Oracle has no *named*
-  transition tables (a compound trigger would need a manual PL/SQL collection,
-  and `FROM inserted` would be invalid), and MySQL has neither. A **mixed**
-  trigger (row-level and set-level together) cannot be a single trigger and
-  stays documented on every target.
+  triggers are statement-level with `inserted`/`deleted` row sets. A **purely
+  set-based** trigger (using `inserted`/`deleted` only via `FROM`/`JOIN`, with
+  no row-level qualifier or `UPDATE(col)` predicate) converts to PostgreSQL —
+  see [the rationale article](rationale/procedural/tsql-set-based-trigger-to-pg-statement-level.md)
+  — but stays a genuine limit on **Oracle** and **MySQL**, documented with a
+  `-- UNIQUE:` note: Oracle has no *named* transition tables (a compound
+  trigger would need a manual PL/SQL collection, and `FROM inserted` would be
+  invalid), and MySQL has neither. A **mixed** trigger (row-level and
+  set-level together) cannot be a single trigger and stays documented on
+  every target.
 
 ### Oracle → T-SQL specifics
 

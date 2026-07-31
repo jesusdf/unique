@@ -40,15 +40,15 @@ itself keeps the native `REFERENCING` clause unchanged
 
 **Discussion.** The reverse direction also occurs: a T-SQL trigger's fixed
 `inserted`/`deleted` become **named** PostgreSQL transition tables when
-translating PG-ward ([§6](../../03-unsupported.md), "Set-based trigger
-pseudo-tables"). Here the traffic runs the other way — a
-PostgreSQL-authored **custom** alias collapses back down to T-SQL's two
-fixed pseudo-table names, which is why every reference to that alias
-throughout the inlined body has to be renamed rather than simply carried
-through.
+translating PG-ward (see [the sibling article](tsql-set-based-trigger-to-pg-statement-level.md)).
+Here the traffic runs the other way — a PostgreSQL-authored **custom**
+alias collapses back down to T-SQL's two fixed pseudo-table names, which
+is why every reference to that alias throughout the inlined body has to be
+renamed rather than simply carried through.
 
 > **Note** faithful — `inserted` and the source's named transition table
 > hold exactly the same batch of affected rows; only the spelling changes.
 
 **See Also.** [`TestTransitionTableAliases`](../../../tests/integration/test_pg_source_wave1.py) ·
-[§6](../../03-unsupported.md) ("Set-based trigger pseudo-tables" — the reverse-direction rename).
+[A purely set-based T-SQL trigger → PostgreSQL statement-level trigger](tsql-set-based-trigger-to-pg-statement-level.md)
+(the reverse-direction rewrite).
