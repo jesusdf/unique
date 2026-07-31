@@ -37,16 +37,10 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
   function-semantics family (~16 cases: INSERT()/LEFT()/REPEAT() float/OOB,
   STUFF/OVERLAY guards on oracle/pg, TO_CHAR masks, base conversion,
   multibyte CHR/ASCII, COMPRESS container, cast-int-datetime, ts-to-date,
-  frac-seconds, cast-binary padding, REPLACE non-literal NULL) — BLUE
-  triage of the ledger's remaining `defect-pending-fix` cases
-  (~27 unwarned wrong-value/runtime-fail pairs named in the report §T4:
-  broken CAST emission on tsql/oracle, unnamed derived columns,
-  string+INTERVAL arithmetic, INSERT()/LEFT()/REPEAT() float/OOB semantics,
-  TO_CHAR mask fidelity, …) plus two D1-W8 additions (STUFF/OVERLAY→
-  oracle/pg out-of-range-start guard missing — pg raises at runtime,
-  unwarned; mysql `REPLACE` with a NON-literal NULL arg → oracle returns the
-  original string where MySQL yields NULL). Each fix removes its ledger
-  entry (the ratchet enforces the direction).
+  frac-seconds, cast-binary padding, REPLACE non-literal NULL) plus the two
+  D1-W8 additions (STUFF/OVERLAY out-of-range guard on oracle/pg; REPLACE
+  with non-literal NULL → oracle). Each fix removes its ledger entry (the
+  ratchet enforces the direction). *Round 2 (T4-B) in progress.*
 - ~~A10-T2~~ — DECIDED (maintainer, 2026-07-31: numeric tolerance) and DONE:
   two numeric cells match when equal after rounding to the COARSER operand's
   own precision, with a zero-adjacent absolute guard and a tight (1e-9)
@@ -132,11 +126,9 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
 
 ### D1b/D1c — rationale residue (P3)
 
-- **D1b** — the batch-6b recall pass's 9 MED + 3 LOW rows (4 HIGH done
-  same-day). *In progress 2026-07-31 (docs worker).*
-- **D1-recall-2** — `test_challenge.py` full-recall pass (batch 5 read only
-  ~99/263 classes in full; the audit's honesty notes flag it as the
-  weakest-recall batch after 6b closed). *In progress 2026-07-31.*
+- ~~D1b~~ — DONE 2026-07-31: all 12 batch-6b rows written as 14 entries.
+- ~~D1-recall-2~~ — DONE 2026-07-31: 215/263 classes read in full (batch
+  5b appendix); recall debt closed; 18 new gap rows → D1b2.
 - **D1c** (maintainer-visible residue, not yet scheduled) — (a) the raw
   appendix rows of the docs-gap sweep NOT folded into the 18 clusters
   (single-mechanism MED/LOW items, each citing a pinning test); (b) test
