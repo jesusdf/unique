@@ -65,6 +65,54 @@ class TestLoweredFloors:
         assert new == {"a": 10}
 
 
+class TestDialectComparesCountsAllForms:
+    """B53: the metric must count ``==``, ``!=``, and dialect-tuple ``in``.
+
+    A regex that only sees ``== "<dialect>"`` misses the equally-real
+    dispatch forms ``!= "<dialect>"`` and ``in ("tsql", "mysql")`` — both
+    common in the watched emitter/procedural-base modules — so the ratchet
+    was blind to a large share of the debt it claims to gate.
+    """
+
+    def test_counts_not_equal_comparison(self, tmp_path: Path) -> None:
+        f = tmp_path / "sample.py"
+        f.write_text('if dialect != "mysql":\n    pass\n')
+        assert ratchets._dialect_compares([f]) == 1
+
+    def test_counts_tuple_membership_two_elements(self, tmp_path: Path) -> None:
+        f = tmp_path / "sample.py"
+        f.write_text('if dialect in ("tsql", "oracle"):\n    pass\n')
+        assert ratchets._dialect_compares([f]) == 1
+
+    def test_counts_tuple_membership_single_element_trailing_comma(
+        self, tmp_path: Path
+    ) -> None:
+        f = tmp_path / "sample.py"
+        f.write_text('if dialect in ("tsql",):\n    pass\n')
+        assert ratchets._dialect_compares([f]) == 1
+
+    def test_does_not_count_mixed_tuple(self, tmp_path: Path) -> None:
+        # A tuple with a non-dialect element is not a dialect-dispatch
+        # membership test; must not be counted.
+        f = tmp_path / "sample.py"
+        f.write_text('if kind in ("tsql", "SELECT"):\n    pass\n')
+        assert ratchets._dialect_compares([f]) == 0
+
+    def test_counts_equal_and_not_equal_and_tuple_together(
+        self, tmp_path: Path
+    ) -> None:
+        f = tmp_path / "sample.py"
+        f.write_text(
+            'if dialect == "tsql":\n'
+            "    pass\n"
+            'elif dialect != "oracle":\n'
+            "    pass\n"
+            'elif dialect in ("mysql", "postgresql"):\n'
+            "    pass\n"
+        )
+        assert ratchets._dialect_compares([f]) == 3
+
+
 class TestBaselineFloorsAreMonotonic:
     def test_current_measurement_does_not_exceed_committed_floors(self) -> None:
         # The committed baselines must describe the current tree (else CI is

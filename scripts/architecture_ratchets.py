@@ -47,9 +47,14 @@ FLOORS: dict[str, int] = {
     # ``re.sub`` / ``re.search`` / ``re.match`` calls in those emitter modules
     # (the F1–F3 post-emit regex surface guardrail 2 bans on emitted text).
     "converter_emitter_re_calls": 182,
-    # ``== "<dialect>"`` string-dispatch in the shared modules (converter
-    # emitter + procedural transformer/emitter base) — F6/§7 debt.
-    "shared_dialect_compares": 570,
+    # Dialect string-dispatch in the shared modules (converter emitter +
+    # procedural transformer/emitter base) — F6/§7 debt. Counts three forms,
+    # each a dispatch-on-dialect decision: ``== "<dialect>"``,
+    # ``!= "<dialect>"``, and tuple membership (``in ("tsql",)`` /
+    # ``in ("a", "b")``) where every element of the tuple is a dialect name
+    # (re-baselined 2026-07-31 — the original regex only saw ``==`` and was
+    # blind to the other two equally-real forms).
+    "shared_dialect_compares": 923,
     # Functions over cyclomatic complexity 10 across src/ (F4/F5).
     "c901_offenders": 114,
 }
@@ -64,7 +69,15 @@ _EXTRA_SHARED = (
 )
 
 _RE_CALL = re.compile(r"\bre\.(?:sub|search|match)\b")
-_DIALECT_CMP = re.compile(r'==\s*"(?:tsql|oracle|postgresql|mysql|sqlite)"')
+_DIALECT_NAMES = r"(?:tsql|oracle|postgresql|mysql|sqlite)"
+# ``== "<dialect>"`` / ``!= "<dialect>"``.
+_DIALECT_CMP = re.compile(rf'[=!]=\s*"{_DIALECT_NAMES}"')
+# ``in (...)`` where every tuple element is a dialect-name string literal —
+# ``in ("tsql",)`` or ``in ("a", "b")``, including a ``not in`` prefix (the
+# "not" itself isn't part of the match) and multi-line tuples.
+_DIALECT_TUPLE_IN = re.compile(
+    rf'in\s*\(\s*"{_DIALECT_NAMES}"\s*(?:,\s*"{_DIALECT_NAMES}"\s*)*,?\s*\)'
+)
 
 
 def _emit_modules() -> list[Path]:
@@ -80,7 +93,12 @@ def _re_calls(paths: list[Path]) -> int:
 
 
 def _dialect_compares(paths: list[Path]) -> int:
-    return sum(len(_DIALECT_CMP.findall(p.read_text())) for p in paths)
+    total = 0
+    for p in paths:
+        text = p.read_text()
+        total += len(_DIALECT_CMP.findall(text))
+        total += len(_DIALECT_TUPLE_IN.findall(text))
+    return total
 
 
 def _c901_offenders() -> int:
