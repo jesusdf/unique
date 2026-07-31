@@ -43,6 +43,9 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### T-SQL as source
 
+| [Date/time](#datetime-arithmetic-and-formatting) | [Strings](#strings-concatenation-and-collation) | [DML](#dml-pivotunpivot-merge-delete-row-values) | [DDL](#ddl-identity-temp-tables-foreign-keys-sequences-storage-options) | [Procedural](#procedural-cursors-dynamic-sql-system-procedures-session-directives) |
+|---|---|---|---|---|
+
 #### [Date/time arithmetic and formatting](datetime/README.md)
 
 | Article | Description |
@@ -97,6 +100,9 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [T-SQL cursor-variable binding (`SET @cur = CURSOR ... FOR q; OPEN @cur;`) → PostgreSQL / Oracle / MySQL](procedural/tsql-cursor-variable-binding.md) | T-SQL lets a cursor be bound to a *variable* in two steps: a bare `DECLARE @cur CURSOR;` (no query yet), then `SET @cur = CURSOR ... |
 
 ### T-SQL as target
+
+| [Date/time](#datetime-arithmetic-and-formatting-1) | [Strings](#strings-concatenation-and-collation-1) | [Aggregates & windows](#aggregates-and-window-functions) | [Booleans](#booleans-the-valuepredicate-duality) | [DML](#dml-pivotunpivot-merge-delete-row-values-1) | [DDL](#ddl-identity-temp-tables-foreign-keys-sequences-storage-options-1) | [Procedural](#procedural-cursors-dynamic-sql-system-procedures-session-directives-1) |
+|---|---|---|---|---|---|---|
 
 #### [Date/time arithmetic and formatting](datetime/README.md)
 
@@ -181,6 +187,9 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### Oracle as source
 
+| [Date/time](#datetime-arithmetic-and-formatting-2) | [Strings](#strings-concatenation-and-collation-2) | [Aggregates & windows](#aggregates-and-window-functions-1) | [Booleans](#booleans-the-valuepredicate-duality-1) | [DML](#dml-pivotunpivot-merge-delete-row-values-2) | [DDL](#ddl-identity-temp-tables-foreign-keys-sequences-storage-options-2) | [Procedural](#procedural-cursors-dynamic-sql-system-procedures-session-directives-2) |
+|---|---|---|---|---|---|---|
+
 #### [Date/time arithmetic and formatting](datetime/README.md)
 
 | Article | Description |
@@ -239,6 +248,9 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Numeric range `FOR i IN a..b LOOP` (Oracle) → MySQL / T-SQL explicit `WHILE` + counter](procedural/numeric-range-for-loop.md) | `FOR i IN 1..13 LOOP` (optionally `REVERSE`) is Oracle's counting loop — no cursor at all, just an integer range. |
 
 ### Oracle as target
+
+| [Date/time](#datetime-arithmetic-and-formatting-3) | [Strings](#strings-concatenation-and-collation-3) | [Aggregates & windows](#aggregates-and-window-functions-2) | [Booleans](#booleans-the-valuepredicate-duality-2) | [DML](#dml-pivotunpivot-merge-delete-row-values-3) | [DDL](#ddl-identity-temp-tables-foreign-keys-sequences-storage-options-3) | [Procedural](#procedural-cursors-dynamic-sql-system-procedures-session-directives-3) |
+|---|---|---|---|---|---|---|
 
 #### [Date/time arithmetic and formatting](datetime/README.md)
 
@@ -323,6 +335,9 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### PostgreSQL as source
 
+| [Date/time](#datetime-arithmetic-and-formatting-4) | [Strings](#strings-concatenation-and-collation-4) | [Aggregates & windows](#aggregates-and-window-functions-3) | [Booleans](#booleans-the-valuepredicate-duality-3) | [DML](#dml-pivotunpivot-merge-delete-row-values-4) | [DDL](#ddl-identity-temp-tables-foreign-keys-sequences-storage-options-4) | [Procedural](#procedural-cursors-dynamic-sql-system-procedures-session-directives-4) |
+|---|---|---|---|---|---|---|
+
 #### [Date/time arithmetic and formatting](datetime/README.md)
 
 | Article | Description |
@@ -390,6 +405,9 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Row-level trigger re-reading its own table (MySQL/PostgreSQL) ↔ Oracle `COMPOUND TRIGGER`](procedural/trigger-reading-own-table.md) | A row-level trigger that aggregates a parent row from its children (`UPDATE invoice SET total = (SELECT SUM(...) FROM invoice_line WHERE invoice_id = NEW.invoice_id) WHERE id = NEW.invoice_id`) re-reads the table it's attached to. |
 
 ### PostgreSQL as target
+
+| [Date/time](#datetime-arithmetic-and-formatting-5) | [Strings](#strings-concatenation-and-collation-5) | [Aggregates & windows](#aggregates-and-window-functions-4) | [DML](#dml-pivotunpivot-merge-delete-row-values-5) | [DDL](#ddl-identity-temp-tables-foreign-keys-sequences-storage-options-5) | [Procedural](#procedural-cursors-dynamic-sql-system-procedures-session-directives-5) |
+|---|---|---|---|---|---|
 
 #### [Date/time arithmetic and formatting](datetime/README.md)
 
@@ -461,6 +479,9 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### MySQL as source
 
+| [Date/time](#datetime-arithmetic-and-formatting-6) | [Strings](#strings-concatenation-and-collation-6) | [Aggregates & windows](#aggregates-and-window-functions-5) | [Booleans](#booleans-the-valuepredicate-duality-4) | [DML](#dml-pivotunpivot-merge-delete-row-values-6) | [DDL](#ddl-identity-temp-tables-foreign-keys-sequences-storage-options-6) | [Procedural](#procedural-cursors-dynamic-sql-system-procedures-session-directives-6) |
+|---|---|---|---|---|---|---|
+
 #### [Date/time arithmetic and formatting](datetime/README.md)
 
 | Article | Description |
@@ -520,6 +541,9 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Leading `DECLARE` block reordered (MySQL): variables before cursors](procedural/mysql-declare-reorder.md) | MySQL requires every `DECLARE <cursor>` to come *after* every `DECLARE <variable>` in the same block (error 1337, "Variable or condition declaration after cursor or handler declaration") — a rule no other target engine imposes, so a source routine that declares its cursor before its scalar variables (a legal order on Oracle/T-SQL/PostgreSQL) needs its leading declaration block reordered for MySQL specifically. |
 
 ### MySQL as target
+
+| [Date/time](#datetime-arithmetic-and-formatting-7) | [Strings](#strings-concatenation-and-collation-7) | [Aggregates & windows](#aggregates-and-window-functions-6) | [Booleans](#booleans-the-valuepredicate-duality-5) | [DML](#dml-pivotunpivot-merge-delete-row-values-7) | [DDL](#ddl-identity-temp-tables-foreign-keys-sequences-storage-options-7) | [Procedural](#procedural-cursors-dynamic-sql-system-procedures-session-directives-7) |
+|---|---|---|---|---|---|---|
 
 #### [Date/time arithmetic and formatting](datetime/README.md)
 
@@ -593,6 +617,9 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Numeric range `FOR i IN a..b LOOP` (Oracle) → MySQL / T-SQL explicit `WHILE` + counter](procedural/numeric-range-for-loop.md) | `FOR i IN 1..13 LOOP` (optionally `REVERSE`) is Oracle's counting loop — no cursor at all, just an integer range. |
 
 ### Cross-engine / multi-directional
+
+| [Date/time](#datetime-arithmetic-and-formatting-8) | [Strings](#strings-concatenation-and-collation-8) | [Aggregates & windows](#aggregates-and-window-functions-7) | [DML](#dml-pivotunpivot-merge-delete-row-values-8) | [DDL](#ddl-identity-temp-tables-foreign-keys-sequences-storage-options-8) | [Procedural](#procedural-cursors-dynamic-sql-system-procedures-session-directives-8) |
+|---|---|---|---|---|---|
 
 #### [Date/time arithmetic and formatting](datetime/README.md)
 

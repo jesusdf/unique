@@ -296,9 +296,11 @@ def _by_engine_section(articles: list[Article]) -> str:
     )
 
     def _slug(text: str) -> str:
-        # GitHub heading anchor: lowercase, spaces -> hyphens, punctuation
-        # (here: '/') dropped.
-        return text.lower().replace("/", "").replace(" ", "-")
+        # GitHub heading anchor: lowercase; drop everything but word chars,
+        # spaces and hyphens; spaces -> hyphens. (Repeated headings get -1,
+        # -2, ... suffixes — handled by the dedup counter below.)
+        kept = re.sub(r"[^\w\- ]", "", text.lower())
+        return kept.replace(" ", "-")
 
     jump_rows = [
         (
@@ -318,35 +320,81 @@ def _by_engine_section(articles: list[Article]) -> str:
     parts.append(_table(["Engine", "As source", "As target"], jump_rows))
     parts.append("\n")
 
-    def _topic_tables(selected: list[Article]) -> None:
-        """One sub-table per topic (topic title as a linked sub-heading)."""
-        for topic in _TOPIC_ORDER:
-            rows = [
-                (f"[{a.title}]({a.topic}/{a.slug}.md)", a.description)
-                for a in selected
-                if a.topic == topic
-            ]
-            if not rows:
-                continue
+    # Pre-compute every section's per-topic groups IN EMISSION ORDER, assigning
+    # each repeated `#### <topic>` heading its GitHub-deduplicated anchor
+    # (`slug`, `slug-1`, `slug-2`, ...) so the per-section topic nav can link
+    # to the right instance.
+    ordered = sorted(real, key=lambda x: (x.topic, x.order))
+    sections: list[tuple[str, list[tuple[str, str, list[tuple[str, str]]]]]] = []
+    for eng in _ENGINES:
+        for role, idx in (("as source", 0), ("as target", 1)):
+            selected = [a for a in ordered if eng in parsed[a][idx]]
+            sections.append((f"{_ENGINE_LABEL[eng]} {role}", _group(selected)))
+    sections.append(
+        (
+            "Cross-engine / multi-directional",
+            _group([a for a in ordered if parsed[a][2]]),
+        )
+    )
+
+    slug_seen: dict[str, int] = {}
+
+    def _dedup(slug: str) -> str:
+        n = slug_seen.get(slug, 0)
+        slug_seen[slug] = n + 1
+        return slug if n == 0 else f"{slug}-{n}"
+
+    # Engine/cross headings also occupy the anchor namespace, in order.
+    resolved: list[tuple[str, list[tuple[str, str, str, list[tuple[str, str]]]]]] = []
+    for heading, groups in sections:
+        _dedup(_slug(heading))
+        resolved.append(
+            (
+                heading,
+                [
+                    (topic, _dedup(_slug(_TOPIC_TITLE[topic])), label, rows)
+                    for topic, label, rows in groups
+                ],
+            )
+        )
+
+    for heading, groups in resolved:
+        parts.append(f"### {heading}\n\n")
+        if len(groups) > 1:
+            cells = [f"[{label}](#{anchor})" for _, anchor, label, _ in groups]
+            parts.append("| " + " | ".join(cells) + " |\n")
+            parts.append("|" + "|".join(["---"] * len(cells)) + "|\n\n")
+        for topic, _anchor, _label, rows in groups:
             parts.append(f"#### [{_TOPIC_TITLE[topic]}]({topic}/README.md)\n\n")
             parts.append(_table(["Article", "Description"], rows))
             parts.append("\n")
-
-    for eng in _ENGINES:
-        for role, idx in (("as source", 0), ("as target", 1)):
-            parts.append(f"### {_ENGINE_LABEL[eng]} {role}\n\n")
-            _topic_tables(
-                [
-                    a
-                    for a in sorted(real, key=lambda x: (x.topic, x.order))
-                    if eng in parsed[a][idx]
-                ]
-            )
-    parts.append("### Cross-engine / multi-directional\n\n")
-    _topic_tables(
-        [a for a in sorted(real, key=lambda x: (x.topic, x.order)) if parsed[a][2]]
-    )
     return "".join(parts)
+
+
+#: Compact topic labels for the per-section jump tables.
+_TOPIC_SHORT = {
+    "datetime": "Date/time",
+    "strings-collation": "Strings",
+    "aggregates-windows": "Aggregates & windows",
+    "booleans": "Booleans",
+    "dml": "DML",
+    "ddl": "DDL",
+    "procedural": "Procedural",
+}
+
+
+def _group(selected: list[Article]) -> list[tuple[str, str, list[tuple[str, str]]]]:
+    """Per-topic (topic, short label, table rows) groups, topic order."""
+    groups = []
+    for topic in _TOPIC_ORDER:
+        rows = [
+            (f"[{a.title}]({a.topic}/{a.slug}.md)", a.description)
+            for a in selected
+            if a.topic == topic
+        ]
+        if rows:
+            groups.append((topic, _TOPIC_SHORT[topic], rows))
+    return groups
 
 
 def render_master_readme(articles: list[Article]) -> str:
