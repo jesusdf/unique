@@ -1449,6 +1449,32 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
         return _emit_interval_chain(
             _iv_left, _iv_comps, node.operator == BinaryOperator.SUB, dialect
         )
+    # Date arithmetic on an ISO date/datetime STRING literal ('2020-01-01' +
+    # INTERVAL 1 HOUR, the MySQL spelling): the string reaches Oracle/PG as a
+    # bare ``'…' + interval`` (ORA-30081 / "invalid input syntax for type
+    # interval"). Promote the string to an ANSI DATE/TIMESTAMP literal so the
+    # interval math is valid and the value matches (a date-only base + a sub-day
+    # interval yields a timestamp on both engines — live-verified). A bare
+    # ``string + INTERVAL`` is unambiguously date arithmetic and only a MySQL-
+    # style source produces it, so no source-dialect guard is needed. T-SQL keeps
+    # its own DATEADD/CAST-back path further below.
+    if (
+        dialect in ("oracle", "postgresql")
+        and node.operator in (BinaryOperator.ADD, BinaryOperator.SUB)
+        and isinstance(node.left, Literal)
+        and isinstance(node.left.value, str)
+        and node.left.dtype in ("string", "national", "unknown")
+        and isinstance(node.right, RawSQL)
+        and (
+            _mdi := re.fullmatch(
+                r"(?is)\s*INTERVAL\s+'?(\d+)'?\s+'?([A-Z]+)'?\s*", node.right.sql
+            )
+        )
+        and (_mdlit := _oracle_date_literal(node.left.value.strip())) is not None
+    ):
+        _mop = "-" if node.operator == BinaryOperator.SUB else "+"
+        _mn, _munit = _mdi.group(1), _mdi.group(2).upper().rstrip("S")
+        return f"{_mdlit} {_mop} INTERVAL '{_mn}' {_munit}"
     # An INTERVAL literal in +/- arithmetic renders per target: T-SQL has no
     # interval at all (DATEADD), MySQL takes an unquoted count, Oracle quotes
     # the count alone (INTERVAL '1' DAY — '1 DAY' is ORA-30089), PG accepts
@@ -1763,9 +1789,15 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             amount = n if node.operator == BinaryOperator.ADD else f"-{n}"
             other_sql = _emit_expression(other_side, dialect)
             result = f"DATEADD({unit}, {amount}, {other_sql})"
-            # MySQL date + INTERVAL on a DATE returns a DATE; cast the T-SQL
-            # DATEADD back to DATE when the base is a date-only literal.
-            if SOURCE_DIALECT.get() == "mysql" and _is_date_only_literal(other_side):
+            # MySQL date + INTERVAL on a DATE returns a DATE, but adding a
+            # sub-day unit (HOUR/MINUTE/SECOND) promotes it to a DATETIME
+            # ('2020-01-01' + INTERVAL 1 HOUR = '2020-01-01 01:00:00'). Cast the
+            # T-SQL DATEADD back to DATE only for a whole-day-or-larger unit.
+            if (
+                SOURCE_DIALECT.get() == "mysql"
+                and _is_date_only_literal(other_side)
+                and unit not in ("HOUR", "MINUTE", "SECOND")
+            ):
                 result = f"CAST({result} AS DATE)"
             return result
 

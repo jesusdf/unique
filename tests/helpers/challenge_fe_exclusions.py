@@ -124,12 +124,6 @@ LEDGER: tuple[Excluded, ...] = (
         sql="SELECT CONVERT('abc',BINARY), CONVERT('abc' USING latin1), CAST('abc' AS BINARY)",
     ),
     Excluded(
-        id="my-dateadd",
-        tag="defect-pending-fix",
-        reason="string-typed date + INTERVAL needs a date cast on targets",
-        sql="SELECT DATE_ADD('2020-01-31',INTERVAL 1 MONTH), DATE_ADD('2020-01-01',INTERVAL 1 DAY), DATE_SUB('2020-03-01',INTERVAL 1 DAY), '2020-01-01'+INTERVAL 1 HOUR",
-    ),
-    Excluded(
         id="my-insert-oob",
         tag="defect-pending-fix",
         reason="out-of-bounds INSERT() emulation not guarded",
@@ -152,12 +146,6 @@ LEDGER: tuple[Excluded, ...] = (
         tag="defect-pending-fix",
         reason="float count arg: MySQL rounds, emulation truncates",
         sql="SELECT REPEAT('ab', 2.9) AS r",
-    ),
-    Excluded(
-        id="my-str-plus-interval",
-        tag="defect-pending-fix",
-        reason="string date + INTERVAL needs a date cast on targets",
-        sql="SELECT '2020-01-01' + INTERVAL 1 DAY AS r",
     ),
     Excluded(
         id="my-ts-to-date",

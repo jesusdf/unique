@@ -264,16 +264,47 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
         },
         "postgresql": {"present": ["INTERVAL '1 MONTH'"], "absent": ["DATE_ADD"]},
     },
+    # invalid: the 4th column ('2020-01-01' + INTERVAL 1 HOUR) reached Oracle/PG
+    # as a bare string + interval (ORA-30081 / "invalid input syntax for type
+    # interval"); promote the string to a DATE literal. On T-SQL the DATEADD must
+    # NOT be cast back to DATE for a sub-day unit (HOUR keeps the time component,
+    # value 2020-01-01 01:00:00 — live-verified on all four engines).
     "my-dateadd": {
         "tsql": {
-            "present": ["DATEADD(MONTH, 1, '2020-01-31')"],
-            "absent": ["DATE_ADD"],
+            "present": [
+                "DATEADD(MONTH, 1, '2020-01-31')",
+                "DATEADD(HOUR, 1, '2020-01-01')",
+            ],
+            "absent": ["DATE_ADD", "CAST(DATEADD(HOUR"],
         },
         "oracle": {
-            "present": ["ADD_MONTHS(DATE '2020-01-31', 1)"],
+            "present": [
+                "ADD_MONTHS(DATE '2020-01-31', 1)",
+                "DATE '2020-01-01' + INTERVAL '1' HOUR",
+            ],
             "absent": ["DATE_ADD"],
         },
-        "postgresql": {"present": ["INTERVAL '1 MONTH'"], "absent": ["DATE_SUB"]},
+        "postgresql": {
+            "present": ["INTERVAL '1 MONTH'", "DATE '2020-01-01' + INTERVAL '1' HOUR"],
+            "absent": ["DATE_SUB"],
+        },
+    },
+    # invalid: '2020-01-01' + INTERVAL 1 DAY reached Oracle/PG as a bare string +
+    # interval; promote the string to a DATE literal (result 2020-01-02). The
+    # DATE literal prefix proves the promotion; the unquoted source count is gone.
+    "my-str-plus-interval": {
+        "tsql": {
+            "present": ["CAST(DATEADD(DAY, 1, '2020-01-01') AS DATE)"],
+            "absent": ["INTERVAL"],
+        },
+        "oracle": {
+            "present": ["DATE '2020-01-01' + INTERVAL '1' DAY"],
+            "absent": ["INTERVAL 1 DAY"],
+        },
+        "postgresql": {
+            "present": ["DATE '2020-01-01' + INTERVAL '1' DAY"],
+            "absent": ["INTERVAL 1 DAY"],
+        },
     },
     "my-dayparts": {
         "tsql": {"degrade": True},
@@ -913,20 +944,6 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
         "postgresql": {
             "present": ["SELECT LENGTH(NULL), NULL, NULL, SUBSTRING(NULL, 1, 2)"],
             "absent": ["CONCAT("],
-        },
-    },
-    "my-str-plus-interval": {
-        "tsql": {
-            "present": ["DATEADD(DAY, 1, '2020-01-01')"],
-            "absent": ["INTERVAL 1 DAY"],
-        },
-        "oracle": {
-            "present": ["'2020-01-01' + INTERVAL '1' DAY"],
-            "absent": ["INTERVAL 1 DAY"],
-        },
-        "postgresql": {
-            "present": ["'2020-01-01' + INTERVAL '1' DAY"],
-            "absent": ["INTERVAL 1 DAY"],
         },
     },
     "my-subdate": {
