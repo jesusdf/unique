@@ -26,8 +26,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### T-SQL as source
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot) | [`MERGE` / upsert lowering](#merge--upsert-lowering) | [Multi-table `DELETE`](#multi-table-delete) | [Multi-join `UPDATE`](#multi-join-update) | [`OUTPUT` / `RETURNING`](#output--returning) | [Set-operation `ORDER BY`](#set-operation-order-by) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction) | [Recursive CTE synthesis](#recursive-cte-synthesis) | [Conditional expression translation](#conditional-expression-translation) | [Self-referencing `UPDATE`/`DELETE` subquery (MySQL)](#self-referencing-updatedelete-subquery-mysql) | [Literal parsing recovery](#literal-parsing-recovery) |
-|---|---|---|---|---|---|---|---|---|---|---|
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot) | [`MERGE` / upsert lowering](#merge--upsert-lowering) | [Multi-table `DELETE`](#multi-table-delete) | [Multi-join `UPDATE`](#multi-join-update) | [`OUTPUT` / `RETURNING`](#output--returning) | [Set-operation `ORDER BY`](#set-operation-order-by) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction) | [Recursive CTE synthesis](#recursive-cte-synthesis) | [Conditional expression translation](#conditional-expression-translation) | [Self-referencing `UPDATE`/`DELETE` subquery (MySQL)](#self-referencing-updatedelete-subquery-mysql) | [Literal parsing recovery](#literal-parsing-recovery) | [Error-tolerant cast lowering](#error-tolerant-cast-lowering) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
 
@@ -43,6 +43,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`WHEN NOT MATCHED BY SOURCE` (T-SQL) → PostgreSQL / Oracle](merge-when-not-matched-by-source.md) | tsql → oracle/postgresql | T-SQL's `MERGE` can act on target rows that have **no** matching source row at all (`WHEN NOT MATCHED BY SOURCE THEN UPDATE/DELETE`) — an anti-join over the `ON` predicate. |
 | [Conditional `MATCHED` UPDATE+DELETE pair (T-SQL) → Oracle fold](merge-matched-update-delete-fold.md) | tsql → oracle | A T-SQL `MERGE` may carry two conditional `WHEN MATCHED` clauses in sequence — first-match-wins — one `UPDATE`, one `DELETE`. |
 | [A leading CTE feeding `MERGE` (T-SQL) → Oracle / MySQL](merge-with-leading-cte.md) | tsql → oracle/mysql | `WITH src AS (…) MERGE INTO t USING src ON … WHEN MATCHED THEN UPDATE … WHEN NOT MATCHED THEN INSERT …` — the `MERGE`'s `USING` source is itself a named CTE. |
+| [Canonical `MERGE` (T-SQL/Oracle) → MySQL `INSERT … SELECT … ON DUPLICATE KEY UPDATE`](merge-to-mysql-on-duplicate-key.md) | tsql/oracle → mysql | MySQL has no `MERGE` statement at all. |
 
 #### Multi-table `DELETE`
 
@@ -99,6 +100,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [T-SQL bare money literal (`$12.50`) → the numeric literal it means](money-literal-shorthand.md) | tsql → oracle/postgresql/mysql | T-SQL accepts a bare currency-prefixed literal like `$12.50` or `$100` as a numeric constant, but the underlying parser mis-reads it as a `table.column` reference instead — `$12.50` becomes `Column(this=Literal(50), table=Identifier($12))`, a nonsense "column `50` of table `$12`" — because the digits after the dot look like a member access, not a decimal point. |
 
+#### Error-tolerant cast lowering
+
+| Article | Direction | Description |
+|---|---|---|
+| [Error-tolerant cast (Oracle `DEFAULT … ON CONVERSION ERROR` / T-SQL `TRY_CAST`/`TRY_CONVERT`) → cross-engine guard](error-tolerant-cast-lowering.md) | oracle/tsql → cross-engine | Oracle's `CAST(x AS T DEFAULT d ON CONVERSION ERROR)` returns `d` instead of raising when the conversion fails; T-SQL's `TRY_CAST`/ `TRY_CONVERT` return `NULL` the same way. |
+
 ### T-SQL as target
 
 | [`PIVOT` / `UNPIVOT`](#pivot--unpivot-1) | [Multi-table `DELETE`](#multi-table-delete-1) | [Row-value comparisons](#row-value-comparisons) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-1) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql) | [Recursive CTE synthesis](#recursive-cte-synthesis-1) | [Positional GROUP BY resolved to a column name](#positional-group-by-resolved-to-a-column-name) |
@@ -150,8 +157,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### Oracle as source
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-2) | [Row-value comparisons](#row-value-comparisons-1) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-2) | [Self-referencing `UPDATE`/`DELETE` subquery (MySQL)](#self-referencing-updatedelete-subquery-mysql-1) |
-|---|---|---|---|
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-2) | [Row-value comparisons](#row-value-comparisons-1) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-2) | [Self-referencing `UPDATE`/`DELETE` subquery (MySQL)](#self-referencing-updatedelete-subquery-mysql-1) | [`MERGE` / upsert lowering](#merge--upsert-lowering-1) | [Error-tolerant cast lowering](#error-tolerant-cast-lowering-1) |
+|---|---|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
 
@@ -179,9 +186,21 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [A subquery reading its own `UPDATE`/`DELETE` target → MySQL derived-table wrap](mysql-update-delete-self-reference.md) | all → mysql | MySQL rejects a subquery — anywhere in an `UPDATE`'s `SET` or `WHERE` clause, or a `DELETE`'s `WHERE` clause — that reads from the very table being written, with error 1093 ("You can't specify target table 't' for update in FROM clause"). |
 
+#### `MERGE` / upsert lowering
+
+| Article | Direction | Description |
+|---|---|---|
+| [Canonical `MERGE` (T-SQL/Oracle) → MySQL `INSERT … SELECT … ON DUPLICATE KEY UPDATE`](merge-to-mysql-on-duplicate-key.md) | tsql/oracle → mysql | MySQL has no `MERGE` statement at all. |
+
+#### Error-tolerant cast lowering
+
+| Article | Direction | Description |
+|---|---|---|
+| [Error-tolerant cast (Oracle `DEFAULT … ON CONVERSION ERROR` / T-SQL `TRY_CAST`/`TRY_CONVERT`) → cross-engine guard](error-tolerant-cast-lowering.md) | oracle/tsql → cross-engine | Oracle's `CAST(x AS T DEFAULT d ON CONVERSION ERROR)` returns `d` instead of raising when the conversion fails; T-SQL's `TRY_CAST`/ `TRY_CONVERT` return `NULL` the same way. |
+
 ### Oracle as target
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-3) | [`MERGE` / upsert lowering](#merge--upsert-lowering-1) | [Multi-table `DELETE`](#multi-table-delete-2) | [Multi-join `UPDATE`](#multi-join-update-1) | [`OUTPUT` / `RETURNING`](#output--returning-1) | [Set-operation `ORDER BY`](#set-operation-order-by-1) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-3) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-1) | [Recursive CTE synthesis](#recursive-cte-synthesis-2) | [Conditional expression translation](#conditional-expression-translation-1) | [Literal parsing recovery](#literal-parsing-recovery-1) |
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-3) | [`MERGE` / upsert lowering](#merge--upsert-lowering-2) | [Multi-table `DELETE`](#multi-table-delete-2) | [Multi-join `UPDATE`](#multi-join-update-1) | [`OUTPUT` / `RETURNING`](#output--returning-1) | [Set-operation `ORDER BY`](#set-operation-order-by-1) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-3) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-1) | [Recursive CTE synthesis](#recursive-cte-synthesis-2) | [Conditional expression translation](#conditional-expression-translation-1) | [Literal parsing recovery](#literal-parsing-recovery-1) |
 |---|---|---|---|---|---|---|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
@@ -256,8 +275,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### PostgreSQL as source
 
-| [Multi-join `UPDATE`](#multi-join-update-2) | [Row-value comparisons](#row-value-comparisons-2) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-4) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-2) | [Positional GROUP BY resolved to a column name](#positional-group-by-resolved-to-a-column-name-1) | [Self-referencing `UPDATE`/`DELETE` subquery (MySQL)](#self-referencing-updatedelete-subquery-mysql-2) |
-|---|---|---|---|---|---|
+| [Multi-join `UPDATE`](#multi-join-update-2) | [Row-value comparisons](#row-value-comparisons-2) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-4) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-2) | [Positional GROUP BY resolved to a column name](#positional-group-by-resolved-to-a-column-name-1) | [Self-referencing `UPDATE`/`DELETE` subquery (MySQL)](#self-referencing-updatedelete-subquery-mysql-2) | [`MERGE` / upsert lowering](#merge--upsert-lowering-3) |
+|---|---|---|---|---|---|---|
 
 #### Multi-join `UPDATE`
 
@@ -296,9 +315,15 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [A subquery reading its own `UPDATE`/`DELETE` target → MySQL derived-table wrap](mysql-update-delete-self-reference.md) | all → mysql | MySQL rejects a subquery — anywhere in an `UPDATE`'s `SET` or `WHERE` clause, or a `DELETE`'s `WHERE` clause — that reads from the very table being written, with error 1093 ("You can't specify target table 't' for update in FROM clause"). |
 
+#### `MERGE` / upsert lowering
+
+| Article | Direction | Description |
+|---|---|---|
+| [`INSERT ... ON CONFLICT` / `ON DUPLICATE KEY UPDATE` upsert clause → per-target idiom](upsert-clause-modeled-per-target.md) | postgresql/mysql → cross-engine | PostgreSQL's `INSERT ... ON CONFLICT (key) DO UPDATE/DO NOTHING` and MySQL's `INSERT ... ON DUPLICATE KEY UPDATE` / `INSERT IGNORE` are each one engine's own upsert syntax. |
+
 ### PostgreSQL as target
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-4) | [`MERGE` / upsert lowering](#merge--upsert-lowering-2) | [Multi-table `DELETE`](#multi-table-delete-3) | [Multi-join `UPDATE`](#multi-join-update-3) | [`OUTPUT` / `RETURNING`](#output--returning-2) | [Set-operation `ORDER BY`](#set-operation-order-by-2) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-5) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-3) | [Recursive CTE synthesis](#recursive-cte-synthesis-3) | [Conditional expression translation](#conditional-expression-translation-2) | [Literal parsing recovery](#literal-parsing-recovery-2) |
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-4) | [`MERGE` / upsert lowering](#merge--upsert-lowering-4) | [Multi-table `DELETE`](#multi-table-delete-3) | [Multi-join `UPDATE`](#multi-join-update-3) | [`OUTPUT` / `RETURNING`](#output--returning-2) | [Set-operation `ORDER BY`](#set-operation-order-by-2) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-5) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-3) | [Recursive CTE synthesis](#recursive-cte-synthesis-3) | [Conditional expression translation](#conditional-expression-translation-2) | [Literal parsing recovery](#literal-parsing-recovery-2) |
 |---|---|---|---|---|---|---|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
@@ -373,8 +398,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### MySQL as source
 
-| [Multi-table `DELETE`](#multi-table-delete-4) | [Row-value comparisons](#row-value-comparisons-3) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-6) | [Recursive CTE synthesis](#recursive-cte-synthesis-4) | [Conditional expression translation](#conditional-expression-translation-3) | [Self-referencing `UPDATE`/`DELETE` subquery (MySQL)](#self-referencing-updatedelete-subquery-mysql-3) |
-|---|---|---|---|---|---|
+| [Multi-table `DELETE`](#multi-table-delete-4) | [Row-value comparisons](#row-value-comparisons-3) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-6) | [Recursive CTE synthesis](#recursive-cte-synthesis-4) | [Conditional expression translation](#conditional-expression-translation-3) | [Self-referencing `UPDATE`/`DELETE` subquery (MySQL)](#self-referencing-updatedelete-subquery-mysql-3) | [`MERGE` / upsert lowering](#merge--upsert-lowering-5) |
+|---|---|---|---|---|---|---|
 
 #### Multi-table `DELETE`
 
@@ -412,9 +437,15 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [A subquery reading its own `UPDATE`/`DELETE` target → MySQL derived-table wrap](mysql-update-delete-self-reference.md) | all → mysql | MySQL rejects a subquery — anywhere in an `UPDATE`'s `SET` or `WHERE` clause, or a `DELETE`'s `WHERE` clause — that reads from the very table being written, with error 1093 ("You can't specify target table 't' for update in FROM clause"). |
 
+#### `MERGE` / upsert lowering
+
+| Article | Direction | Description |
+|---|---|---|
+| [`INSERT ... ON CONFLICT` / `ON DUPLICATE KEY UPDATE` upsert clause → per-target idiom](upsert-clause-modeled-per-target.md) | postgresql/mysql → cross-engine | PostgreSQL's `INSERT ... ON CONFLICT (key) DO UPDATE/DO NOTHING` and MySQL's `INSERT ... ON DUPLICATE KEY UPDATE` / `INSERT IGNORE` are each one engine's own upsert syntax. |
+
 ### MySQL as target
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-5) | [`MERGE` / upsert lowering](#merge--upsert-lowering-3) | [Multi-table `DELETE`](#multi-table-delete-5) | [Multi-join `UPDATE`](#multi-join-update-4) | [Set-operation `ORDER BY`](#set-operation-order-by-3) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-7) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-4) | [Recursive CTE synthesis](#recursive-cte-synthesis-5) | [Self-referencing `UPDATE`/`DELETE` subquery (MySQL)](#self-referencing-updatedelete-subquery-mysql-4) | [Literal parsing recovery](#literal-parsing-recovery-3) |
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-5) | [`MERGE` / upsert lowering](#merge--upsert-lowering-6) | [Multi-table `DELETE`](#multi-table-delete-5) | [Multi-join `UPDATE`](#multi-join-update-4) | [Set-operation `ORDER BY`](#set-operation-order-by-3) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-7) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-4) | [Recursive CTE synthesis](#recursive-cte-synthesis-5) | [Self-referencing `UPDATE`/`DELETE` subquery (MySQL)](#self-referencing-updatedelete-subquery-mysql-4) | [Literal parsing recovery](#literal-parsing-recovery-3) |
 |---|---|---|---|---|---|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
@@ -429,6 +460,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [A leading CTE feeding `MERGE` (T-SQL) → Oracle / MySQL](merge-with-leading-cte.md) | tsql → oracle/mysql | `WITH src AS (…) MERGE INTO t USING src ON … WHEN MATCHED THEN UPDATE … WHEN NOT MATCHED THEN INSERT …` — the `MERGE`'s `USING` source is itself a named CTE. |
+| [Canonical `MERGE` (T-SQL/Oracle) → MySQL `INSERT … SELECT … ON DUPLICATE KEY UPDATE`](merge-to-mysql-on-duplicate-key.md) | tsql/oracle → mysql | MySQL has no `MERGE` statement at all. |
 
 #### Multi-table `DELETE`
 
@@ -526,6 +558,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`WHEN NOT MATCHED BY SOURCE` (T-SQL) → PostgreSQL / Oracle](merge-when-not-matched-by-source.md) | tsql → oracle/postgresql | T-SQL's `MERGE` can act on target rows that have **no** matching source row at all (`WHEN NOT MATCHED BY SOURCE THEN UPDATE/DELETE`) — an anti-join over the `ON` predicate. |
 | [Conditional `MATCHED` UPDATE+DELETE pair (T-SQL) → Oracle fold](merge-matched-update-delete-fold.md) | tsql → oracle | A T-SQL `MERGE` may carry two conditional `WHEN MATCHED` clauses in sequence — first-match-wins — one `UPDATE`, one `DELETE`. |
 | [A leading CTE feeding `MERGE` (T-SQL) → Oracle / MySQL](merge-with-leading-cte.md) | tsql → oracle/mysql | `WITH src AS (…) MERGE INTO t USING src ON … WHEN MATCHED THEN UPDATE … WHEN NOT MATCHED THEN INSERT …` — the `MERGE`'s `USING` source is itself a named CTE. |
+| [Canonical `MERGE` (T-SQL/Oracle) → MySQL `INSERT … SELECT … ON DUPLICATE KEY UPDATE`](merge-to-mysql-on-duplicate-key.md) | tsql/oracle → mysql | MySQL has no `MERGE` statement at all. |
+| [`INSERT ... ON CONFLICT` / `ON DUPLICATE KEY UPDATE` upsert clause → per-target idiom](upsert-clause-modeled-per-target.md) | postgresql/mysql → cross-engine | PostgreSQL's `INSERT ... ON CONFLICT (key) DO UPDATE/DO NOTHING` and MySQL's `INSERT ... ON DUPLICATE KEY UPDATE` / `INSERT IGNORE` are each one engine's own upsert syntax. |
 
 ## Multi-table `DELETE`
 
@@ -619,3 +653,9 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [T-SQL bare money literal (`$12.50`) → the numeric literal it means](money-literal-shorthand.md) | tsql → oracle/postgresql/mysql | T-SQL accepts a bare currency-prefixed literal like `$12.50` or `$100` as a numeric constant, but the underlying parser mis-reads it as a `table.column` reference instead — `$12.50` becomes `Column(this=Literal(50), table=Identifier($12))`, a nonsense "column `50` of table `$12`" — because the digits after the dot look like a member access, not a decimal point. |
+
+## Error-tolerant cast lowering
+
+| Article | Direction | Description |
+|---|---|---|
+| [Error-tolerant cast (Oracle `DEFAULT … ON CONVERSION ERROR` / T-SQL `TRY_CAST`/`TRY_CONVERT`) → cross-engine guard](error-tolerant-cast-lowering.md) | oracle/tsql → cross-engine | Oracle's `CAST(x AS T DEFAULT d ON CONVERSION ERROR)` returns `d` instead of raising when the conversion fails; T-SQL's `TRY_CAST`/ `TRY_CONVERT` return `NULL` the same way. |

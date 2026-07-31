@@ -37,4 +37,7 @@ the opposite of the source engines' session-scoped, commit-surviving rows.
 > rows on Oracle against 2 on PostgreSQL across the same commit boundary.
 
 **See Also.** [`ts-select-into-temp`](../../../tests/fixtures/challenge/challenge_sqlserver.sql), [`pg-select-into-ctas`](../../../tests/fixtures/challenge/challenge_postgresql.sql),
-[`pg-temp-oncommit-oracle`](../../../tests/fixtures/challenge/challenge_postgresql.sql).
+[`pg-temp-oncommit-oracle`](../../../tests/fixtures/challenge/challenge_postgresql.sql) ·
+[T-SQL table variable / in-routine `SELECT ... INTO #tmp` → Oracle hoisted GTT](../procedural/routine-scoped-temp-tables-to-oracle-gtt.md)
+(the sibling mechanism for storage declared *inside* a routine body, which
+needs the `CREATE` hoisted out and a per-call `DELETE`/`INSERT` instead).

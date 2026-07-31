@@ -67,6 +67,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [Positional string-splice: `OVERLAY`/`STUFF`/`INSERT` (PostgreSQL/T-SQL/MySQL) → all targets](overlay-stuff-insert-splice.md) | tsql/postgresql/mysql → all | Three engines each have a native "replace `len` characters of `string` at 1-based position `start` with `new`" function: PostgreSQL's `OVERLAY(string PLACING new FROM start [FOR len])`, T-SQL's `STUFF(string, start, len, new)`, MySQL's `INSERT(string, start, len, new)`. |
+| [Oracle extended `INSTR` (occurrence / backward search) over **literal** arguments → the computed position](oracle-instr-literal-fold.md) | oracle → postgresql/mysql/tsql | Oracle's 4-argument `INSTR(s, sub, start, occurrence)` finds the `occurrence`-th match at or after `start` — and, when `start` is negative, searches **backward** from the end of the string instead. |
 
 #### Trimming
 
@@ -100,8 +101,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### Oracle as source
 
-| [NULL and empty-string semantics](#null-and-empty-string-semantics-1) | [Trimming](#trimming-1) | [DECODE mixed-type branches](#decode-mixed-type-branches-1) | [Lookup functions with no target spelling](#lookup-functions-with-no-target-spelling-1) |
-|---|---|---|---|
+| [NULL and empty-string semantics](#null-and-empty-string-semantics-1) | [Trimming](#trimming-1) | [DECODE mixed-type branches](#decode-mixed-type-branches-1) | [Lookup functions with no target spelling](#lookup-functions-with-no-target-spelling-1) | [Repeat, substring and splice](#repeat-substring-and-splice-2) |
+|---|---|---|---|---|
 
 #### NULL and empty-string semantics
 
@@ -127,9 +128,15 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [Functions with no target spelling: MySQL `ELT`/`FIELD`, Oracle `NVL2` → a synthesized `CASE`](no-target-spelling-case-chain.md) | mysql/oracle → all | MySQL's `ELT(n, v1, v2, ...)` (pick the `n`th value) and `FIELD(v, v1, v2, ...)` (find `v`'s 1-based position among the rest, `0` if absent) have no equivalent built-in on any other engine. |
 
+#### Repeat, substring and splice
+
+| Article | Direction | Description |
+|---|---|---|
+| [Oracle extended `INSTR` (occurrence / backward search) over **literal** arguments → the computed position](oracle-instr-literal-fold.md) | oracle → postgresql/mysql/tsql | Oracle's 4-argument `INSTR(s, sub, start, occurrence)` finds the `occurrence`-th match at or after `start` — and, when `start` is negative, searches **backward** from the end of the string instead. |
+
 ### Oracle as target
 
-| [NULL and empty-string semantics](#null-and-empty-string-semantics-2) | [Repeat, substring and splice](#repeat-substring-and-splice-2) | [LIKE and pattern matching](#like-and-pattern-matching) | [Operator precedence](#operator-precedence-1) | [Hex/binary literal folding](#hexbinary-literal-folding-1) | [Case-insensitive pattern matching](#case-insensitive-pattern-matching-1) | [Lookup functions with no target spelling](#lookup-functions-with-no-target-spelling-2) | [String function argument/edge cases](#string-function-argumentedge-cases-1) |
+| [NULL and empty-string semantics](#null-and-empty-string-semantics-2) | [Repeat, substring and splice](#repeat-substring-and-splice-3) | [LIKE and pattern matching](#like-and-pattern-matching) | [Operator precedence](#operator-precedence-1) | [Hex/binary literal folding](#hexbinary-literal-folding-1) | [Case-insensitive pattern matching](#case-insensitive-pattern-matching-1) | [Lookup functions with no target spelling](#lookup-functions-with-no-target-spelling-2) | [String function argument/edge cases](#string-function-argumentedge-cases-1) |
 |---|---|---|---|---|---|---|---|
 
 #### NULL and empty-string semantics
@@ -183,7 +190,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### PostgreSQL as source
 
-| [Repeat, substring and splice](#repeat-substring-and-splice-3) | [LIKE and pattern matching](#like-and-pattern-matching-1) | [Operator precedence](#operator-precedence-2) | [Case-insensitive pattern matching](#case-insensitive-pattern-matching-2) |
+| [Repeat, substring and splice](#repeat-substring-and-splice-4) | [LIKE and pattern matching](#like-and-pattern-matching-1) | [Operator precedence](#operator-precedence-2) | [Case-insensitive pattern matching](#case-insensitive-pattern-matching-2) |
 |---|---|---|---|
 
 #### Repeat, substring and splice
@@ -213,7 +220,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### PostgreSQL as target
 
-| [NULL and empty-string semantics](#null-and-empty-string-semantics-3) | [Repeat, substring and splice](#repeat-substring-and-splice-4) | [Hex/binary literal folding](#hexbinary-literal-folding-2) | [Trimming](#trimming-2) | [DECODE mixed-type branches](#decode-mixed-type-branches-2) | [Lookup functions with no target spelling](#lookup-functions-with-no-target-spelling-3) | [String function argument/edge cases](#string-function-argumentedge-cases-2) |
+| [NULL and empty-string semantics](#null-and-empty-string-semantics-3) | [Repeat, substring and splice](#repeat-substring-and-splice-5) | [Hex/binary literal folding](#hexbinary-literal-folding-2) | [Trimming](#trimming-2) | [DECODE mixed-type branches](#decode-mixed-type-branches-2) | [Lookup functions with no target spelling](#lookup-functions-with-no-target-spelling-3) | [String function argument/edge cases](#string-function-argumentedge-cases-2) |
 |---|---|---|---|---|---|---|
 
 #### NULL and empty-string semantics
@@ -228,6 +235,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [Positional string-splice: `OVERLAY`/`STUFF`/`INSERT` (PostgreSQL/T-SQL/MySQL) → all targets](overlay-stuff-insert-splice.md) | tsql/postgresql/mysql → all | Three engines each have a native "replace `len` characters of `string` at 1-based position `start` with `new`" function: PostgreSQL's `OVERLAY(string PLACING new FROM start [FOR len])`, T-SQL's `STUFF(string, start, len, new)`, MySQL's `INSERT(string, start, len, new)`. |
 | [3-argument `CHARINDEX(needle, s, start)` (T-SQL) → PostgreSQL zero-guarded `POSITION`](charindex-start-argument-zero-guard.md) | tsql → postgresql | T-SQL's `CHARINDEX(needle, s, start)` searches only from `start` onward, and returns `0` (not `NULL`) when the needle isn't found anywhere from `start` on. |
+| [Oracle extended `INSTR` (occurrence / backward search) over **literal** arguments → the computed position](oracle-instr-literal-fold.md) | oracle → postgresql/mysql/tsql | Oracle's 4-argument `INSTR(s, sub, start, occurrence)` finds the `occurrence`-th match at or after `start` — and, when `start` is negative, searches **backward** from the end of the string instead. |
 
 #### Hex/binary literal folding
 
@@ -261,7 +269,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### MySQL as source
 
-| [Repeat, substring and splice](#repeat-substring-and-splice-5) | [Empty-needle search guard](#empty-needle-search-guard-1) | [Lookup functions with no target spelling](#lookup-functions-with-no-target-spelling-4) | [Operator precedence](#operator-precedence-3) |
+| [Repeat, substring and splice](#repeat-substring-and-splice-6) | [Empty-needle search guard](#empty-needle-search-guard-1) | [Lookup functions with no target spelling](#lookup-functions-with-no-target-spelling-4) | [Operator precedence](#operator-precedence-3) |
 |---|---|---|---|
 
 #### Repeat, substring and splice
@@ -290,7 +298,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### MySQL as target
 
-| [NULL and empty-string semantics](#null-and-empty-string-semantics-4) | [Repeat, substring and splice](#repeat-substring-and-splice-6) | [LIKE and pattern matching](#like-and-pattern-matching-2) | [Operator precedence](#operator-precedence-4) | [Hex/binary literal folding](#hexbinary-literal-folding-3) | [Trimming](#trimming-3) | [DECODE mixed-type branches](#decode-mixed-type-branches-3) | [Case-insensitive pattern matching](#case-insensitive-pattern-matching-3) | [Lookup functions with no target spelling](#lookup-functions-with-no-target-spelling-5) | [String function argument/edge cases](#string-function-argumentedge-cases-3) |
+| [NULL and empty-string semantics](#null-and-empty-string-semantics-4) | [Repeat, substring and splice](#repeat-substring-and-splice-7) | [LIKE and pattern matching](#like-and-pattern-matching-2) | [Operator precedence](#operator-precedence-4) | [Hex/binary literal folding](#hexbinary-literal-folding-3) | [Trimming](#trimming-3) | [DECODE mixed-type branches](#decode-mixed-type-branches-3) | [Case-insensitive pattern matching](#case-insensitive-pattern-matching-3) | [Lookup functions with no target spelling](#lookup-functions-with-no-target-spelling-5) | [String function argument/edge cases](#string-function-argumentedge-cases-3) |
 |---|---|---|---|---|---|---|---|---|---|
 
 #### NULL and empty-string semantics
@@ -304,6 +312,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [Positional string-splice: `OVERLAY`/`STUFF`/`INSERT` (PostgreSQL/T-SQL/MySQL) → all targets](overlay-stuff-insert-splice.md) | tsql/postgresql/mysql → all | Three engines each have a native "replace `len` characters of `string` at 1-based position `start` with `new`" function: PostgreSQL's `OVERLAY(string PLACING new FROM start [FOR len])`, T-SQL's `STUFF(string, start, len, new)`, MySQL's `INSERT(string, start, len, new)`. |
+| [Oracle extended `INSTR` (occurrence / backward search) over **literal** arguments → the computed position](oracle-instr-literal-fold.md) | oracle → postgresql/mysql/tsql | Oracle's 4-argument `INSTR(s, sub, start, occurrence)` finds the `occurrence`-th match at or after `start` — and, when `start` is negative, searches **backward** from the end of the string instead. |
 
 #### LIKE and pattern matching
 
@@ -355,7 +364,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### Cross-engine / multi-directional
 
-| [Concatenation](#concatenation) | [NULL and empty-string semantics](#null-and-empty-string-semantics-5) | [LIKE and pattern matching](#like-and-pattern-matching-3) | [Repeat, substring and splice](#repeat-substring-and-splice-7) | [Trimming](#trimming-4) | [Length and encoding](#length-and-encoding) | [Unmapped built-ins](#unmapped-built-ins) | [Collation and ordering](#collation-and-ordering) | [Operator precedence](#operator-precedence-5) |
+| [Concatenation](#concatenation) | [NULL and empty-string semantics](#null-and-empty-string-semantics-5) | [LIKE and pattern matching](#like-and-pattern-matching-3) | [Repeat, substring and splice](#repeat-substring-and-splice-8) | [Trimming](#trimming-4) | [Length and encoding](#length-and-encoding) | [Unmapped built-ins](#unmapped-built-ins) | [Collation and ordering](#collation-and-ordering) | [Operator precedence](#operator-precedence-5) |
 |---|---|---|---|---|---|---|---|---|
 
 #### Concatenation
@@ -452,6 +461,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Positional string-splice: `OVERLAY`/`STUFF`/`INSERT` (PostgreSQL/T-SQL/MySQL) → all targets](overlay-stuff-insert-splice.md) | tsql/postgresql/mysql → all | Three engines each have a native "replace `len` characters of `string` at 1-based position `start` with `new`" function: PostgreSQL's `OVERLAY(string PLACING new FROM start [FOR len])`, T-SQL's `STUFF(string, start, len, new)`, MySQL's `INSERT(string, start, len, new)`. |
 | [String-function positional-argument edge cases: negative `LEFT`, T-SQL `LEN` trailing spaces, MySQL fractional rounding](string-function-argument-edge-cases.md) | cross-engine | `LEFT`/`SUBSTRING`/`REPEAT`'s position and length arguments, and T-SQL `LEN`, each have one engine-specific edge-case rule that a literal translation would silently drop: PostgreSQL's `LEFT(s, -n)` means something different from a plain clamp, T-SQL's `LEN` counts differently from every other engine's length function, and MySQL rounds a fractional numeric argument where the other engines truncate it. |
 | [3-argument `CHARINDEX(needle, s, start)` (T-SQL) → PostgreSQL zero-guarded `POSITION`](charindex-start-argument-zero-guard.md) | tsql → postgresql | T-SQL's `CHARINDEX(needle, s, start)` searches only from `start` onward, and returns `0` (not `NULL`) when the needle isn't found anywhere from `start` on. |
+| [Oracle extended `INSTR` (occurrence / backward search) over **literal** arguments → the computed position](oracle-instr-literal-fold.md) | oracle → postgresql/mysql/tsql | Oracle's 4-argument `INSTR(s, sub, start, occurrence)` finds the `occurrence`-th match at or after `start` — and, when `start` is negative, searches **backward** from the end of the string instead. |
 
 ## Trimming
 

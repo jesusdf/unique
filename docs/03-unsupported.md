@@ -104,13 +104,13 @@ On a PostgreSQL target they are preserved faithfully (bracket spelling and
 
 **Engines:** Oracle (PL/SQL), PostgreSQL (plpgsql)
 
-T-SQL and MySQL have no constant local variables. A `name CONSTANT type`
-declaration is emitted as the plain mutable declaration on those targets —
-a safe relaxation for valid programs (the initializer still applies; only
-the compile-time reassignment guard is lost). Oracle↔PostgreSQL keep
-`CONSTANT` intact. Cursor scrollability (`[NO] SCROLL`) is likewise kept on
-PostgreSQL and T-SQL (`SCROLL`) and dropped on MySQL/Oracle, whose cursors
-are forward-only.
+T-SQL and MySQL have no constant local variables, and no cursor
+scrollability modifier. A `name CONSTANT type` declaration and a cursor's
+`[NO] SCROLL` modifier both convert faithfully to the plain, unmarked form
+on any target that cannot express them — a safe relaxation for valid
+programs (the initializer/query still applies; only the compile-time
+reassignment guard or scroll-fetch support is lost) — see
+[the rationale article](rationale/procedural/constant-and-scroll-relaxation.md).
 
 ### 1.6 Function/Procedure Overloading
 
@@ -238,26 +238,28 @@ so an exotic custom format may still need manual review.
 #### Supported function translations
 
 Within procedural bodies, the engine translates these built-in functions
-across dialects (name mapping for same-arity equivalents, plus dedicated
-handling for the forms below):
-
-- **Current timestamp**: `GETDATE()` ↔ `SYSDATE` ↔ `NOW()`, with the correct
-  parenthesization per engine.
-- **`DATEADD(part, n, date)`**: → Oracle (`date + n` for days, `ADD_MONTHS`,
-  `NUMTODSINTERVAL`), PostgreSQL (`date + INTERVAL 'n unit'`), MySQL
-  (`DATE_ADD(date, INTERVAL n unit)`).
-- **`DATEDIFF(part, start, end)`**: → Oracle (`end - start`,
-  `MONTHS_BETWEEN`), PostgreSQL (`end::date - start::date`), MySQL
-  (`DATEDIFF` for days, `TIMESTAMPDIFF` otherwise).
-- **String/null functions**: `LEN`/`LENGTH`/`CHAR_LENGTH`,
-  `SUBSTRING`/`SUBSTR`, `ISNULL`/`NVL`/`COALESCE`/`IFNULL`, `UPPER`,
-  `LOWER`, `REPLACE`, `CEILING`/`CEIL`, and others.
-
-Functions that require argument reordering (e.g. `CHARINDEX`↔`INSTR`↔
-`LOCATE`) or decomposition (`DECODE`→`CASE`) convert faithfully — arguments
-are re-slotted / the expression is rebuilt on the AST, with no comment or
-warning needed. Unknown date parts or non-standard call shapes degrade to a
-carrier + warning for manual handling.
+across dialects by name (current timestamp `GETDATE()` ↔ `SYSDATE` ↔
+`NOW()`, `LEN`/`LENGTH`/`CHAR_LENGTH`, `ISNULL`/`NVL`/`COALESCE`/`IFNULL`,
+and the rest of the same-arity catalog — see the generated
+[mappings reference](reference/mappings-tsql-oracle.md) and its per-pair
+siblings for the full table). `DATEADD`/`DATEDIFF` and the argument-
+reordering or decomposition forms (`CHARINDEX`↔`INSTR`↔`LOCATE`,
+`DECODE`→`CASE`) need real per-target rebuilding rather than a bare rename;
+the mechanism and its edge cases each have a dedicated rationale article:
+[DATEADD(MONTH) → Oracle
+ADD_MONTHS](rationale/datetime/dateadd-month-to-oracle-add-months.md) and
+[the reverse](rationale/datetime/oracle-add-months-to-dateadd.md),
+[DATEDIFF QUARTER/WEEK and DATEPART
+WEEKDAY](rationale/datetime/datediff-datepart-unit-maps.md), [date ± int /
+timestamp − timestamp](rationale/datetime/temporal-plus-minus-arithmetic.md),
+[`CHARINDEX` start-argument zero
+guard](rationale/strings-collation/charindex-start-argument-zero-guard.md),
+[`LOCATE` empty-needle
+guard](rationale/strings-collation/locate-empty-needle-guard.md), and
+[`DECODE` mixed-type branch
+cast](rationale/strings-collation/decode-mixed-type-branch-cast.md). Unknown
+date parts or non-standard call shapes degrade to a carrier + warning for
+manual handling.
 
 **Non-reproducible date/number masks (⚠️ degrade to a carrier + warning).** A
 **reproducible** mask — standard date fields, or a plain grouping/decimal number
@@ -346,10 +348,11 @@ block performs a partial mutation before failing.
 ### 3.6 MERGE Statement → MySQL
 
 MySQL lacks MERGE. The canonical pattern (one unconditional WHEN MATCHED
-UPDATE plus one unconditional WHEN NOT MATCHED INSERT) is rewritten as
-`INSERT ... SELECT ... ON DUPLICATE KEY UPDATE`; the rewrite relies on a
-UNIQUE or PRIMARY KEY covering the ON-clause columns, which is noted in a
-carrier comment and mirrored in `result.warnings`.
+UPDATE plus one unconditional WHEN NOT MATCHED INSERT) converts faithfully to
+`INSERT ... SELECT ... ON DUPLICATE KEY UPDATE`, conditioned on a UNIQUE or
+PRIMARY KEY covering the ON-clause columns (noted in a carrier comment and
+mirrored in `result.warnings`) — see
+[the rationale article](rationale/dml/merge-to-mysql-on-duplicate-key.md).
 
 More complex MERGEs (conditional WHEN clauses, WHEN MATCHED DELETE, multiple
 branches) are preserved as a documented comment and registered in
@@ -493,16 +496,13 @@ silently:
 - **`SQL%ROWCOUNT` in EXPRESSION position → PostgreSQL** (B37): PostgreSQL reads
   the last statement's row count only through the `GET DIAGNOSTICS x = ROW_COUNT`
   *statement*, so an inline reference (`IF SQL%ROWCOUNT <> 1`, `v := SQL%ROWCOUNT
-  + 1`, a call argument, a `RETURN`) can no longer be substituted in place — it
-  used to degrade to a `UNIQUE-1033` carrier. It is now lowered by hoisting a
-  `GET DIAGNOSTICS uq_rowcount = ROW_COUNT;` (a `bigint` local declared once per
-  routine) immediately before the referencing statement and substituting the
-  local. Oracle's `SQL%ROWCOUNT` names the last executed DML, which in
-  straight-line code is the preceding statement, so a capture placed just before
-  the use reads the same value (live-verified on PostgreSQL). A **re-evaluated
-  loop/exit condition** (`WHILE SQL%ROWCOUNT > 0`) cannot be captured once and
-  keeps the honest `UNIQUE-1033` carrier + warning. T-SQL (`@@ROWCOUNT`) and
-  MySQL (`ROW_COUNT()`) already read the count inline and are unaffected.
+  + 1`, a call argument, a `RETURN`) is lowered by hoisting a capture ahead of the
+  referencing statement instead — see
+  [the rationale article](rationale/procedural/rowcount-expression-hoist-to-postgresql.md).
+  Only a **re-evaluated loop/exit condition** (`WHILE SQL%ROWCOUNT > 0`), which
+  cannot be captured once, remains a genuine limit: it keeps the honest
+  `UNIQUE-1033` carrier + warning. T-SQL (`@@ROWCOUNT`) and MySQL (`ROW_COUNT()`)
+  already read the count inline and are unaffected.
 - **PostgreSQL `SET TRANSACTION [ISOLATION LEVEL <lvl>] READ ONLY|READ
   WRITE`** (audit N7/B8): MySQL comma-joins the isolation level and access
   mode into one statement; Oracle prefers the access mode (its `READ ONLY`
@@ -517,9 +517,11 @@ silently:
   a plain literal or `CHR()`).
 - **PostgreSQL array column types** (`TEXT[]`): no cross-engine model (§7) —
   the output gate degrades the statement off PG.
-- **Upsert semantics across engines** (audit B1/N1): the upsert clause is
-  modeled and lowered per target (native PG⟷MySQL, MERGE for T-SQL/Oracle), but
-  two divergences are annotated + warned rather than shipped silently:
+- **Upsert semantics across engines** (audit B1/N1): the upsert clause
+  converts faithfully to each target's own idiom (native PostgreSQL/MySQL,
+  an insert-only MERGE for T-SQL/Oracle) — see
+  [the rationale article](rationale/dml/upsert-clause-modeled-per-target.md).
+  Two divergences are annotated + warned rather than shipped silently:
   - **MySQL `ON DUPLICATE KEY UPDATE` fires on *any* unique/primary key**, not a
     single named conflict target — so a PG `ON CONFLICT (k)` mapped to MySQL, or
     a MySQL-source upsert whose target key had to be assumed from the in-script
@@ -567,14 +569,15 @@ another cursor can no longer corrupt them:
 ### 3.21 Oracle Extended `INSTR` (occurrence / backward search)
 
 Oracle's 4-argument `INSTR(s, sub, start, occurrence)` and the negative-start
-backward search have no equivalent on MySQL/PostgreSQL/T-SQL. Literal
-arguments are folded to Oracle's computed value at transpile time; a
-non-literal occurrence or negative start degrades to `NULL` with a `UNIQUE:`
-note and a warning. Compile-time literal folds of the same kind cover the
-LENGTH family (per-source code-unit semantics, including T-SQL LEN's UTF-16
-count and right-trim), substring edge positions, MySQL byte-string decodes
-(`CAST(0x… AS CHAR)`, `CHAR(n USING cs)`), string-operand arithmetic, and
-T-SQL binary `CONVERT`s.
+backward search have no runtime equivalent on MySQL/PostgreSQL/T-SQL. Over
+**literal** arguments the value is computed at transpile time and emitted as
+the plain number — see
+[the rationale article](rationale/strings-collation/oracle-instr-literal-fold.md),
+which also covers the sibling literal-fold family (LENGTH per-source
+code-unit semantics, substring edge positions, MySQL byte-string decodes,
+string-operand arithmetic, T-SQL binary `CONVERT`s). A **non-literal**
+occurrence or negative start cannot be computed ahead of time and has no
+runtime fallback: it degrades to `NULL` with a `UNIQUE:` note and a warning.
 
 ### 3.20 PostgreSQL `money` Formatting
 
@@ -658,22 +661,15 @@ point beyond Oracle `NCHR`'s 16-bit range — see
 
 ### 3.15 Error-Tolerant Cast (`DEFAULT … ON CONVERSION ERROR`)
 
-Oracle's `CAST(x AS T DEFAULT d ON CONVERSION ERROR)` returns `d` when the
-conversion fails instead of raising. It is translated so the fallback is never
-silently dropped: T-SQL uses `COALESCE(TRY_CAST(x AS T), d)`; PostgreSQL and MySQL
-have no error-safe cast, so a **numeric** target is guarded with a validation
-`CASE` (`x ~`/`REGEXP` a number pattern, else `d`). A **literal** operand is folded
-at transpile time — a valid number casts, a non-numeric one becomes `d` — because
-PostgreSQL constant-folds the `THEN` branch during planning and would raise on a
-bad constant before the guard runs. A non-numeric target with a fallback keeps the
-plain cast and flags the dropped default with a carrier.
-
-T-SQL `TRY_CAST`/`TRY_CONVERT` (which yield `NULL` on a bad value) use the same
-mechanism: over a **column** — where nothing can be folded — a numeric target is
-wrapped in the runtime guard with `ELSE NULL` (`INT`-family targets guard on an
-integer-only pattern; `DECIMAL`/`FLOAT` on the general numeric one), so a
-non-numeric row yields `NULL` instead of a MySQL `0` or a PostgreSQL runtime abort.
-A string-type `TRY` cast never fails and stays a faithful plain `CAST`.
+Oracle's `CAST(x AS T DEFAULT d ON CONVERSION ERROR)` and T-SQL's
+`TRY_CAST`/`TRY_CONVERT` translate faithfully across engines (T-SQL
+`COALESCE(TRY_CAST(x AS T), d)`; a validation-guarded `CASE` on
+PostgreSQL/MySQL, which have no error-safe cast at all) — see
+[the rationale article](rationale/dml/error-tolerant-cast-lowering.md). A
+**non-numeric** target type has no failure mode to guard on PostgreSQL/MySQL
+(a string cast never fails), so a fallback paired with one keeps the plain,
+valid cast and flags the dropped default with a carrier instead — the
+genuine remaining limit.
 
 ### 3.14 Case-Insensitive Collation Under DISTINCT / ORDER BY
 
@@ -773,23 +769,18 @@ only partially supported:
   assignments) so these bodies parse correctly. Chained DML such as
   `INSERT ... SELECT` and `UPDATE ... SET` is kept intact. Rare edge cases
   with unusual formatting may still need review.
-- **`DECLARE @t TABLE (...)`** (table variables): on **Oracle**, hoisted to a
-  schema-level **Global Temporary Table** emitted before the routine (a CREATE
-  cannot live in a PL/SQL block, and the block references it statically), with a
-  per-routine-unique name and renamed references; an accompanying `INSERT … OUTPUT
-  … INTO @t` is a documented carrier (Oracle `RETURNING` cannot target a table, so
-  the GTT is populated manually). **PostgreSQL/MySQL** have no direct equivalent —
-  the column list is captured verbatim (use a collection type or temporary table).
-- **`SELECT ... INTO #tmp`** inside a procedure (a T-SQL temp table, not a
-  variable): lowered to the target's temp-table idiom rather than the invalid
-  variable-`INTO` form. **PostgreSQL/MySQL** emit `CREATE TEMPORARY TABLE tmp AS
-  SELECT …` preceded by a `DROP … IF EXISTS` (so a second `CALL` in the same
-  session recreates it — temp tables outlive a statement there). **Oracle**
-  hoists a session **Global Temporary Table** before the routine (same machinery
-  as `@table` variables) and the body clears + repopulates it
-  (`DELETE`/`INSERT`) so each call is isolated. Outside a procedure (in a
-  function or trigger, where the Oracle CREATE cannot be hoisted) it falls back
-  to the documented warned degrade.
+- **`DECLARE @t TABLE (...)`** (table variables) and in-procedure **`SELECT
+  ... INTO #tmp`** (a T-SQL temp table, not a variable) both convert
+  faithfully on every target — a real temp table declared inline on
+  PostgreSQL/MySQL, and a schema-level **Global Temporary Table** hoisted
+  before the routine on **Oracle** (whose PL/SQL cannot run a `CREATE`
+  inline) — see
+  [the rationale article](rationale/procedural/routine-scoped-temp-tables-to-oracle-gtt.md).
+  An accompanying `INSERT … OUTPUT … INTO @t` is a documented carrier
+  instead on Oracle (`RETURNING` cannot target a table). Outside a
+  procedure (in a function or trigger, where Oracle's `CREATE` cannot be
+  hoisted), `SELECT ... INTO #tmp` falls back to the documented warned
+  degrade on Oracle.
 - **`SELECT ... INTO @var`** combined with `OUTPUT ... INTO`: the `OUTPUT`
   clause is engine-specific and emitted as raw SQL.
 - **Variable-assignment `SELECT`** (`SELECT @x = col`): handled for the
