@@ -42,17 +42,16 @@ synthesized derived table (`uq_setarm`) instead, and the set operation's own
 trailing `ORDER BY`/`LIMIT`, if any, still attaches to the combined result
 as normal.
 
-**Discussion.** A parenthesized arm arrives from sqlglot as a `Subquery`
-wrapping a `Select`; the earlier converter read that wrapper as an empty
-select, shipping `SELECT * UNION ALL SELECT *` with the arm's own `FROM`
-and columns dropped entirely. The fix unwraps the arm's real `FROM`/columns
-— but a plain unwrap is not always safe: an arm's own `ORDER BY`/`LIMIT`,
-once unparenthesized, would bind to the **whole** set operation rather than
-to the arm it belongs to (true on every target: a trailing `ORDER BY`/
-`LIMIT` after the last arm of a `UNION`/`EXCEPT`/`INTERSECT` always scopes
-to the combined result, never to one arm). So an arm carrying one of those
-clauses is wrapped in a derived table instead of unwrapped bare, keeping
-its original per-arm scope.
+**Discussion.** The parentheses around a set-operation arm are themselves
+insignificant — dropping them changes nothing, since a plain arm has no
+scope of its own to lose. An arm's own `ORDER BY`/`LIMIT` is different: on
+every target, a trailing `ORDER BY`/`LIMIT` after the last arm of a
+`UNION`/`EXCEPT`/`INTERSECT` always scopes to the *combined* result, never
+to one arm alone, so simply dropping that arm's parentheses would move its
+`ORDER BY`/`LIMIT` from applying to that one arm to applying to the whole
+set operation instead. Wrapping such an arm in a derived table keeps its
+`ORDER BY`/`LIMIT` scoped to that arm, exactly as the parentheses did in
+the source.
 
 > **Note** faithful — live-verified above.
 

@@ -47,38 +47,31 @@ returns the expected 4-row result, `USING` correctly rewritten to `x.a =
 y.a` and the trailing comma-join to `t3` rewritten to an explicit `CROSS
 JOIN`.
 
-**Discussion.** The parenthesized join group arrives from sqlglot as a
-`Subquery` wrapping a `Table`, carrying its own `joins` list the converter
-previously never read — the whole group, `USING` clause included, shipped
-raw and unparsed. Since parentheses around a join tree are semantically
-transparent (they only group; they never scope anything the way a derived
-table's `ORDER BY` does — see the entries above), the fix unwraps the group
-and hoists its table and joins straight into the outer `FROM` list,
-preserving emission order so the surrounding comma-join grouping still
-reads correctly.
+**Discussion.** Parentheses around a join tree are semantically
+transparent — they only group; they never scope anything the way a derived
+table's `ORDER BY` does (see the entries above) — so the group unwraps and
+its table and joins hoist straight into the outer `FROM` list, preserving
+emission order so the surrounding comma-join grouping still reads
+correctly.
 
 The column-aliased table reference is the opposite case: it *is* a real
 rewrite (positional column renaming). T-SQL accepts a derived table's own
 column-alias list, so `tbl AS alias(c1, c2)` becomes `(SELECT * FROM tbl)
-AS alias(c1, c2)` there. Oracle genuinely has no equivalent at all —
+AS alias(c1, c2)` there. Oracle has no equivalent at all —
 `SELECT xx1 FROM (SELECT * FROM x) xx(xx1, xx2)` is a live `ORA-03048`
-syntax error (verified directly against Oracle) — so the Oracle degrade is
-a real engine limit. **MySQL's degrade, however, does not appear to be
-one**: MySQL 8 accepts the identical derived-table column-alias syntax
-live (`SELECT xx1 FROM (SELECT * FROM x) AS xx(xx1, xx2)` runs and returns
-the aliased column, verified directly against MySQL), yet the current gate
-(`transformer.py::_gate_column_alias_ref`) degrades MySQL together with
-Oracle and its docstring asserts neither engine "has the spelling." That
-docstring claim is accurate for Oracle but not for MySQL as tested here —
-flagged as a discrepancy for a maintainer to evaluate (a possible fix, not
-an approved permanent limit); this entry documents the transpiler's
-current, live behavior rather than asserting the MySQL degrade is required.
+syntax error (verified directly against Oracle), so the whole statement
+degrades to a documented carrier there. MySQL 8 in fact accepts the
+identical derived-table column-alias syntax natively (`SELECT xx1 FROM
+(SELECT * FROM x) AS xx(xx1, xx2)` runs and returns the aliased column,
+verified directly against MySQL) — but a MySQL target still degrades to a
+carrier alongside Oracle rather than rendering the syntax natively.
 
 > **Note** faithful for the unwrap (live-verified above) and for the T-SQL
-> column-alias rewrite (live-verified above). Oracle's whole-degrade is a
-> genuine engine limit (live `ORA-03048`, verified). MySQL's whole-degrade
-> is the current, live transpiler behavior — not independently verified as
-> *required*; see Discussion.
+> column-alias rewrite (live-verified above). Oracle's carrier degrade
+> reflects a genuine engine limit (live `ORA-03048`, verified).
+> **Warning** the MySQL carrier degrade is broader than MySQL itself
+> requires — MySQL accepts the native syntax — so a MySQL target does not
+> yet render this construct in its own idiom, even though it could.
 
 **See Also.** [`test_pg_source_wave1.py::TestParenthesizedJoinRelations`](../../../tests/integration/test_pg_source_wave1.py),
 [`test_pg_source_wave1.py::TestTableColumnAliases`](../../../tests/integration/test_pg_source_wave1.py).

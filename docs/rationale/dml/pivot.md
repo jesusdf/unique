@@ -19,8 +19,7 @@ SELECT * FROM (SELECT dept, v FROM t) src PIVOT (SUM(v) FOR dept IN ([A],[B])) p
 --   SELECT SUM(CASE WHEN dept = 'A' THEN v END) AS A,
 --          SUM(CASE WHEN dept = 'B' THEN v END) AS B
 --   FROM (SELECT dept, v FROM t) src
--- Live (rows A/1, A/2, B/5): PIVOT = one row (A=3, B=5); the old silent drop
--- returned the 3 raw rows instead.
+-- Live (rows A/1, A/2, B/5): PIVOT = one row (A=3, B=5).
 ```
 
 T-SQL keeps its native `PIVOT`; Oracle re-spells the
@@ -30,7 +29,7 @@ B))`). PostgreSQL/MySQL get a conditional-aggregation derived table —
 source column that is neither the pivot column nor the aggregate argument.
 When the source's projected columns are not visible (a bare table or
 `SELECT *`), the grouping columns cannot be determined and the relation
-degrades to a warned carrier instead (`emit_relations.py::_emit_pivot_relation`).
+degrades to a warned carrier instead.
 
 **Discussion.** PostgreSQL and MySQL have no `PIVOT`
 operator at all. Oracle keeps `PIVOT` natively but needs an explicit
@@ -38,9 +37,7 @@ operator at all. Oracle keeps `PIVOT` natively but needs an explicit
 T-SQL's default `[v]` bracket naming.
 
 > **Note** faithful when the source projection is visible.
-> `[limit]` (warned carrier) otherwise. The original conversion silently
-> **dropped the whole `PIVOT` operator** with no warning — a defect this
-> lowering replaced.
+> `[limit]` (warned carrier) otherwise.
 
 **See Also.** [`reda-ts-pivot`](../../../tests/fixtures/challenge/challenge_sqlserver.sql) · [§2](../../03-unsupported.md) (T-SQL
 PIVOT/UNPIVOT row).
