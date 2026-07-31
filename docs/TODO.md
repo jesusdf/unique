@@ -107,12 +107,12 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
   warned whole-degrade outside the bound — never a silent dedup. 28 tests
   incl. live multiset value checks on 4 engines; new rationale article +
   compatibility row. `test_setop_all.py`.
-- **B52** (P2, found during B50) — a CTE directly preceding a set-op chain
-  (`WITH … SELECT … INTERSECT ALL SELECT …`) loses its CTEs: sqlglot hangs
-  `with_` off the Intersect/Except/Union node and `_convert_union`
-  (`convert.py`) never reads it. Semi-warned (the UNIQUE-1228 unread-args
-  tripwire fires) but the CTE text is gone from the output — promote to a
-  real handler that converts the WITH.
+- ~~B52~~ — DONE 2026-07-31: `_convert_union` reads the set-op node's
+  `with` and routes it through the shared `_convert_cte` machinery onto the
+  head arm; remaining SetOperation args enumerated per guardrail 7 (all
+  either handled or never populated by real grammars, tripwire backstops).
+  Composes with B50's ALL rewrite for free. 95 tests incl. 12 live-value;
+  `test_setop_cte.py`.
 - ~~B51~~ — DONE 2026-07-31: `options` consumed into
   `SelectStatement.query_hints`; MAXRECURSION drops under `UNIQUE-1238`
   (divergence stated), other hints under `UNIQUE-1239`; tsql→tsql keeps the
