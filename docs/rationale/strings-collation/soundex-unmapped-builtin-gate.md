@@ -32,20 +32,17 @@ alongside a `SOUNDEX` call in the same statement — the degrade is scoped to
 catalog (it lives only in the optional `fuzzystrmatch` extension, which
 Unique cannot assume is installed on the target database) — a genuine,
 source-engine-built-in-but-target-has-no-form gap, not an implementation
-oversight. This is the reference example the built-in catalog gate
-(`docs/03-unsupported.md` §2.1) is written around: a call that is a built-in
-of the *source* engine (so it is clearly meant to run, not a user object)
-but absent from the *target*'s catalog degrades the **whole statement**
-rather than shipping a call the target engine would reject outright.
+oversight. A call that is a built-in of the *source* engine (so it is
+clearly meant to run, not a user object) but absent from the *target*'s
+catalog degrades the **whole statement** rather than shipping a call the
+target engine would reject outright.
 
 > **Warning** **Documented limit, warned** — a carrier + the
-> `docs/03-unsupported.md` §2.1 catalog entry (`unsupported` finding), never a
-> silently-invalid `SOUNDEX(...)` call on PostgreSQL. Deliberately **not**
-> special-cased with a hand-built `SOUNDEX` emulation — it is kept as the
-> worked example of the general unmapped-built-in gate mechanism, which is
-> meant to catch the long tail of similar gaps (`GENERATE_SERIES`→Oracle,
-> `LISTAGG`→MySQL, `INITCAP`→T-SQL/MySQL, …) rather than being patched one
-> function at a time.
+> `docs/03-unsupported.md` §2.1 catalog entry, never a silently-invalid
+> `SOUNDEX(...)` call on PostgreSQL. No bespoke `SOUNDEX` emulation is
+> substituted; the same general unmapped-built-in handling applies to any
+> other source built-in missing from a target's catalog
+> (`GENERATE_SERIES`→Oracle, `LISTAGG`→MySQL, `INITCAP`→T-SQL/MySQL, …).
 
 **See Also.** Corpus [`ora-soundex`](../../../tests/fixtures/challenge/challenge_oracle.sql), [`ora-soundex3`](../../../tests/fixtures/challenge/challenge_oracle.sql), [`my-soundex-format`](../../../tests/fixtures/challenge/challenge_mysql.sql) ·
 [§2.1](../../03-unsupported.md), "Unmapped built-in scalar functions" ·

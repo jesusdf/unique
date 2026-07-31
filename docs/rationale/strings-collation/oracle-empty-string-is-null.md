@@ -40,7 +40,7 @@ documented, approved limit rather than a bug (`docs/03-unsupported.md` §2,
 
 > **Warning** **Documented limit, warned.** Not `faithful` — no
 > workaround exists in either direction; every occurrence carries a `UNIQUE:`
-> note + warning rather than a silent value change. User-approved 2026-07-19.
+> note + warning rather than a silent value change.
 
 **See Also.** Corpus [`ora-empty-is-null`](../../../tests/fixtures/challenge/challenge_oracle.sql), [`ora-empty-null`](../../../tests/fixtures/challenge/challenge_oracle.sql),
 [`pg-empty-is-null`](../../../tests/fixtures/challenge/challenge_postgresql.sql) · [§2](../../03-unsupported.md), "Empty string as a distinct

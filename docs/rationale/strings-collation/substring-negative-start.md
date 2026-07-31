@@ -48,15 +48,13 @@ SELECT SUBSTR('abc', 1);
 **Discussion.** MySQL's `SUBSTRING(s, 0, n)` treats
 position `0` as simply invalid and returns `''` (empty). Oracle's `SUBSTR(s,
 0, n)` instead **clamps** `0` up to `1` and returns `n` characters from
-there — `SUBSTR('hello', 0, 3)` = `'hel'`. Three engines, three different
-results for the same call shape, and the original code passed the call
-through unchanged with no warning (`reda-ts-substring-zero-start`, class
-`func`; live: tsql=`'he'`, pg=`'he'`, mysql=`''`, oracle=`'hel'`).
+there — `SUBSTR('hello', 0, 3)` = `'hel'`. Three engines give three
+different results for the same call shape, which is why the `start`/`len`
+rebase above is needed rather than a bare copy of the call.
 
 > **Note** faithful — live-verified `'he'` (tsql) / `'he'`
-> (pg source) reproduced as `'he'` on MySQL/Oracle post-rebase (was `''` /
-> `'hel'` before the fix); `('abc','abc','bc')` verified on all three for the
-> 2-arg form. No warning.
+> (pg source) reproduced as `'he'` on MySQL/Oracle post-rebase;
+> `('abc','abc','bc')` verified on all three for the 2-arg form. No warning.
 
 **See Also.** Corpus [`reda-ts-substring-zero-start`](../../../tests/fixtures/challenge/challenge_sqlserver.sql), [`pg-substr-zero`](../../../tests/fixtures/challenge/challenge_postgresql.sql),
 [`pg-fsubstr`](../../../tests/fixtures/challenge/challenge_postgresql.sql) · [`TestPgSubstringZeroStart`](../../../tests/integration/test_challenge.py)
