@@ -188,6 +188,54 @@ def test_procedures_fixture_is_valid_live(target: str) -> None:
         validator.close()
 
 
+def test_pg_result_set_proc_call_returns_rows_live() -> None:
+    """B56: a T-SQL result-set procedure (bare ``SELECT``) transpiled to
+    PostgreSQL must be *callable*, not merely compilable — the bare ``SELECT``
+    becomes an ``INOUT refcursor`` the caller ``FETCH``es. The compile-only
+    gate passes the old bare-SELECT form, which throws SQLSTATE 42601 ("query
+    has no destination for result data") at CALL. So this test CALLs the
+    procedure with a bound cursor portal and reads the rows back, comparing
+    them against the source's result set."""
+    url = _URLS.get("postgresql")
+    if not url:
+        pytest.skip("postgresql validator not configured (set the env var)")
+    try:
+        import psycopg
+    except ImportError as e:  # pragma: no cover - driver not installed
+        pytest.skip(f"psycopg not installed: {e}")
+
+    tsql = (
+        "CREATE PROCEDURE dbo.unq_b56 @a INT AS BEGIN "
+        "SELECT @a AS x, @a + 1 AS y; END"
+    )
+    out = transpile(tsql, "tsql", "postgresql").sql
+    assert "INOUT result_cursor refcursor" in out, out
+    assert "OPEN result_cursor FOR" in out, out
+    drop = "DROP PROCEDURE IF EXISTS unq_b56(int, refcursor)"
+    try:
+        conn = psycopg.connect(url, autocommit=True)
+    except Exception as e:  # pragma: no cover - engine not reachable
+        pytest.skip(f"could not connect to postgresql engine: {e}")
+    try:
+        with conn.cursor() as cur:
+            cur.execute(drop)  # clear a prior crash's leftover
+        conn.autocommit = False
+        with conn.cursor() as cur:
+            cur.execute(out)
+            # A refcursor portal lives only inside its transaction; bind a name
+            # in and FETCH the rows the procedure OPENed.
+            cur.execute("CALL unq_b56(5, 'unq_b56_rc')")
+            cur.execute("FETCH ALL FROM unq_b56_rc")
+            rows = cur.fetchall()
+        conn.rollback()
+        assert rows == [(5, 6)], f"expected [(5, 6)], got {rows}\n{out}"
+    finally:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute(drop)
+        conn.close()
+
+
 def test_oracle_validator_catches_lazy_invalid_procedure() -> None:
     """The Oracle validator must fail an object that CREATE's but compiles
     INVALID (Oracle's lazy PL/SQL compilation) — not just an execute error."""

@@ -17,22 +17,17 @@ from unique.core.ast_nodes import (
     AlterProcedureStatement,
     AssignmentStatement,
     ASTNode,
-    BeginEndBlock,
     CreateFunctionStatement,
     CreateProcedureStatement,
     DataType,
     DeclareStatement,
-    EmbeddedDML,
     ForLoopStatement,
     IfStatement,
-    LoopStatement,
     NullStatement,
     ParameterDefinition,
     RawSQL,
     SelectIntoStatement,
     StatementList,
-    TryCatchBlock,
-    WhileStatement,
 )
 from unique.core.procedural.transformer.base import (
     ProceduralTransformer,
@@ -327,96 +322,13 @@ class OracleTransformer(ProceduralTransformer):
                 changes[f.name] = self._rename_idents(val, renames)
         return dataclasses.replace(node, **changes) if changes else node
 
-    def _result_selects_to_refcursors(
-        self, proc: CreateProcedureStatement
-    ) -> CreateProcedureStatement:
-        cursors: list[str] = []
-        new_body = self._rewrite_result_selects(proc.body, cursors)
-        if not cursors:
-            return proc
-        cursor_params = tuple(
-            ParameterDefinition(
-                name=c, data_type=DataType(name="SYS_REFCURSOR"), direction="OUT"
-            )
-            for c in cursors
+    def _result_refcursor_param(self, name: str) -> ParameterDefinition:
+        # A bare result SELECT returns rows only through a SYS_REFCURSOR OUT
+        # parameter the body OPENs FOR the query (the base rewrite handles the
+        # body and the call-site propagation).
+        return ParameterDefinition(
+            name=name, data_type=DataType(name="SYS_REFCURSOR"), direction="OUT"
         )
-        from unique.core.converter import REFCURSOR_PROCS
-
-        registry = REFCURSOR_PROCS.get()
-        if registry is not None:
-            registry[proc.name.split(".")[-1].strip('`"[]').lower()] = len(cursors)
-        return dataclasses.replace(
-            proc, parameters=proc.parameters + cursor_params, body=new_body
-        )
-
-    def _rewrite_result_selects(
-        self, stmts: tuple[ASTNode, ...], cursors: list[str]
-    ) -> tuple[ASTNode, ...]:
-        """Replace each bare result ``SELECT`` with ``OPEN <cursor> FOR …``,
-        recursing into control-flow blocks; append allocated cursor names."""
-        from unique.core.sql_split import split_leading_trivia
-
-        out: list[ASTNode] = []
-        for stmt in stmts:
-            # Match on the code, not the trivia: a leading comment must not
-            # hide a result SELECT (audit doc 04, P2).
-            trivia, code = (
-                split_leading_trivia(stmt.sql)
-                if isinstance(stmt, EmbeddedDML)
-                else ("", "")
-            )
-            if isinstance(stmt, EmbeddedDML) and self._is_result_select(code):
-                name = (
-                    "RESULT_CURSOR"
-                    if not cursors
-                    else f"RESULT_CURSOR_{len(cursors) + 1}"
-                )
-                cursors.append(name)
-                query = code.rstrip(";").strip()
-                prefix = f"{trivia.rstrip()}\n" if trivia.strip() else ""
-                out.append(RawSQL(sql=f"{prefix}OPEN {name} FOR {query};"))
-            elif isinstance(stmt, IfStatement):
-                out.append(
-                    dataclasses.replace(
-                        stmt,
-                        then_body=self._rewrite_result_selects(stmt.then_body, cursors),
-                        else_body=self._rewrite_result_selects(stmt.else_body, cursors),
-                    )
-                )
-            elif isinstance(stmt, (WhileStatement, ForLoopStatement, LoopStatement)):
-                out.append(
-                    dataclasses.replace(
-                        stmt, body=self._rewrite_result_selects(stmt.body, cursors)
-                    )
-                )
-            elif isinstance(stmt, (BeginEndBlock, StatementList)):
-                out.append(
-                    dataclasses.replace(
-                        stmt,
-                        statements=self._rewrite_result_selects(
-                            stmt.statements, cursors
-                        ),
-                    )
-                )
-            elif isinstance(stmt, TryCatchBlock):
-                out.append(
-                    dataclasses.replace(
-                        stmt,
-                        try_body=self._rewrite_result_selects(stmt.try_body, cursors),
-                        catch_body=self._rewrite_result_selects(
-                            stmt.catch_body, cursors
-                        ),
-                    )
-                )
-            else:
-                out.append(stmt)
-        return tuple(out)
-
-    @staticmethod
-    def _is_result_select(sql: str) -> bool:
-        """A top-level result-set SELECT (returns rows, no INTO target)."""
-        s = sql.strip()
-        return bool(re.match(r"(?i)^SELECT\b", s)) and not re.search(r"(?i)\bINTO\b", s)
 
     def _fetch_status_forms(self) -> tuple[str, str] | None:
         # %FOUND/%NOTFOUND need the cursor's name: use the one from the most

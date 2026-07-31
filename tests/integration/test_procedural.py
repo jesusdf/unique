@@ -1178,7 +1178,10 @@ class TestParameterlessRoutineParens:
     routine takes no parameters; Oracle allows them to be omitted."""
 
     FUNC = "CREATE FUNCTION dbo.f() RETURNS INT AS BEGIN RETURN 1 END"
-    PROC = "CREATE PROCEDURE dbo.p AS BEGIN SELECT 1 END"
+    # A non-result-set body: a bare ``SELECT`` would (correctly) gain an
+    # INOUT refcursor / SYS_REFCURSOR parameter on PG/Oracle (B56), which is
+    # orthogonal to the empty-parens property under test here.
+    PROC = "CREATE PROCEDURE dbo.p AS BEGIN DECLARE @x INT SET @x = 1 END"
 
     def test_mysql_function_has_empty_parens(self) -> None:
         out = _transpile(self.FUNC, "tsql", "mysql")

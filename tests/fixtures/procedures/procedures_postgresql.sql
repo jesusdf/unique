@@ -164,7 +164,7 @@ CREATE TABLE IF NOT EXISTS tbl_8 (
 -- EXEC (N'CREATE PROCEDURE dbo.proc_13 AS SELECT 1')
 CREATE OR REPLACE PROCEDURE proc_13
 (
-    v_where OUT TEXT,
+    OUT v_where TEXT,
     v_col VARCHAR(200),
     v_op VARCHAR(10),
     v_param VARCHAR(200),
@@ -184,9 +184,9 @@ $$;
 -- EXEC (N'CREATE PROCEDURE dbo.proc_14 AS SELECT 1')
 CREATE OR REPLACE PROCEDURE proc_14
 (
-    v_query OUT TEXT,
+    OUT v_query TEXT,
     v_filter TEXT,
-    v_page OUT TEXT
+    OUT v_page TEXT
 )
 LANGUAGE plpgsql
 AS $$
@@ -271,8 +271,9 @@ DROP FUNCTION IF EXISTS func5;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_1
 (
-    v_col_1 INTEGER DEFAULT NULL,
-    v_col_2 INTEGER DEFAULT NULL
+    v_col_1 INTEGER,
+    v_col_2 INTEGER,
+    INOUT result_cursor refcursor
 )
 LANGUAGE plpgsql
 AS $$
@@ -284,7 +285,7 @@ BEGIN
             /* UNIQUE-1193: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
-    SELECT *
+    OPEN result_cursor FOR SELECT *
     FROM (SELECT DISTINCT col_3.col_1, col_3.col_4, col_5.col_6, col_5.col_7, col_8.col_9, col_8.col_10
     FROM tbl_1 col_11
     INNER JOIN tbl_2 col_3 ON col_3.col_1 = col_11.col_1
@@ -309,10 +310,11 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_2
 (
-    v_col_1 INTEGER DEFAULT NULL,
-    v_col_4 INTEGER DEFAULT NULL,
-    v_col_15 VARCHAR(10) DEFAULT NULL,
-    v_col_2 INTEGER DEFAULT NULL
+    v_col_1 INTEGER,
+    v_col_4 INTEGER,
+    v_col_15 VARCHAR(10),
+    v_col_2 INTEGER,
+    INOUT result_cursor refcursor
 )
 LANGUAGE plpgsql
 AS $$
@@ -363,7 +365,7 @@ BEGIN
                         WHERE col_1 = v_col_1);
             END IF;
     END IF;
-    SELECT LOWER(CAST(v_col_6 AS VARCHAR(36))) AS col_21;
+    OPEN result_cursor FOR SELECT LOWER(CAST(v_col_6 AS VARCHAR(36))) AS col_21;
 END;
 $$;
 
@@ -378,7 +380,8 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_3
 (
-    v_col_2 INTEGER DEFAULT NULL
+    v_col_2 INTEGER,
+    INOUT result_cursor refcursor
 )
 LANGUAGE plpgsql
 AS $$
@@ -390,7 +393,7 @@ BEGIN
             /* UNIQUE-1193: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
-    SELECT col_22.col_23, col_22.col_24 AS col_25, col_22.col_26 AS col_27, CAST(NULL AS VARCHAR) AS value, col_22.col_28 AS col_29
+    OPEN result_cursor FOR SELECT col_22.col_23, col_22.col_24 AS col_25, col_22.col_26 AS col_27, CAST(NULL AS VARCHAR) AS value, col_22.col_28 AS col_29
     FROM tbl_5 col_22
     WHERE col_22.col_30 = 1
     ORDER BY col_22.col_28 ASC NULLS FIRST;
@@ -408,8 +411,9 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_4
 (
-    v_col_31 INTEGER DEFAULT NULL,
-    v_col_2 INTEGER DEFAULT NULL
+    v_col_31 INTEGER,
+    v_col_2 INTEGER,
+    INOUT result_cursor refcursor
 )
 LANGUAGE plpgsql
 AS $$
@@ -429,7 +433,7 @@ BEGIN
     -- xxxxxx xx xx xxxxxx
     -- xxxxxx
     -- xx xx xx xxxxxx xx col_161
-    SELECT col_32, col_34, col_35, col_36
+    OPEN result_cursor FOR SELECT col_32, col_34, col_35, col_36
     FROM (SELECT 1 AS col_32, col_37.col_38 AS col_34, CAST(NULL AS VARCHAR) AS col_35, COALESCE((SELECT 1
     FROM tbl_8
     WHERE col_31 = v_col_31 AND col_39 = 3
@@ -461,8 +465,9 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_5
 (
-    v_col_31 INTEGER DEFAULT NULL,
-    v_col_2 INTEGER DEFAULT NULL
+    v_col_31 INTEGER,
+    v_col_2 INTEGER,
+    INOUT result_cursor refcursor
 )
 LANGUAGE plpgsql
 AS $$
@@ -476,7 +481,7 @@ BEGIN
     END IF;
     -- xxxxxx xx xx col_6 xx xxxxxx
     -- xx xx xx xxxxxx xx col_161
-    SELECT col_45.col_46 AS col_47, col_45.col_48 AS col_49, col_11.col_50 AS col_51, col_52.col_46 AS col_53, COALESCE((SELECT 1
+    OPEN result_cursor FOR SELECT col_45.col_46 AS col_47, col_45.col_48 AS col_49, col_11.col_50 AS col_51, col_52.col_46 AS col_53, COALESCE((SELECT 1
     FROM tbl_8
     WHERE col_31 = v_col_31 AND col_39 = 1
     ORDER BY col_31 ASC NULLS FIRST
@@ -508,17 +513,18 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_6
 (
-    v_col_61 TEXT DEFAULT NULL,
-    v_col_6 UUID DEFAULT NULL,
-    v_col_42 INTEGER DEFAULT 0,
-    v_col_62 VARCHAR(50) DEFAULT NULL,
-    v_col_13 INTEGER DEFAULT NULL,
-    v_col_63 VARCHAR(1000) DEFAULT NULL,
-    v_col_9 VARCHAR(200) DEFAULT NULL,
-    v_col_10 VARCHAR(200) DEFAULT NULL,
-    v_col_64 TEXT DEFAULT NULL,
-    v_col_15 VARCHAR(50) DEFAULT NULL,
-    v_col_2 INTEGER DEFAULT NULL
+    v_col_61 TEXT,
+    v_col_6 UUID,
+    v_col_42 INTEGER,
+    v_col_62 VARCHAR(50),
+    v_col_13 INTEGER,
+    v_col_63 VARCHAR(1000),
+    v_col_9 VARCHAR(200),
+    v_col_10 VARCHAR(200),
+    v_col_64 TEXT,
+    v_col_15 VARCHAR(50),
+    v_col_2 INTEGER,
+    INOUT result_cursor refcursor
 )
 LANGUAGE plpgsql
 AS $$
@@ -596,7 +602,7 @@ BEGIN
     ELSE
             UPDATE tbl_6 SET col_74 = v_col_74 WHERE col_31 = v_col_17;
     END IF;
-    SELECT col_31, col_74 FROM tbl_6 WHERE col_31 = v_col_17;
+    OPEN result_cursor FOR SELECT col_31, col_74 FROM tbl_6 WHERE col_31 = v_col_17;
 END;
 $$;
 
@@ -719,7 +725,7 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_7
 (
-    v_col_6 OUT UUID,
+    OUT v_col_6 UUID,
     v_col_7 INTEGER DEFAULT NULL,
     v_col_91 VARCHAR(4000) DEFAULT NULL,
     v_col_19 VARCHAR(10) DEFAULT NULL,
@@ -752,7 +758,7 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_8
 (
-    v_col_93 OUT INTEGER,
+    OUT v_col_93 INTEGER,
     v_col_15 VARCHAR(10) DEFAULT NULL,
     v_col_18 TIMESTAMP DEFAULT NULL,
     v_col_31 INTEGER DEFAULT NULL,
@@ -784,7 +790,7 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_9
 (
-    v_col_31 OUT INTEGER,
+    OUT v_col_31 INTEGER,
     v_col_6 UUID DEFAULT NULL,
     v_col_32 INTEGER DEFAULT NULL,
     v_col_33 TIMESTAMP DEFAULT NULL,
@@ -953,15 +959,16 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_12
 (
-    v_col_97 INTEGER DEFAULT NULL,
-    v_col_31 INTEGER DEFAULT NULL,
-    v_col_23 INTEGER DEFAULT NULL,
-    v_col_15 VARCHAR(10) DEFAULT NULL,
-    v_col_18 TIMESTAMP DEFAULT NULL,
-    v_col_98 INTEGER DEFAULT NULL,
-    v_col_99 TEXT DEFAULT NULL,
-    v_col_107 TEXT DEFAULT NULL,
-    v_col_2 INTEGER DEFAULT NULL
+    v_col_97 INTEGER,
+    v_col_31 INTEGER,
+    v_col_23 INTEGER,
+    v_col_15 VARCHAR(10),
+    v_col_18 TIMESTAMP,
+    v_col_98 INTEGER,
+    v_col_99 TEXT,
+    v_col_107 TEXT,
+    v_col_2 INTEGER,
+    INOUT result_cursor refcursor
 )
 LANGUAGE plpgsql
 AS $$
@@ -977,7 +984,7 @@ BEGIN
             NULL;
     END IF;
     IF NOT (v_col_97 IS NULL) AND NOT (v_col_31 IS NULL) AND NOT (v_col_23 IS NULL) AND v_col_107 IS NULL THEN
-            SELECT col_97, col_31, col_23, col_15, col_18, col_98, col_99
+            OPEN result_cursor FOR SELECT col_97, col_31, col_23, col_15, col_18, col_98, col_99
             FROM tbl_7
             WHERE v_col_97 = col_97 AND v_col_31 = col_31 AND v_col_23 = col_23 AND (col_97 = v_col_97 OR v_col_97 IS NULL) AND (col_31 = v_col_31 OR v_col_31 IS NULL) AND (col_23 = v_col_23 OR v_col_23 IS NULL) AND (col_15 = v_col_15 OR v_col_15 IS NULL) AND (col_18 = v_col_18 OR v_col_18 IS NULL) AND (col_98 = v_col_98 OR v_col_98 IS NULL) AND (col_99 = v_col_99 OR v_col_99 IS NULL);
     ELSE
@@ -1093,14 +1100,15 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_17
 (
-    v_col_93 INTEGER DEFAULT NULL,
-    v_col_15 VARCHAR(10) DEFAULT NULL,
-    v_col_18 TIMESTAMP DEFAULT NULL,
-    v_col_31 INTEGER DEFAULT NULL,
-    v_col_39 INTEGER DEFAULT NULL,
-    v_col_94 TIMESTAMP DEFAULT NULL,
-    v_col_107 TEXT DEFAULT NULL,
-    v_col_2 INTEGER DEFAULT NULL
+    v_col_93 INTEGER,
+    v_col_15 VARCHAR(10),
+    v_col_18 TIMESTAMP,
+    v_col_31 INTEGER,
+    v_col_39 INTEGER,
+    v_col_94 TIMESTAMP,
+    v_col_107 TEXT,
+    v_col_2 INTEGER,
+    INOUT result_cursor refcursor
 )
 LANGUAGE plpgsql
 AS $$
@@ -1116,7 +1124,7 @@ BEGIN
             NULL;
     END IF;
     IF NOT (v_col_93 IS NULL) AND v_col_107 IS NULL THEN
-            SELECT col_93, col_15, col_18, col_31, col_39, col_94
+            OPEN result_cursor FOR SELECT col_93, col_15, col_18, col_31, col_39, col_94
             FROM tbl_8
             WHERE v_col_93 = col_93 AND (col_93 = v_col_93 OR v_col_93 IS NULL) AND (col_15 = v_col_15 OR v_col_15 IS NULL) AND (col_18 = v_col_18 OR v_col_18 IS NULL) AND (col_31 = v_col_31 OR v_col_31 IS NULL) AND (col_39 = v_col_39 OR v_col_39 IS NULL) AND (col_94 = v_col_94 OR v_col_94 IS NULL);
     ELSE
@@ -1260,29 +1268,30 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_20
 (
-    v_col_31 INTEGER DEFAULT NULL,
-    v_col_6 UUID DEFAULT NULL,
-    v_col_32 INTEGER DEFAULT NULL,
-    v_col_33 TIMESTAMP DEFAULT NULL,
-    v_col_12 INTEGER DEFAULT NULL,
-    v_col_42 INTEGER DEFAULT NULL,
-    v_col_62 VARCHAR(10) DEFAULT NULL,
-    v_col_13 INTEGER DEFAULT NULL,
-    v_col_9 VARCHAR(200) DEFAULT NULL,
-    v_col_10 VARCHAR(200) DEFAULT NULL,
-    v_col_74 TEXT DEFAULT NULL,
-    v_col_38 TEXT DEFAULT NULL,
-    v_col_95 TEXT DEFAULT NULL,
-    v_col_96 TEXT DEFAULT NULL,
-    v_col_72 VARCHAR(200) DEFAULT NULL,
-    v_col_73 VARCHAR(200) DEFAULT NULL,
-    v_col_63 VARCHAR(1000) DEFAULT NULL,
-    v_col_19 VARCHAR(10) DEFAULT NULL,
-    v_col_20 TIMESTAMP DEFAULT NULL,
-    v_col_15 VARCHAR(10) DEFAULT NULL,
-    v_col_18 TIMESTAMP DEFAULT NULL,
-    v_col_107 TEXT DEFAULT NULL,
-    v_col_2 INTEGER DEFAULT NULL
+    v_col_31 INTEGER,
+    v_col_6 UUID,
+    v_col_32 INTEGER,
+    v_col_33 TIMESTAMP,
+    v_col_12 INTEGER,
+    v_col_42 INTEGER,
+    v_col_62 VARCHAR(10),
+    v_col_13 INTEGER,
+    v_col_9 VARCHAR(200),
+    v_col_10 VARCHAR(200),
+    v_col_74 TEXT,
+    v_col_38 TEXT,
+    v_col_95 TEXT,
+    v_col_96 TEXT,
+    v_col_72 VARCHAR(200),
+    v_col_73 VARCHAR(200),
+    v_col_63 VARCHAR(1000),
+    v_col_19 VARCHAR(10),
+    v_col_20 TIMESTAMP,
+    v_col_15 VARCHAR(10),
+    v_col_18 TIMESTAMP,
+    v_col_107 TEXT,
+    v_col_2 INTEGER,
+    INOUT result_cursor refcursor
 )
 LANGUAGE plpgsql
 AS $$
@@ -1298,7 +1307,7 @@ BEGIN
             NULL;
     END IF;
     IF NOT (v_col_31 IS NULL) AND v_col_107 IS NULL THEN
-            SELECT col_31, col_6, col_32, col_33, col_12, col_42, col_62, col_13, col_9, col_10, col_74, col_38, col_95, col_96, col_72, col_73, col_63, col_19, col_20, col_15, col_18
+            OPEN result_cursor FOR SELECT col_31, col_6, col_32, col_33, col_12, col_42, col_62, col_13, col_9, col_10, col_74, col_38, col_95, col_96, col_72, col_73, col_63, col_19, col_20, col_15, col_18
             FROM tbl_6
             WHERE v_col_31 = col_31 AND (col_31 = v_col_31 OR v_col_31 IS NULL) AND (col_6 = v_col_6 OR v_col_6 IS NULL) AND (col_32 = v_col_32 OR v_col_32 IS NULL) AND (col_33 = v_col_33 OR v_col_33 IS NULL) AND (col_12 = v_col_12 OR v_col_12 IS NULL) AND (col_42 = v_col_42 OR v_col_42 IS NULL) AND (col_62 = v_col_62 OR v_col_62 IS NULL) AND (col_13 = v_col_13 OR v_col_13 IS NULL) AND (col_9 = v_col_9 OR v_col_9 IS NULL) AND (col_10 = v_col_10 OR v_col_10 IS NULL) AND (col_74 = v_col_74 OR v_col_74 IS NULL) AND (col_38 = v_col_38 OR v_col_38 IS NULL) AND (col_95 = v_col_95 OR v_col_95 IS NULL) AND (col_96 = v_col_96 OR v_col_96 IS NULL) AND (col_72 = v_col_72 OR v_col_72 IS NULL) AND (col_73 = v_col_73 OR v_col_73 IS NULL) AND (col_63 = v_col_63 OR v_col_63 IS NULL) AND (col_19 = v_col_19 OR v_col_19 IS NULL) AND (col_20 = v_col_20 OR v_col_20 IS NULL) AND (col_15 = v_col_15 OR v_col_15 IS NULL) AND (col_18 = v_col_18 OR v_col_18 IS NULL);
     ELSE
@@ -1444,15 +1453,16 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_23
 (
-    v_col_6 UUID DEFAULT NULL,
-    v_col_7 INTEGER DEFAULT NULL,
-    v_col_91 VARCHAR(4000) DEFAULT NULL,
-    v_col_19 VARCHAR(10) DEFAULT NULL,
-    v_col_20 TIMESTAMP DEFAULT NULL,
-    v_col_15 VARCHAR(10) DEFAULT NULL,
-    v_col_18 TIMESTAMP DEFAULT NULL,
-    v_col_107 TEXT DEFAULT NULL,
-    v_col_2 INTEGER DEFAULT NULL
+    v_col_6 UUID,
+    v_col_7 INTEGER,
+    v_col_91 VARCHAR(4000),
+    v_col_19 VARCHAR(10),
+    v_col_20 TIMESTAMP,
+    v_col_15 VARCHAR(10),
+    v_col_18 TIMESTAMP,
+    v_col_107 TEXT,
+    v_col_2 INTEGER,
+    INOUT result_cursor refcursor
 )
 LANGUAGE plpgsql
 AS $$
@@ -1468,7 +1478,7 @@ BEGIN
             NULL;
     END IF;
     IF NOT (v_col_6 IS NULL) AND v_col_107 IS NULL THEN
-            SELECT col_6, col_7, col_91, col_19, col_20, col_15, col_18
+            OPEN result_cursor FOR SELECT col_6, col_7, col_91, col_19, col_20, col_15, col_18
             FROM tbl_3
             WHERE v_col_6 = col_6 AND (col_6 = v_col_6 OR v_col_6 IS NULL) AND (col_7 = v_col_7 OR v_col_7 IS NULL) AND (col_91 = v_col_91 OR v_col_91 IS NULL) AND (col_19 = v_col_19 OR v_col_19 IS NULL) AND (col_20 = v_col_20 OR v_col_20 IS NULL) AND (col_15 = v_col_15 OR v_col_15 IS NULL) AND (col_18 = v_col_18 OR v_col_18 IS NULL);
     ELSE
@@ -1538,20 +1548,21 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_25
 (
-    v_col_1 INTEGER DEFAULT NULL,
-    v_col_135 TIMESTAMP DEFAULT NULL,
-    v_col_136 TIMESTAMP DEFAULT NULL,
-    v_col_137 VARCHAR(10) DEFAULT NULL,
-    v_col_138 VARCHAR(5) DEFAULT NULL,
-    v_col_139 VARCHAR(200) DEFAULT NULL,
-    v_col_140 VARCHAR(200) DEFAULT NULL,
-    v_col_141 VARCHAR(200) DEFAULT NULL,
-    v_col_142 VARCHAR(200) DEFAULT NULL,
-    v_col_143 VARCHAR(200) DEFAULT NULL,
-    v_col_144 VARCHAR(200) DEFAULT NULL,
-    v_col_145 VARCHAR(200) DEFAULT NULL,
-    v_col_146 VARCHAR(200) DEFAULT NULL,
-    v_col_2 INTEGER DEFAULT NULL
+    v_col_1 INTEGER,
+    v_col_135 TIMESTAMP,
+    v_col_136 TIMESTAMP,
+    v_col_137 VARCHAR(10),
+    v_col_138 VARCHAR(5),
+    v_col_139 VARCHAR(200),
+    v_col_140 VARCHAR(200),
+    v_col_141 VARCHAR(200),
+    v_col_142 VARCHAR(200),
+    v_col_143 VARCHAR(200),
+    v_col_144 VARCHAR(200),
+    v_col_145 VARCHAR(200),
+    v_col_146 VARCHAR(200),
+    v_col_2 INTEGER,
+    INOUT result_cursor refcursor
 )
 LANGUAGE plpgsql
 AS $$
@@ -1567,7 +1578,7 @@ BEGIN
             /* UNIQUE-1193: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
-    SELECT
+    OPEN result_cursor FOR SELECT
       col_1,
       col_50,
       col_148,
@@ -1749,8 +1760,9 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_26
 (
-    v_col_1 INTEGER DEFAULT NULL,
-    v_col_13 INTEGER DEFAULT NULL
+    v_col_1 INTEGER,
+    v_col_13 INTEGER,
+    INOUT result_cursor refcursor
 )
 LANGUAGE plpgsql
 AS $$
@@ -1772,7 +1784,7 @@ BEGIN
     INNER JOIN tbl_1 col_11 ON col_11.col_1 = col_56.col_1
     WHERE col_32 = 1 AND v_func1 > col_11.col_50 + (v_col_67) * INTERVAL '1 MINUTE');
     UPDATE tbl_6 SET col_32 = 0 WHERE col_32 = 1 AND v_func1 > COALESCE(col_33, v_func1) + INTERVAL '5 MINUTE';
-    SELECT DISTINCT col_56.col_1
+    OPEN result_cursor FOR SELECT DISTINCT col_56.col_1
     FROM tbl_2 col_56
     WHERE EXISTS (SELECT NULL
     FROM tbl_6 col_37
