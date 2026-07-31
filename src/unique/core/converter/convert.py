@@ -1795,7 +1795,16 @@ def _convert_union(expr: exp.SetOperation) -> SelectStatement:
     Flatten the whole chain (converting only the outer two operands silently
     dropped every middle arm) into a base statement whose ``set_query`` links
     each subsequent arm in left-to-right order.
+
+    A CTE preceding the whole chain (``WITH cte AS (...) SELECT ... UNION
+    SELECT ...``) is attached by sqlglot to the OUTERMOST set-operation node
+    (``expr`` itself — never to an inner link of a chain nor to the first
+    arm's own SELECT; verified across UNION/INTERSECT/EXCEPT, plain and ALL,
+    and all four source dialects). The previous code never read
+    ``expr.args["with"]`` at all, so the CTE text was silently dropped (B52).
+    Read it here and re-attach it to the head statement below.
     """
+    with_clause = expr.args.get("with") or expr.args.get("with_")
 
     def _convert_arm(e: exp.Expression) -> SelectStatement:
         # A parenthesized arm ``(SELECT …)`` is a Subquery; reading it as
@@ -1902,6 +1911,16 @@ def _convert_union(expr: exp.SetOperation) -> SelectStatement:
     result = selects[-1]
     for i in range(len(set_ops) - 1, -1, -1):
         result = _link(selects[i], set_ops[i], result)
+    if with_clause:
+        # Attach to the head of the chain — the shape ``_pair_setop_all_arms``
+        # (the T-SQL INTERSECT ALL/EXCEPT ALL ROW_NUMBER-pairing rewrite,
+        # B50) already special-cases: it keeps the head's ``ctes`` on the
+        # rewritten outer statement and only bails on the TAIL arm's own
+        # (always-empty-here) ``ctes``, so the two features compose without
+        # further changes.
+        rec = bool(with_clause.args.get("recursive"))
+        ctes = tuple(_convert_cte(c, recursive=rec) for c in with_clause.expressions)
+        result = dataclasses.replace(result, ctes=ctes)
     return result
 
 
