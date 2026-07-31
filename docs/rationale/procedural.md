@@ -282,6 +282,251 @@ a control-flow expansion.
 [§3.22](../03-unsupported.md) (the related `SQL%ROWCOUNT` "matched vs.
 changed" divergence), [§3.23](../03-unsupported.md).
 
+## Error handling
+
+### MySQL `DECLARE {EXIT|CONTINUE} HANDLER FOR ...` → block-structured exception handling (PostgreSQL / Oracle / T-SQL)
+
+**Problem.** MySQL declares an error handler *separately* from the code it
+protects — `DECLARE EXIT HANDLER FOR SQLEXCEPTION <stmt>` sits anywhere in
+the block's declaration section, naming the condition(s) it reacts to and a
+single action statement. PostgreSQL/Oracle's `EXCEPTION WHEN OTHERS` and
+T-SQL's `BEGIN TRY...END TRY BEGIN CATCH...END CATCH` are both
+**block-structured** instead: the protected code and its handler are two
+halves of one syntactic unit, not a declaration plus free-floating code.
+
+**Solution.** An `EXIT` handler for `SQLEXCEPTION`/`SQLWARNING` is exactly
+the enclosing block's exception section, so it folds directly into the
+target's own block-structured form — the rest of the block becomes the
+protected body, and the handler's action becomes the handler body:
+
+```sql
+-- tests/integration/test_pg_source_wave1.py::TestMysqlDeclareHandler (_EXIT_SRC)
+create procedure hp()
+begin
+  declare exit handler for sqlexception select 'bad' as e;
+  insert into t1 values (1);
+  select 'ok' as r;
+end
+-- mysql -> postgresql:
+CREATE PROCEDURE hp()
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    BEGIN
+            INSERT INTO t1 VALUES (1);
+            SELECT 'ok' AS r;
+    EXCEPTION
+    WHEN OTHERS THEN
+            SELECT 'bad' AS e;
+    END;
+END;
+$$;
+-- mysql -> tsql:
+CREATE PROCEDURE hp
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    BEGIN TRY
+            INSERT INTO t1 VALUES (1);
+            SELECT 'ok' AS r;
+    END TRY
+    BEGIN CATCH
+            SELECT 'bad' AS e;
+    END CATCH
+END
+```
+
+A `CONTINUE` handler, a handler for any condition other than
+`SQLEXCEPTION`/`SQLWARNING` (a specific `SQLSTATE`, a named condition, `NOT
+FOUND` used outside a cursor loop), more than one handler in the same block,
+or a handler declared in a *nested* block all keep the honest,
+already-documented whole-routine degrade instead — each with its own
+interpolated reason:
+
+```sql
+-- tests/integration/test_pg_source_wave1.py::TestMysqlDeclareHandler::test_continue_handler_degrades
+create procedure hc()
+begin
+  declare continue handler for sqlstate '23000' select 'dup';
+  insert into t1 values (1);
+end
+-- mysql -> postgresql:
+-- UNIQUE-1171: MySQL CONTINUE handler for SQLSTATE '23000' has no postgresql equivalent; routine preserved as a comment
+-- create procedure hc()
+-- begin
+--   declare continue handler for sqlstate '23000' select 'dup';
+--   insert into t1 values (1);
+-- end
+```
+
+**Discussion.** `EXIT`'s control-flow contract — abandon the block and run
+the handler's action — is precisely what `EXCEPTION WHEN OTHERS`/`CATCH`
+already do, so a single condition set of `SQLEXCEPTION`/`SQLWARNING` maps
+without any semantic gap. `CONTINUE` cannot: it resumes execution at the
+statement *after* the one that raised, a resumption model neither
+`EXCEPTION`/`CATCH` block nor any other target construct offers. A specific
+`SQLSTATE` value or a named condition has no standard cross-engine spelling
+Unique can trust without a lookup table it does not have, and a handler
+nested inside an inner block, or more than one handler sharing a block,
+would need per-condition dispatch logic no target's block-exception form
+expresses directly — so each of those keeps the pre-existing whole-routine
+carrier rather than guessing a mapping.
+
+> **Note** faithful for the `EXIT`/`SQLEXCEPTION`/`SQLWARNING` fold — same
+> protected body, same handler action, restated in each target's own
+> block-exception syntax.
+> **Warning** `[limit]` (the pre-existing whole-routine degrade,
+> unaffected by this fold) for `CONTINUE` handlers, unmapped condition
+> classes, multiple handlers, and nested-block handlers.
+
+**See Also.** [`TestMysqlDeclareHandler`](../../tests/integration/test_pg_source_wave1.py) ·
+`src/unique/core/procedural/transformer/base.py` (`_fold_mysql_handlers`,
+docstring) · [05-procedural-engine.md](../05-procedural-engine.md)
+("4. ProceduralTransformer", the `TRY...CATCH` ↔ `EXCEPTION WHEN OTHERS THEN`
+mapping-table row) ·
+[`UNIQUE-1171`](../reference/warnings.md#unique-1171) — no dedicated
+challenge-corpus case exercises `DECLARE HANDLER`, so the examples above are
+drawn from that dedicated integration test.
+
+## Expression arguments hoisted through a synthesized variable
+
+### RAISERROR (T-SQL) ↔ Oracle `RAISE_APPLICATION_ERROR` / PostgreSQL `RAISE EXCEPTION`: expression messages and printf substitutions
+
+**Problem.** T-SQL's `RAISERROR` accepts only a literal, a variable, or a
+message id as its first argument — never an expression. An Oracle
+`RAISE_APPLICATION_ERROR(code, msg_expr)` translated to T-SQL, or a
+T-SQL-source `RAISERROR` whose own message argument is itself an expression
+(a `+`/`||` concatenation), both need somewhere to put that expression
+before it can reach `RAISERROR`. Separately, `RAISERROR`'s printf-style
+`%d`/`%s` substitution arguments (`RAISERROR('value is %d today', 16, 1,
+42)`) have no direct spelling on PostgreSQL/Oracle, whose own raise
+statements format substitutions differently.
+
+**Solution.** An expression message hoists through a synthesized,
+routine-scoped `@unique_errmsgN` variable, declared immediately before the
+`RAISERROR` call:
+
+```sql
+-- tests/integration/test_oracle_source_m4_wave.py::TestOracleBuiltinsOnTsql::test_error_context_and_sys_context
+create or replace PROCEDURE p_x AS
+BEGIN
+    UPDATE t_c SET x = 1;
+EXCEPTION WHEN OTHERS THEN
+    RAISE_APPLICATION_ERROR(-20001, SQLCODE || ' ' || SQLERRM);
+END;
+-- oracle -> tsql:
+CREATE OR ALTER PROCEDURE p_x
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    BEGIN TRY
+            UPDATE t_c SET x = 1;
+    END TRY
+    BEGIN CATCH
+            DECLARE @unique_errmsg1 NVARCHAR(2048) = CAST(ERROR_NUMBER() AS NVARCHAR(20)) + ' ' + ERROR_MESSAGE();
+            RAISERROR(@unique_errmsg1, 16, 1);
+    END CATCH
+END
+```
+
+The same hoist fires for a T-SQL-source `RAISERROR` whose own payload is a
+concatenation, or a PostgreSQL-source `RAISE EXCEPTION` with a format string
+plus argument
+(`tests/integration/test_pg_source_wave1.py::TestTsqlRaiserrorExpressionHoist::test_concat_payload_hoists`)
+— only a single string literal, a bare variable, or a message id is left
+inline; anything else routes through the same `@unique_errmsgN` variable.
+
+In the opposite direction — a T-SQL `RAISERROR` with printf substitution
+arguments read as the *source* — the arguments are spliced directly into
+each target's own format spelling instead of being hoisted or dropped:
+
+```sql
+-- corpus case red2-ts-raiserror-format-arg-drop
+CREATE PROCEDURE p AS
+BEGIN
+  RAISERROR('value is %d today', 16, 1, 42);
+END
+-- tsql -> postgresql:
+RAISE EXCEPTION 'value is % today', 42;
+-- tsql -> oracle:
+RAISE_APPLICATION_ERROR(-20001, 'value is ' || 42 || ' today');
+```
+
+**Discussion.** `RAISERROR`'s argument grammar is a T-SQL-only restriction —
+PostgreSQL's `RAISE` and Oracle's `RAISE_APPLICATION_ERROR` both already
+accept an arbitrary expression in the message position, so the hoist is only
+needed when a T-SQL `RAISERROR` is the *target* of the rewrite, never when
+it is the source being read into a more permissive target. The printf splice
+runs the other way for the same structural reason: PostgreSQL's `RAISE`
+already has its own `%`-placeholder substitution mechanism (`RAISE
+EXCEPTION 'value is % today', 42`), and Oracle has none, so Oracle gets the
+substitution folded into an explicit `||` concatenation instead — before
+this was handled, the substitution argument (`42`) was silently **dropped**
+on PostgreSQL/Oracle, with the literal `%d` shipped unexpanded and no
+warning at all (`red2-ts-raiserror-format-arg-drop`, `class=silent-drop`);
+the MySQL leg already warned when the args were dropped, so PG/Oracle were
+the inconsistent legs.
+
+> **Note** faithful — the hoisted variable carries the same value the inline
+> expression would have produced; the format splice reproduces the same
+> substituted text (`"value is 42 today"`) on every target. No warning for
+> either direction.
+
+**See Also.** [`TestOracleBuiltinsOnTsql`](../../tests/integration/test_oracle_source_m4_wave.py), [`TestTsqlRaiserrorExpressionHoist`](../../tests/integration/test_pg_source_wave1.py), [`TestRaiserrorFormatArgs`](../../tests/integration/test_challenge.py) ·
+Corpus [`red2-ts-raiserror-format-arg-drop`](../../tests/fixtures/challenge/challenge_sqlserver.sql) ·
+`src/unique/core/procedural/emitter/tsql.py` (the `_emit_raise_error` message-hoist
+branch, docstring) · `src/unique/core/procedural/emitter/postgresql.py`,
+`src/unique/core/procedural/emitter/oracle.py` (`_emit_raise_error`, the
+printf-substitution comment) · [`UNIQUE-1163`](../reference/warnings.md#unique-1163)
+(the MySQL leg's own substitution-args-dropped warning, for contrast).
+
+### EXEC / routine-call expression argument (Oracle) → synthesized variable (T-SQL)
+
+**Problem.** A T-SQL `EXEC` call accepts only a literal, a variable, or
+`DEFAULT`/`NULL` in its argument list — never an arbitrary expression. An
+Oracle call passing `SYSDATE`, or any other expression, as a named-association
+argument (`PRC(V_ID=>1, V_modstamp=>SYSDATE)`) has no legal T-SQL spelling
+inline.
+
+**Solution.** The expression is hoisted into a synthesized variable declared
+immediately before the `EXEC`, and the call itself passes only that
+variable. A `GETDATE()`/`SYSDATETIME()`/`SYSUTCDATETIME()` value (the
+Oracle-source `SYSDATE` case) gets its own dedicated `@uq_nowN DATETIME`
+variable:
+
+```sql
+-- tests/integration/test_oracle_source_m4_wave.py::TestWave12And13Classes::test_exec_expression_argument_hoisted
+BEGIN
+    PRC_MED_INS(V_ID=>1, V_modstamp=>SYSDATE);
+END;
+-- oracle -> tsql:
+DECLARE @uq_now1 DATETIME = GETDATE();
+EXEC PRC_MED_INS @V_ID = 1, @V_modstamp = @uq_now1;
+```
+
+A general (non-`now()`) expression argument hoists the same way, into a
+variable typed from the callee's own declared parameter type where it can be
+resolved (`_hoist_exec_expression_args`), rather than being restricted to
+the date-function case.
+
+**Discussion.** T-SQL's `EXEC`/`EXECUTE` call syntax is simply stricter than
+Oracle's named-association call, which accepts any expression directly. As
+with the `RAISERROR` message hoist above, an expression argument has to be
+evaluated into a variable *before* the call, in a separate statement, since
+there is no argument-position syntax in T-SQL that would accept it inline.
+
+> **Note** faithful — the hoisted variable holds exactly the value the
+> inline expression would have evaluated to at the same point in the routine
+> (same evaluation order, immediately before the call). No warning.
+
+**See Also.** [`TestWave12And13Classes`](../../tests/integration/test_oracle_source_m4_wave.py) ·
+`src/unique/core/procedural/emitter/tsql.py` (`_emit_call`,
+`_hoist_exec_expression_args`, docstrings) — no dedicated challenge-corpus
+case exercises the expression-argument hoist, so the example above is drawn
+from that dedicated integration test.
+
 ## Dynamic SQL constant translation
 
 ### A constant dynamic-SQL string (T-SQL `EXEC sp_executesql` / Oracle `EXECUTE IMMEDIATE` / PL/pgSQL `EXECUTE`) → any target
