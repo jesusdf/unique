@@ -7045,10 +7045,87 @@ class TestWave189BitwiseNotReplaceSet:
         assert "~5" in out, out
 
     def test_replace_set_converts(self) -> None:
-        out = _t2("replace t1 set data = 1, id = 'bar';", "mysql", "mysql")
+        """mysql -> mysql identity must round-trip a REAL, executable
+        REPLACE INTO ... VALUES statement — never a comment-only carrier
+        that merely echoes the source. (The prior assertion here was an
+        identity-mutant false positive: it matched the ``REPLACE INTO ...``
+        text even when it only appeared inside a
+        ``-- UNIQUE-1003: Unhandled expression type: Command`` carrier —
+        sqlglot has no REPLACE-statement parser at all, so every direction,
+        including this identity one, degraded to that carrier before B49.)"""
+        result = Transpiler().transpile(
+            "replace t1 set data = 1, id = 'bar';", source="mysql", target="mysql"
+        )
+        out = result.sql
         assert re.search(
-            r"(?i)REPLACE INTO t1 \(data, id\)\s*VALUES \(1, 'bar'\)", out
+            r"(?i)^\s*REPLACE INTO t1 \(data, id\)\s*VALUES \(1, 'bar'\)\s*;?\s*$",
+            out,
         ), out
+        assert "UNIQUE-" not in out, out
+        assert not result.warnings, result.warnings
+        assert not result.unsupported, result.unsupported
+
+    def test_replace_set_multi_expression_values_converts(self) -> None:
+        """Neighbor: more than two columns, and expressions (not bare
+        literals) as SET values."""
+        out = _t2(
+            "replace t1 set data = 1 + 2, id = upper('bar'), n = 3;",
+            "mysql",
+            "mysql",
+        )
+        assert re.search(
+            r"(?i)REPLACE INTO t1 \(data, id, n\)\s*VALUES "
+            r"\(1 \+ 2, UPPER\('bar'\), 3\)",
+            out,
+        ), out
+        assert "UNIQUE-" not in out, out
+
+    def test_replace_values_form_identity(self) -> None:
+        """The canonical ``REPLACE INTO ... VALUES`` spelling (not the SET
+        shorthand) must round-trip the same honest way on identity."""
+        result = Transpiler().transpile(
+            "REPLACE INTO t1 (id, data) VALUES ('bar', 1);",
+            source="mysql",
+            target="mysql",
+        )
+        out = result.sql
+        assert re.search(
+            r"(?i)REPLACE INTO t1 \(id, data\)\s*VALUES \('bar', 1\)", out
+        ), out
+        assert "UNIQUE-" not in out, out
+        assert not result.warnings, result.warnings
+
+    @pytest.mark.parametrize("target", ["postgresql", "oracle", "tsql"])
+    def test_replace_set_degrades_honestly_on_other_targets(self, target: str) -> None:
+        """REPLACE has no cross-engine equivalent (delete-then-insert, not an
+        upsert): the whole statement degrades to a carrier + a warning that
+        NAMES REPLACE specifically — never a silently-emitted plain INSERT
+        (which would raise on a duplicate key) and never the generic,
+        unhelpful 'Unhandled expression type: Command' message the
+        pre-fix code produced for every target including identity."""
+        result = Transpiler().transpile(
+            "replace t1 set data = 1, id = 'bar';", source="mysql", target=target
+        )
+        assert "UNIQUE-" in result.sql, result.sql
+        assert "REPLACE" in result.sql, result.sql
+        assert any(
+            "REPLACE" in w.message and "delete-then-insert" in w.message
+            for w in result.warnings
+        ), result.warnings
+        assert result.unsupported, result.unsupported
+
+    def test_replace_set_inside_routine_body_identity(self) -> None:
+        """Neighbor: REPLACE...SET inside a stored procedure body stays
+        verbatim (executable) on the mysql -> mysql identity direction."""
+        out = _t2(
+            "create procedure p1() begin" " replace t1 set data = 1, id = 'bar'; end",
+            "mysql",
+            "mysql",
+        )
+        assert re.search(
+            r"(?i)REPLACE\s+t1\s+SET\s+data\s*=\s*1\s*,\s*id\s*=\s*'bar'", out
+        ), out
+        assert "UNIQUE-" not in out, out
 
 
 class TestWave191PgSearchCte:

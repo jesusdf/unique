@@ -29,6 +29,7 @@ from unique.core.ast_nodes import (
     CreateTableStatement,
     DataType,
     FunctionCall,
+    InsertStatement,
     LimitClause,
     Literal,
     OrderByItem,
@@ -828,6 +829,7 @@ class Transformer:
             # a top-level statement is unmappable there too (wave 178).
             result = [self._gate_tsql_unknown_sysvar(node) for node in result]
         if self.context.source == "mysql" and self.context.target != "mysql":
+            result = [self._gate_mysql_replace(node) for node in result]
             result = [self._gate_mysql_user_var(node) for node in result]
             result = [self._strip_mysql_charset_marks(node) for node in result]
             result = [self._rewrite_enum_ordering(node) for node in result]
@@ -873,6 +875,26 @@ class Transformer:
         from unique.core.converter.emit import emit_node
 
         return emit_node(node, self.context.source)
+
+    def _gate_mysql_replace(self, node: ASTNode) -> ASTNode:
+        """Degrade MySQL's REPLACE statement WHOLE for non-MySQL targets.
+
+        REPLACE is a delete-then-insert upsert (cascades on FK deletes,
+        resets AUTO_INCREMENT differently, fires DELETE+INSERT triggers) —
+        not the same operation as an ON CONFLICT/MERGE upsert, so it must
+        never be silently lowered to a plain INSERT (duplicate-key error at
+        runtime) or an UPDATE-style upsert (wrong semantics). Mirrors the
+        procedural engine's wording for the same construct in a routine
+        body (``transformer/base.py`` ``_degrade_untranslatable_body``)."""
+        if not (isinstance(node, InsertStatement) and node.is_replace):
+            return node
+        reason = (
+            "MySQL REPLACE (delete-then-insert upsert) has no "
+            f"{self.context.target} equivalent; statement preserved as a comment"
+        )
+        self.context.warn(reason, "mysql_replace")
+        self.context.mark_unsupported("REPLACE (MySQL delete-then-insert upsert)")
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _gate_pg_internals(self, node: ASTNode) -> ASTNode:
         """Degrade a statement touching PG catalog internals — WHOLE.
