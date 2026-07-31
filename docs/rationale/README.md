@@ -38,7 +38,7 @@ This is the narrative companion to two machine-checked sources of truth:
 | Topic | Covers | Articles |
 |---|---|---|
 | [Date/time arithmetic and formatting](datetime/README.md) | date/time arithmetic, truncation, unit maps, month-end semantics, epoch rebasing | 15 |
-| [Strings, concatenation and collation](strings-collation/README.md) | concatenation & NULL, LIKE/ESCAPE, character classes, collation/order, Oracle `''` ≡ NULL, byte vs char lengths | 28 |
+| [Strings, concatenation and collation](strings-collation/README.md) | concatenation & NULL, LIKE/ESCAPE, character classes, collation/order, Oracle `''` ≡ NULL, byte vs char lengths | 29 |
 | [Aggregates and window functions](aggregates-windows/README.md) | window frames, ordered aggregates, string aggregation, DISTINCT ON, boolean aggregates | 16 |
 | [Booleans: the value/predicate duality](booleans/README.md) | tri-state `CASE` wrap for value position, `<> 0` synthesis for predicate position, boolean-column `IS TRUE`/`IS FALSE` re-spelling | 10 |
 | [DML: PIVOT/UNPIVOT, MERGE, DELETE, row values](dml/README.md) | PIVOT/UNPIVOT, MERGE/upsert lowering, multi-table DELETE, row caps, row-value comparisons | 28 |
@@ -187,6 +187,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [MySQL `LOCATE('', s)` (always `1`) → T-SQL guarded `CASE`](strings-collation/locate-empty-needle-guard.md) | MySQL's `LOCATE(needle, haystack)` special-cases an empty needle: `LOCATE('', s)` is always `1`, regardless of `s`, treating the empty string as matching at the very start. |
 | [PostgreSQL `ILIKE` (case-insensitive `LIKE`) → `UPPER(x) LIKE UPPER(pattern)`](strings-collation/ilike-upper-comparison.md) | PostgreSQL's `ILIKE` is a case-insensitive `LIKE` operator — no other target engine has a dedicated case-insensitive pattern-match operator (T-SQL and MySQL's default collations are already case-insensitive, but Oracle's is case-sensitive by default and has no `ILIKE` spelling at all). |
 | [Functions with no target spelling: MySQL `ELT`/`FIELD`, Oracle `NVL2` → a synthesized `CASE`](strings-collation/no-target-spelling-case-chain.md) | MySQL's `ELT(n, v1, v2, ...)` (pick the `n`th value) and `FIELD(v, v1, v2, ...)` (find `v`'s 1-based position among the rest, `0` if absent) have no equivalent built-in on any other engine. |
+| [Oracle extended `INSTR` (occurrence / backward search) over **literal** arguments → the computed position](strings-collation/oracle-instr-literal-fold.md) | Oracle's 4-argument `INSTR(s, sub, start, occurrence)` finds the `occurrence`-th match at or after `start` — and, when `start` is negative, searches **backward** from the end of the string instead. |
 
 #### [Aggregates and window functions](aggregates-windows/README.md)
 
@@ -287,6 +288,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Oracle `LTRIM(s, chars)`/`RTRIM(s, chars)` → `TRIM(LEADING/TRAILING chars FROM s)`](strings-collation/oracle-ltrim-rtrim-charset-reverse.md) | This is the reverse of Character-set `TRIM(chars FROM string)` → Oracle: Oracle's own `LTRIM`/`RTRIM` already accept a multi-character trim set as their second argument natively. |
 | [Oracle `DECODE` with mixed-type result branches → `CASE` with a `CAST` inserted to unify types](strings-collation/decode-mixed-type-branch-cast.md) | Oracle's `DECODE(expr, search1, result1, ..., default)` tolerates result branches of different types — a string in one branch, a number in another — since Oracle resolves the whole expression's type loosely at runtime. |
 | [Functions with no target spelling: MySQL `ELT`/`FIELD`, Oracle `NVL2` → a synthesized `CASE`](strings-collation/no-target-spelling-case-chain.md) | MySQL's `ELT(n, v1, v2, ...)` (pick the `n`th value) and `FIELD(v, v1, v2, ...)` (find `v`'s 1-based position among the rest, `0` if absent) have no equivalent built-in on any other engine. |
+| [Oracle extended `INSTR` (occurrence / backward search) over **literal** arguments → the computed position](strings-collation/oracle-instr-literal-fold.md) | Oracle's 4-argument `INSTR(s, sub, start, occurrence)` finds the `occurrence`-th match at or after `start` — and, when `start` is negative, searches **backward** from the end of the string instead. |
 
 #### [Aggregates and window functions](aggregates-windows/README.md)
 
@@ -581,6 +583,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Oracle `DECODE` with mixed-type result branches → `CASE` with a `CAST` inserted to unify types](strings-collation/decode-mixed-type-branch-cast.md) | Oracle's `DECODE(expr, search1, result1, ..., default)` tolerates result branches of different types — a string in one branch, a number in another — since Oracle resolves the whole expression's type loosely at runtime. |
 | [Functions with no target spelling: MySQL `ELT`/`FIELD`, Oracle `NVL2` → a synthesized `CASE`](strings-collation/no-target-spelling-case-chain.md) | MySQL's `ELT(n, v1, v2, ...)` (pick the `n`th value) and `FIELD(v, v1, v2, ...)` (find `v`'s 1-based position among the rest, `0` if absent) have no equivalent built-in on any other engine. |
 | [T-SQL `NCHAR(n)` Unicode code point → PostgreSQL `CHR`, MySQL `CHAR(... USING utf32)`, Oracle `NCHR`/`UNISTR`](strings-collation/nchar-code-point-per-target.md) | T-SQL's `NCHAR(n)` returns the character for Unicode code point `n` — an integer argument (a `0x…` literal is still a *number* there, not a byte string) — with no matching built-in on any other engine under that name. |
+| [Oracle extended `INSTR` (occurrence / backward search) over **literal** arguments → the computed position](strings-collation/oracle-instr-literal-fold.md) | Oracle's 4-argument `INSTR(s, sub, start, occurrence)` finds the `occurrence`-th match at or after `start` — and, when `start` is negative, searches **backward** from the end of the string instead. |
 
 #### [Aggregates and window functions](aggregates-windows/README.md)
 
@@ -769,6 +772,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [PostgreSQL `ILIKE` (case-insensitive `LIKE`) → `UPPER(x) LIKE UPPER(pattern)`](strings-collation/ilike-upper-comparison.md) | PostgreSQL's `ILIKE` is a case-insensitive `LIKE` operator — no other target engine has a dedicated case-insensitive pattern-match operator (T-SQL and MySQL's default collations are already case-insensitive, but Oracle's is case-sensitive by default and has no `ILIKE` spelling at all). |
 | [Functions with no target spelling: MySQL `ELT`/`FIELD`, Oracle `NVL2` → a synthesized `CASE`](strings-collation/no-target-spelling-case-chain.md) | MySQL's `ELT(n, v1, v2, ...)` (pick the `n`th value) and `FIELD(v, v1, v2, ...)` (find `v`'s 1-based position among the rest, `0` if absent) have no equivalent built-in on any other engine. |
 | [T-SQL `NCHAR(n)` Unicode code point → PostgreSQL `CHR`, MySQL `CHAR(... USING utf32)`, Oracle `NCHR`/`UNISTR`](strings-collation/nchar-code-point-per-target.md) | T-SQL's `NCHAR(n)` returns the character for Unicode code point `n` — an integer argument (a `0x…` literal is still a *number* there, not a byte string) — with no matching built-in on any other engine under that name. |
+| [Oracle extended `INSTR` (occurrence / backward search) over **literal** arguments → the computed position](strings-collation/oracle-instr-literal-fold.md) | Oracle's 4-argument `INSTR(s, sub, start, occurrence)` finds the `occurrence`-th match at or after `start` — and, when `start` is negative, searches **backward** from the end of the string instead. |
 
 #### [Aggregates and window functions](aggregates-windows/README.md)
 

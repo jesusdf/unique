@@ -569,14 +569,15 @@ another cursor can no longer corrupt them:
 ### 3.21 Oracle Extended `INSTR` (occurrence / backward search)
 
 Oracle's 4-argument `INSTR(s, sub, start, occurrence)` and the negative-start
-backward search have no equivalent on MySQL/PostgreSQL/T-SQL. Literal
-arguments are folded to Oracle's computed value at transpile time; a
-non-literal occurrence or negative start degrades to `NULL` with a `UNIQUE:`
-note and a warning. Compile-time literal folds of the same kind cover the
-LENGTH family (per-source code-unit semantics, including T-SQL LEN's UTF-16
-count and right-trim), substring edge positions, MySQL byte-string decodes
-(`CAST(0x… AS CHAR)`, `CHAR(n USING cs)`), string-operand arithmetic, and
-T-SQL binary `CONVERT`s.
+backward search have no runtime equivalent on MySQL/PostgreSQL/T-SQL. Over
+**literal** arguments the value is computed at transpile time and emitted as
+the plain number — see
+[the rationale article](rationale/strings-collation/oracle-instr-literal-fold.md),
+which also covers the sibling literal-fold family (LENGTH per-source
+code-unit semantics, substring edge positions, MySQL byte-string decodes,
+string-operand arithmetic, T-SQL binary `CONVERT`s). A **non-literal**
+occurrence or negative start cannot be computed ahead of time and has no
+runtime fallback: it degrades to `NULL` with a `UNIQUE:` note and a warning.
 
 ### 3.20 PostgreSQL `money` Formatting
 
