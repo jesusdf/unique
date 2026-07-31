@@ -268,3 +268,32 @@ jobs:
             echo "::error title=Challenge live result diff failed::${DETAIL}"
           fi
           exit $rc
+
+      - name: Run procedures FE result diff
+        env:
+          # oracle-free's default PDB is FREEPDB1; creds match the containers above.
+          UNIQUE_TEST_MSSQL_URL: mssql://sa:Unique_Strong!Pass1@localhost:1433/master
+          UNIQUE_TEST_ORACLE_URL: oracle://uniqueapp:UniqueStrongPass1@localhost:1521/FREEPDB1
+          UNIQUE_TEST_MYSQL_URL: mysql://root:UniqueStrongPass1@localhost:3307/unique
+          UNIQUE_TEST_PG_URL: postgresql://unique:unique@localhost:5433/unique
+        run: |
+          # Serial by design (shared engines, shared table names). Same
+          # annotation channel as the step above (raw logs sit on a blocked blob).
+          set +e
+          pytest tests/integration/test_procedures_fe_live.py -v -rA \
+            > /tmp/procedures_fe.out 2>&1
+          rc=$?
+          set -e
+          cat /tmp/procedures_fe.out
+          {
+            echo '### Procedures FE result diff'
+            echo '```'
+            cat /tmp/procedures_fe.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ $rc -ne 0 ]; then
+            DETAIL=$(grep -E "^(FAILED|E |assert|.*semantic bug|.*source:|.*target:)" /tmp/procedures_fe.out \
+              | head -40 | sed 's/%/%25/g; s/\r//g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=Procedures FE result diff failed::${DETAIL}"
+          fi
+          exit $rc
