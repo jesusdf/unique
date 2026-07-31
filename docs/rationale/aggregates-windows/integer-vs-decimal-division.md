@@ -67,8 +67,7 @@ procedure body the same compensation applies to a declared integer
 > **Note** faithful — `my-sum-div-count` live-verified `1.5`;
 > `test_func_compensation.py`'s literal and declared-variable division tests
 > pin the exact value on both sides of the truncating/decimal split;
-> `TestMysqlSafeDivision` pins the NULL-safety preservation (and the
-> guardrail-7 unread-args false-warning this also silences); `my-avg-int` /
+> `TestMysqlSafeDivision` pins the NULL-safety preservation; `my-avg-int` /
 > `pg-avg-int` / `my-avg-precision2` pin the `AVG` promotion.
 
 **See Also.** [`my-sum-div-count`](../../../tests/fixtures/challenge/challenge_mysql.sql), [`my-avg-int`](../../../tests/fixtures/challenge/challenge_mysql.sql), [`my-avg-precision2`](../../../tests/fixtures/challenge/challenge_mysql.sql), [`pg-avg-int`](../../../tests/fixtures/challenge/challenge_postgresql.sql) ·

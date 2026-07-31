@@ -15,13 +15,11 @@
 SELECT MAX(x) KEEP (DENSE_RANK LAST ORDER BY y) AS r
 FROM (SELECT 10 x, 1 y FROM DUAL UNION ALL SELECT 20, 2 FROM DUAL
       UNION ALL SELECT 5, 2 FROM DUAL) t
--- Oracle (live): [(20)]. The old, now-replaced PG rewrite gave a running
--- max per row, [(10),(20),(20)] — a different result set entirely.
+-- Oracle (live): [(20)].
 ```
 
 The whole `KEEP (...)` expression is preserved as a
-warned `UNIQUE:` carrier comment on every non-Oracle target, replacing the
-earlier (incorrect) windowed rewrite.
+warned `UNIQUE:` carrier comment on every non-Oracle target.
 
 **Discussion.** None of the three targets has an
 "aggregate keyed by another column's extremal rank" construct. The tempting

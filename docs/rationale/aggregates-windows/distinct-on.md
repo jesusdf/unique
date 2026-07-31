@@ -28,8 +28,7 @@ uq_rn` derived table, filtered to `uq_rn = 1` in the outer query — reproduces
 every distinct `(a, b)` **pair**, not one row per `a` — a different row
 count whenever a given `a` has more than one `b`.
 
-> **Note** faithful — PG native = `[(1,10),(2,5)]`; the old
-> `SELECT DISTINCT` mistranslation gave `[(1,10),(1,20),(2,5),(2,7)]` on the
-> other three engines (a real defect this rewrite fixed).
+> **Note** faithful — live-verified `[(1,10),(2,5)]` on all four
+> engines via the `ROW_NUMBER()` rewrite.
 
 **See Also.** [`pg-distinct-on`](../../../tests/fixtures/challenge/challenge_postgresql.sql).
