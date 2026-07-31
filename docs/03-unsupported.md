@@ -238,26 +238,28 @@ so an exotic custom format may still need manual review.
 #### Supported function translations
 
 Within procedural bodies, the engine translates these built-in functions
-across dialects (name mapping for same-arity equivalents, plus dedicated
-handling for the forms below):
-
-- **Current timestamp**: `GETDATE()` ↔ `SYSDATE` ↔ `NOW()`, with the correct
-  parenthesization per engine.
-- **`DATEADD(part, n, date)`**: → Oracle (`date + n` for days, `ADD_MONTHS`,
-  `NUMTODSINTERVAL`), PostgreSQL (`date + INTERVAL 'n unit'`), MySQL
-  (`DATE_ADD(date, INTERVAL n unit)`).
-- **`DATEDIFF(part, start, end)`**: → Oracle (`end - start`,
-  `MONTHS_BETWEEN`), PostgreSQL (`end::date - start::date`), MySQL
-  (`DATEDIFF` for days, `TIMESTAMPDIFF` otherwise).
-- **String/null functions**: `LEN`/`LENGTH`/`CHAR_LENGTH`,
-  `SUBSTRING`/`SUBSTR`, `ISNULL`/`NVL`/`COALESCE`/`IFNULL`, `UPPER`,
-  `LOWER`, `REPLACE`, `CEILING`/`CEIL`, and others.
-
-Functions that require argument reordering (e.g. `CHARINDEX`↔`INSTR`↔
-`LOCATE`) or decomposition (`DECODE`→`CASE`) convert faithfully — arguments
-are re-slotted / the expression is rebuilt on the AST, with no comment or
-warning needed. Unknown date parts or non-standard call shapes degrade to a
-carrier + warning for manual handling.
+across dialects by name (current timestamp `GETDATE()` ↔ `SYSDATE` ↔
+`NOW()`, `LEN`/`LENGTH`/`CHAR_LENGTH`, `ISNULL`/`NVL`/`COALESCE`/`IFNULL`,
+and the rest of the same-arity catalog — see the generated
+[mappings reference](reference/mappings-tsql-oracle.md) and its per-pair
+siblings for the full table). `DATEADD`/`DATEDIFF` and the argument-
+reordering or decomposition forms (`CHARINDEX`↔`INSTR`↔`LOCATE`,
+`DECODE`→`CASE`) need real per-target rebuilding rather than a bare rename;
+the mechanism and its edge cases each have a dedicated rationale article:
+[DATEADD(MONTH) → Oracle
+ADD_MONTHS](rationale/datetime/dateadd-month-to-oracle-add-months.md) and
+[the reverse](rationale/datetime/oracle-add-months-to-dateadd.md),
+[DATEDIFF QUARTER/WEEK and DATEPART
+WEEKDAY](rationale/datetime/datediff-datepart-unit-maps.md), [date ± int /
+timestamp − timestamp](rationale/datetime/temporal-plus-minus-arithmetic.md),
+[`CHARINDEX` start-argument zero
+guard](rationale/strings-collation/charindex-start-argument-zero-guard.md),
+[`LOCATE` empty-needle
+guard](rationale/strings-collation/locate-empty-needle-guard.md), and
+[`DECODE` mixed-type branch
+cast](rationale/strings-collation/decode-mixed-type-branch-cast.md). Unknown
+date parts or non-standard call shapes degrade to a carrier + warning for
+manual handling.
 
 **Non-reproducible date/number masks (⚠️ degrade to a carrier + warning).** A
 **reproducible** mask — standard date fields, or a plain grouping/decimal number
