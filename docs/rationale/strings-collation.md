@@ -285,59 +285,43 @@ portable construct entirely (`reda-ts-like-escape`, class `lying-warning`).
 
 ---
 
-### T-SQL LIKE character classes (`'[A-C]%'`) — open, observed divergence
+### T-SQL LIKE character classes (`'[A-C]%'`) → SIMILAR TO / REGEXP / REGEXP_LIKE
 
 **Problem.** T-SQL's `LIKE` supports bracketed **character
 classes**: `'[A-C]%'` matches any string starting with `A`, `B` or `C`.
-`'Bob' LIKE '[A-C]%'` is true (`1`) on T-SQL.
+PostgreSQL, MySQL and Oracle treat `[` and `]` as **literal characters** in a
+`LIKE` pattern, so a verbatim passthrough silently flips the result
+(`'Bob' LIKE '[A-C]%'` would be false — the string would have to start with
+the literal `[`).
 
 **Solution.**
 
 ```sql
--- tsql → postgresql / mysql / oracle (not a corpus case; reproduces the
--- FINDINGS.md observation against the current build)
-SELECT CASE WHEN 'Bob' LIKE '[A-C]%' THEN 1 ELSE 0 END AS r;
+-- corpus case red2-ts-like-charclass (tsql → postgresql)
+SELECT c FROM t WHERE c LIKE '[A-C]%'
 -- =>
--- UNIQUE: string comparison result depends on each engine's default collation
--- (case/accent sensitivity) and trailing-space handling, which differ between
--- tsql and <target> — the boolean result may differ (docs/03-unsupported.md)
-SELECT CASE
-  WHEN 'Bob' LIKE '[A-C]%' THEN 1
-  ELSE 0
-END AS r;
+SELECT c FROM t WHERE c SIMILAR TO '[A-C]%';
 ```
 
-*Current state — honestly, not fixed.* This is a **known, unresolved**
-finding (`tests/fixtures/challenge/FINDINGS.md`, "Observations" section,
-2026-07-30 batch), left **unscored** in the campaign because a warning *is*
-emitted — but the warning is wrong. PostgreSQL, MySQL and Oracle treat `[` and
-`]` as **literal characters** in a `LIKE` pattern (there is no bracket
-character-class syntax in standard `LIKE`), so the pattern is passed through
-verbatim and silently changes meaning: `'Bob' LIKE '[A-C]%'` is `0` (false)
-on all three, because the string would have to *start* with the literal
-character `[`. The example above was verified directly against the running
-transpiler.
+PostgreSQL keeps the bracket class via `SIMILAR TO` (whose pattern grammar
+includes character classes); MySQL rewrites to `REGEXP '^[A-C].*$'` and
+Oracle to `REGEXP_LIKE(expr, '^[A-C].*$')` — the `%`/`_` wildcards are
+converted to their regex equivalents and the pattern is anchored.
 
-**Discussion.** The warning that fires is the generic **collation**
-divergence note (case sensitivity, trailing spaces) — it is real
-infrastructure, but it is attached here for the wrong reason: the actual
-cause is that the T-SQL bracket character class is untranslated syntax, not a
-collation difference, and the warning text never says so.
+**Discussion.** Standard `LIKE` has no character-class syntax, so each
+target needs the closest predicate that does. Literal-vs-literal comparisons
+still carry the generic collation-divergence note (`UNIQUE-1207`) that any
+cross-engine string comparison gets — that warning is about case/accent
+sensitivity and trailing spaces, a separate mechanism from the class
+translation itself.
 
-*What would fix it (not yet done).* Either translate the bracket class to
-each target's equivalent (PostgreSQL/Oracle: rewrite to a `SIMILAR
-TO`/`REGEXP_LIKE` form or a per-character `OR` chain; MySQL: `REGEXP`), or at
-minimum emit a warning that names the real cause instead of the collation
-boilerplate.
+> **Note** faithful — live-verified 2026-07-30 on all four engines
+> (`'Bob'` matches, value `1`); pinned by
+> [`TestTsqlLikeCharClassTranslated`](../../tests/integration/test_challenge.py).
 
-> **Warning** **Silent-in-effect** (a warning fires, but names
-> the wrong mechanism) — this page documents current behaviour, not the
-> approved-limit status the other collation entries below have. Not `faithful`,
-> not (yet) a correctly-documented limit.
-
-**See Also.** `tests/fixtures/challenge/FINDINGS.md`, "Observations (not
-scored — dedup/borderline, for BLUE/PURPLE)" section, 2026-07-30 batch entry
-"T-SQL LIKE `'[A-C]%'` character class".
+**See Also.** corpus case `red2-ts-like-charclass`
+(`tests/fixtures/challenge/challenge_sqlserver.sql`) ·
+[`UNIQUE-1207`](../reference/warnings.md#unique-1207).
 
 ---
 
