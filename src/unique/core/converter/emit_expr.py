@@ -111,6 +111,24 @@ _INT_SAFE_CAST_BASES = frozenset(
 _SAFE_NUMERIC_CAST_BASES = _INT_SAFE_CAST_BASES | frozenset(
     {"DECIMAL", "NUMERIC", "NUMBER", "DEC", "FLOAT", "DOUBLE", "REAL"}
 )
+# Oracle forbids a length/precision on these CAST target types inside a PL/SQL
+# *expression* (PLS-00103); a SQL statement keeps them. Mirrors the procedural
+# text-path strip in ``procedural/transformer/oracle.py``.
+_ORA_PLSQL_UNCONSTRAINED = frozenset(
+    {
+        "VARCHAR2",
+        "NVARCHAR2",
+        "VARCHAR",
+        "NVARCHAR",
+        "CHAR",
+        "NCHAR",
+        "NUMBER",
+        "DECIMAL",
+        "NUMERIC",
+        "DEC",
+        "FLOAT",
+    }
+)
 # PG/MySQL have no error-safe cast; a numeric target is guarded by a validation
 # test so a non-numeric value yields the fallback (Oracle DEFAULT) / NULL (TRY)
 # instead of raising (PG) or coercing to 0 (MySQL). Dict dispatch — the pattern
@@ -593,32 +611,42 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             and not node.target_type.params
         ):
             dtype, mapped = "VARBINARY", None
-        if (
-            mapped
-            and dialect == "oracle"
-            and dtype.upper() == "CLOB"
-            and IR_EMBEDDED.get()
-        ):
-            # Inside a PL/SQL body ``CAST(x AS CLOB)`` is valid but
+        # Oracle inverts its CAST typing rules between a PL/SQL *expression* (a
+        # PRINT argument, an IF/WHILE condition — PLS-00103 on ANY constrained
+        # type) and a SQL *statement*, top-level OR embedded in a routine body
+        # (ORA-00906 without the char length, ORA-22849 on a CLOB target).
+        # IR_PLSQL_EXPR marks the expression position — IR_EMBEDDED cannot,
+        # since a SELECT … INTO and a PRINT argument are both "embedded".
+        _ora_plsql_expr = dialect == "oracle" and IR_PLSQL_EXPR.get()
+        if mapped and _ora_plsql_expr and dtype.upper() == "CLOB":
+            # In a PL/SQL expression ``CAST(x AS CLOB)`` is valid but
             # ``CAST(x AS VARCHAR2(4000))`` is not (PLS-00103) — the exact reverse
-            # of a top-level SQL statement (ORA-22849 on CLOB). The CLOB->VARCHAR2
-            # remap is for the SQL engine; keep CLOB in a procedural body.
+            # of a SQL statement (ORA-22849 on CLOB). The CLOB->VARCHAR2 remap is
+            # for the SQL engine; keep CLOB in a PL/SQL expression position.
             mapped = None
         if mapped:
             dtype = mapped
-            # A mapped character type keeps its length (Oracle rejects a
-            # lengthless character CAST, ORA-00906); the others (SIGNED,
-            # TIMESTAMP, BIT) take none.
-            if node.target_type.params and mapped in ("VARCHAR2", "NVARCHAR2", "CHAR"):
+            # A mapped character type keeps its length in a SQL statement (Oracle
+            # rejects a lengthless character CAST, ORA-00906) but must drop it in
+            # a PL/SQL expression (PLS-00103); the others (SIGNED, TIMESTAMP, BIT)
+            # take none.
+            if (
+                node.target_type.params
+                and mapped in ("VARCHAR2", "NVARCHAR2", "CHAR")
+                and not _ora_plsql_expr
+            ):
                 dtype += f"({', '.join(str(p) for p in node.target_type.params)})"
-        elif node.target_type.params:
+        elif node.target_type.params and not (
+            _ora_plsql_expr
+            and dtype.split("(")[0].strip().upper() in _ORA_PLSQL_UNCONSTRAINED
+        ):
             dtype += f"({', '.join(str(p) for p in node.target_type.params)})"
-        # A LENGTHLESS VARCHAR2 CAST is ORA-00906 in a SQL statement (but the
-        # only valid form inside a PL/SQL expression — the CLOB lesson): give
-        # the SQL-context cast the maximum length.
+        # A LENGTHLESS VARCHAR2 CAST is ORA-00906 in a SQL statement (top-level
+        # or embedded in a body): give the SQL-context cast the maximum length. A
+        # PL/SQL expression requires no length instead (the CLOB lesson).
         if (
             dialect == "oracle"
-            and not IR_EMBEDDED.get()
+            and not _ora_plsql_expr
             and dtype.upper() in ("VARCHAR2", "NVARCHAR2", "VARCHAR", "NVARCHAR")
         ):
             dtype += "(4000)"
@@ -900,7 +928,15 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             # set_query chain (wave 163), so strip along the chain.
             # (A quantified ALL/ANY subquery is multi-row — keep it.)
             query = _strip_unlimited_order_by(query)
-        rendered = f"({_emit_select(query, dialect)})"
+        # A subquery re-enters SQL statement context: a lengthless char CAST in
+        # its SELECT list needs the length even when the enclosing fragment is a
+        # PL/SQL expression (IF EXISTS(SELECT CAST(x AS VARCHAR) …)).
+        _plsql_tok = IR_PLSQL_EXPR.set(False) if IR_PLSQL_EXPR.get() else None
+        try:
+            rendered = f"({_emit_select(query, dialect)})"
+        finally:
+            if _plsql_tok is not None:
+                IR_PLSQL_EXPR.reset(_plsql_tok)
         if node.quantifier:
             # ``> ALL/ANY (subquery)`` (wave 234).
             return f"{node.quantifier} {rendered}"
@@ -1202,17 +1238,19 @@ def emit_pg_charcode_to_mysql(
     return None
 
 
-def emit_pg_to_hex_to_tsql_oracle(
-    node: FunctionCall, fn_name: str, dialect: str
-) -> str | None:
-    """PG to_hex(x) -> T-SQL/Oracle, matching the unpadded lowercase value, or
-    None (B54).
+def emit_pg_to_hex(node: FunctionCall, fn_name: str, dialect: str) -> str | None:
+    """PG to_hex(x) -> the target's matching unpadded lowercase value, or None
+    (B54, B59).
 
-    Neither engine has a matching built-in — left as bare ``HEX(x)`` (the
-    generic sqlglot name) it was an unwarned runtime error (T-SQL resolves it
-    to a phantom ``dbo.HEX``, Oracle to an undefined function). PG's to_hex()
-    has NO zero-padding, so both rebuilds get the fixed-width hex string from
-    the engine's own primitive and strip the padding back out:
+    sqlglot normalizes PG's ``to_hex`` to the generic name ``HEX``, which is
+    an unwarned runtime error on every target that lacks a ``HEX`` built-in:
+    T-SQL resolves it to a phantom ``dbo.HEX``, Oracle to an undefined function,
+    and — the identity direction — PostgreSQL itself has no ``HEX`` either
+    (only ``to_hex``), so ``SELECT to_hex(x)`` came back out as the invalid
+    ``HEX(x)`` (B59). PG target simply respells the canonical name back to
+    ``TO_HEX``; T-SQL/Oracle rebuild the value from their own primitives. PG's
+    to_hex() has NO zero-padding, so both rebuilds get the fixed-width hex
+    string from the engine's own primitive and strip the padding back out:
 
     - T-SQL: CAST through VARBINARY(8) (matching PG's bigint overload) then
       CONVERT(..., 2) for the fixed-width hex text; the CASE+PATINDEX finds
@@ -1249,6 +1287,8 @@ def _to_hex_tsql(arg: str) -> str:
 _PG_TO_HEX_BUILDERS: dict[str, Callable[[str], str]] = {
     "oracle": _to_hex_oracle,
     "tsql": _to_hex_tsql,
+    # Identity: respell the canonical HEX back to PG's own name (B59).
+    "postgresql": lambda arg: f"TO_HEX({arg})",
 }
 
 

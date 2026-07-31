@@ -5122,6 +5122,65 @@ class TestPlsqlExpressionCastContext:
         )
         assert re.search(r"(?i)AS\s+VARCHAR2\s*\(\s*10\s*\)", out), out
 
+    def test_plsql_expression_cast_drops_explicit_length(self) -> None:
+        # (expr, explicit) quadrant: an explicit-length char CAST used as a
+        # PL/SQL expression argument is PLS-00103 — the length must be dropped.
+        out = _tx(
+            "CREATE PROCEDURE p AS BEGIN PRINT CAST(5 AS VARCHAR(10)); END",
+            "tsql",
+            "oracle",
+        )
+        line = next(x for x in out.splitlines() if "PUT_LINE" in x)
+        assert re.search(r"(?i)AS\s+VARCHAR2\s*\)", line), out
+        assert not re.search(r"(?i)AS\s+VARCHAR2?\s*\(", line), out
+
+    def test_plsql_if_condition_cast_drops_explicit_length(self) -> None:
+        # An IF condition is a PL/SQL expression position too, not only PRINT.
+        out = _tx(
+            "CREATE PROCEDURE p AS BEGIN IF CAST(5 AS VARCHAR(10)) = '5' "
+            "PRINT 'x'; END",
+            "tsql",
+            "oracle",
+        )
+        line = next(x for x in out.splitlines() if x.strip().startswith("IF "))
+        assert re.search(r"(?i)AS\s+VARCHAR2\s*\)", line), out
+        assert not re.search(r"(?i)AS\s+VARCHAR2?\s*\(", line), out
+
+    def test_embedded_sql_statement_lengthless_cast_gets_max_length(self) -> None:
+        # (statement, lengthless) quadrant: a lengthless char CAST inside an
+        # embedded SQL statement (SELECT INTO) is ORA-00906 — synthesize the
+        # maximum length, exactly like a top-level SQL statement does.
+        out = _tx(
+            "CREATE PROCEDURE p AS BEGIN DECLARE @v VARCHAR(10); "
+            "SELECT @v = CAST(n AS VARCHAR) FROM t; END",
+            "tsql",
+            "oracle",
+        )
+        assert re.search(r"(?i)AS\s+VARCHAR2\s*\(\s*4000\s*\)", out), out
+        assert not re.search(r"(?i)AS\s+VARCHAR2\s*\)", out), out
+
+    def test_embedded_sql_statement_explicit_cast_keeps_length(self) -> None:
+        # (statement, explicit) inside a body still keeps the source length.
+        out = _tx(
+            "CREATE PROCEDURE p AS BEGIN DECLARE @v VARCHAR(10); "
+            "SELECT @v = CAST(n AS VARCHAR(10)) FROM t; END",
+            "tsql",
+            "oracle",
+        )
+        assert re.search(r"(?i)AS\s+VARCHAR2\s*\(\s*10\s*\)", out), out
+
+    def test_subquery_cast_in_plsql_condition_keeps_length(self) -> None:
+        # A SELECT subquery nested inside a PL/SQL condition re-enters SQL
+        # statement context: its lengthless char CAST must still get a length.
+        out = _tx(
+            "CREATE PROCEDURE p AS BEGIN "
+            "IF EXISTS(SELECT CAST(n AS VARCHAR) FROM t) PRINT 'x'; END",
+            "tsql",
+            "oracle",
+        )
+        assert re.search(r"(?i)AS\s+VARCHAR2\s*\(\s*4000\s*\)", out), out
+        assert not re.search(r"(?i)AS\s+VARCHAR2\s*\)", out), out
+
 
 class TestMergeExtendedClauses:
     """T-SQL's extended MERGE clauses: NOT MATCHED BY SOURCE splits into a

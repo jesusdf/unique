@@ -374,6 +374,19 @@ IR_EMBEDDED: contextvars.ContextVar[bool] = contextvars.ContextVar(
     "ir_embedded", default=False
 )
 
+# True while the fragment being emitted is a *bare PL/SQL expression* (a PRINT
+# argument, an IF/WHILE condition) rather than a SQL statement. Oracle inverts
+# its CAST typing rules between the two: a PL/SQL expression rejects ANY
+# constrained type (PLS-00103), while a SQL statement — top-level OR embedded
+# in a routine body (SELECT … INTO) — requires the character length (ORA-00906).
+# IR_EMBEDDED alone cannot tell them apart (both a SELECT INTO and a PRINT
+# argument are "embedded"); the procedural transformer marks the position, and
+# emit resets this to False when it descends into a nested subquery (which
+# re-enters SQL statement context).
+IR_PLSQL_EXPR: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "ir_plsql_expr", default=False
+)
+
 
 _CREATE_FUNCTION_NAME_RE = re.compile(
     r"(?im)^\s*CREATE\s+(?:OR\s+(?:REPLACE|ALTER)\s+)?FUNCTION\s+" r"([\w\[\]\"`.]+)"
@@ -1160,6 +1173,7 @@ __all__ = [
     "DEFINED_ALIASES",
     "SOURCE_DIALECT",
     "IR_EMBEDDED",
+    "IR_PLSQL_EXPR",
     "_BARE_CHAR_BIGTEXT",
     "_BIT_COLUMN_RE",
     "_COLUMN_NAME_RE",
