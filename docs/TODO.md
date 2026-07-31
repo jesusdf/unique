@@ -54,7 +54,17 @@ routines-unblocked and severity:*
   `UNIX_TIMESTAMP()` (func2) and oracle `RAWTOHEX`/`STANDARD_HASH` (func4).
 - ~~B37~~ — DONE 2026-07-31: expression-position hoist with honest re-evaluated-condition degrade; corpus 1033 count 8 → 0.
 - **B38** — UNIQUE-1170 temp-table parse giveup: isolate before briefing. ALSO: `_split_generic` (batch_splitter.py ~663) shares the CASE-uncounted depth asymmetry B35 fixed in `_split_mysql` — a DELIMITER-less PL/SQL body with a CASE expression could tear the same way (flagged 2026-07-31, not yet reproduced).
-- **B39** — 1230/1231 placeholder-code fidelity (quality, not coverage).
+- ~~B39~~ — DONE 2026-07-31: parse/transform warnings ship `code=None` and the
+  existing carrier reconciliation backfills the specific code (exact-literal
+  match for the parse-fallback warning via `PARSE_FALLBACK_WARNING`); a new
+  per-batch fallback keeps 1230/1231 for genuinely generic warnings. Sweep:
+  mysql 1231 20→16 (4 → correct 1171), oracle 1230 4→0 (→ 1170). SQL output
+  byte-identical. `tests/integration/test_procedural_warning_codes.py`.
+- **B40** (P3, found during B39) — the "no warning covers this carrier →
+  synthesize a duplicate" reconciliation path emits a second
+  `lossy_conversion` warning alongside a correctly-coded parse warning for
+  the same carrier (same code twice, cosmetic duplication) — a
+  `_warning_covers` shingle-matching limitation, pre-existing.
 
 ---
 
