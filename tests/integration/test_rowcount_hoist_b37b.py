@@ -176,6 +176,70 @@ class TestOtherTargetsUnchanged:
         assert "GET DIAGNOSTICS" not in out, out
 
 
+class TestMysqlChangedRowsDivergence:
+    """MySQL's ``ROW_COUNT()`` counts rows CHANGED; PostgreSQL's
+    ``GET DIAGNOSTICS ROW_COUNT`` counts rows MATCHED (base.py N11/B12). When
+    the hoist consumes a MySQL-source reference the divergence must be warned —
+    not shipped silently. Oracle ``SQL%ROWCOUNT`` and T-SQL ``@@ROWCOUNT`` both
+    count matched rows, so those sources do NOT warn.
+    """
+
+    _DIVERGENCE = "ROW_COUNT() counts rows CHANGED"
+
+    def test_mysql_hoist_warns_divergence(self) -> None:
+        r = _t(_MYSQL_IF, "mysql")
+        assert any(self._DIVERGENCE in w.message for w in r.warnings), r.warnings
+
+    def test_mysql_assignment_hoist_warns_divergence(self) -> None:
+        r = _t(_MYSQL_ASSIGN, "mysql")
+        assert any(self._DIVERGENCE in w.message for w in r.warnings), r.warnings
+
+    def test_warning_does_not_alter_sql_output(self) -> None:
+        # The divergence is a warning only — no carrier lands in the SQL, the
+        # hoist output is unchanged (still a clean GET DIAGNOSTICS capture).
+        out = _t(_MYSQL_IF, "mysql").sql
+        assert "UNIQUE-1192" not in out, out
+        assert "GET DIAGNOSTICS uq_rowcount = ROW_COUNT;" in _flat(out), out
+
+    def test_warning_deduplicated(self) -> None:
+        # Two MySQL rowcount checks in one routine warn once (guardrail 5).
+        src = (
+            "CREATE PROCEDURE p()\n"
+            "BEGIN\n"
+            "    UPDATE t SET x = 1 WHERE id = 5;\n"
+            "    IF ROW_COUNT() = 0 THEN\n"
+            "        UPDATE t SET x = 2 WHERE id = 6;\n"
+            "    END IF;\n"
+            "    DELETE FROM t WHERE id = 7;\n"
+            "    IF ROW_COUNT() = 0 THEN\n"
+            "        UPDATE t SET x = 3 WHERE id = 8;\n"
+            "    END IF;\n"
+            "END"
+        )
+        r = _t(src, "mysql")
+        matches = [w for w in r.warnings if self._DIVERGENCE in w.message]
+        assert len(matches) == 1, r.warnings
+
+    def test_tsql_hoist_no_divergence_warning(self) -> None:
+        r = _t(_TSQL_IF, "tsql")
+        assert "GET DIAGNOSTICS uq_rowcount" in r.sql, r.sql
+        assert not any(self._DIVERGENCE in w.message for w in r.warnings), r.warnings
+
+    def test_oracle_hoist_no_divergence_warning(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p IS\n"
+            "BEGIN\n"
+            "    UPDATE t SET x = 1 WHERE id = 5;\n"
+            "    IF SQL%ROWCOUNT <> 1 THEN\n"
+            "        RAISE_APPLICATION_ERROR(-20001, 42);\n"
+            "    END IF;\n"
+            "END;\n/"
+        )
+        r = Transpiler().transpile(src, "oracle", "postgresql")
+        assert "GET DIAGNOSTICS uq_rowcount" in r.sql, r.sql
+        assert not any(self._DIVERGENCE in w.message for w in r.warnings), r.warnings
+
+
 class TestRoundTripPgDiagnosticsToMysql:
     """The pg ``GET DIAGNOSTICS x = ROW_COUNT`` form must still translate back
     out to MySQL's ``ROW_COUNT()`` — the reverse direction of the hoist."""

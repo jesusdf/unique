@@ -135,6 +135,13 @@ class PostgresTransformer(ProceduralTransformer):
         new_body = self._inject_rowcount(body)
         if not self._rowcount_hoisted:
             return node
+        if self._source == "mysql":
+            # MySQL's ROW_COUNT() counts rows CHANGED by the last DML; the
+            # PostgreSQL ``GET DIAGNOSTICS ROW_COUNT`` it hoists to counts rows
+            # MATCHED (base.py N11/B12) — a value-wise no-op UPDATE diverges.
+            # Warn (do not ship silently). Oracle/T-SQL sources count matched
+            # rows too, so they do not diverge.
+            self._warn_mysql_rowcount_divergence()
         decl = DeclareStatement(
             name=self._ROWCOUNT_TMP, data_type=DataType(name="bigint")
         )
