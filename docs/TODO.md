@@ -38,10 +38,15 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
   unwarned; mysql `REPLACE` with a NON-literal NULL arg → oracle returns the
   original string where MySQL yields NULL). Each fix removes its ledger
   entry (the ratchet enforces the direction).
-- **A10-T2 (maintainer decision)** — precision policy: numeric-tolerance
-  comparison vs. warning on precision-changing conversions (the historical
-  "same value + precision diff = acceptable" rule is nowhere encoded);
-  decides the ledger's 12 `precision-policy-pending` cases.
+- ~~A10-T2~~ — DECIDED (maintainer, 2026-07-31: numeric tolerance) and DONE:
+  two numeric cells match when equal after rounding to the COARSER operand's
+  own precision, with a zero-adjacent absolute guard and a tight (1e-9)
+  relative-epsilon fallback for full-precision transcendental noise (found
+  via a live ts-trig regression). Purely-numeric fractional strings in
+  scope; numbers inside longer text untouched. 11/12
+  `precision-policy-pending` cases removed from the ledger
+  (`my-num-to-str` retagged `documented-inherent`); floor 43→32. Policy
+  documented in the `corpus_diff.py` module docstring.
 - **A10-P** — procedures corpus live-COMPARE (4-dialect same-routine
   fixtures: call with fixed inputs, compare effects). Needs its own design;
   highest-value remaining FE gap.
