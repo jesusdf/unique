@@ -43,3 +43,21 @@ built and its entry format.
 | Article | Direction | Description |
 |---|---|---|
 | [MySQL compound `EXTRACT` units (`YEAR_MONTH`, `DAY_HOUR`, …) → all targets](mysql-compound-extract-units.md) | mysql → all | MySQL's `EXTRACT` accepts several **compound** units — `YEAR_MONTH`, `DAY_HOUR`, `DAY_MINUTE`, `DAY_SECOND`, and others — that pack two or more calendar fields into a single decimal-weighted number in one call. |
+
+## Schema-harvested ANSI date/timestamp literal wrapping
+
+| Article | Direction | Description |
+|---|---|---|
+| [An ISO date/timestamp string written into a harvested `DATE`/`DATETIME` column → wrapped in an Oracle ANSI literal](schema-harvested-date-literal-to-oracle.md) | tsql → oracle | `INSERT INTO evt (d, ts) VALUES ('2024-01-15', '2024-01-15 10:30:00')` relies on the target column's own declared type (`DATE`/`DATETIME`) to interpret a plain ISO string as a date or timestamp — T-SQL, PostgreSQL, and MySQL all accept this implicit string-to-date coercion. |
+
+## DATE typing propagated through a derived table
+
+| Article | Direction | Description |
+|---|---|---|
+| [An Oracle `DATE` literal inside a derived-table projection → its typing survives to the outer column reference](date-typing-propagated-through-derived-table.md) | oracle → tsql/mysql/postgresql | `SELECT ShipDate - OrderDate FROM (SELECT DATE '2020-01-10' ShipDate, DATE '2020-01-01' OrderDate FROM DUAL) x` computes a day count on Oracle, since `DATE - DATE` is arithmetic there. |
+
+## CONVERT(type, value, style) numeric style codes
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `CONVERT(type, value, style)`'s numeric style code → a per-target format function, or ignored when the target type isn't a date](convert-style-code-per-target.md) | tsql → postgresql/mysql/oracle | T-SQL's `CONVERT` takes an optional third argument, a numeric *style* code, whose meaning depends entirely on what the second argument is being converted to: against a date/time type, it selects a date format (`120` = ISO `yyyy-mm-dd hh:mi:ss`, `103` = British/French `dd/mm/yyyy`, ...); against a non-date type, the style code is only meaningful for a handful of special cases (binary-to-string encodings) and is otherwise ignored. |

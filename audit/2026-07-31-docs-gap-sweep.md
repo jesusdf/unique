@@ -691,3 +691,137 @@ remaining directory `ls tests/` reveals, including the one subdirectory —
 `tests/unit/core/procedural/` — the original file-count missed), every
 `test_*.py` file under `tests/` has now been read and classified at least
 once by this audit. No test directory remains unswept.
+
+### Raw-appendix reconciliation (2026-07-31, brief D1c-2)
+
+**Method.** Every row of batches 1–4 and 7's raw tables above (115 rows —
+these five were never re-swept by 5b/6b, whose full-recall passes covered
+only batches 5 and 6) was checked, in order, against the **current**
+`docs/rationale/**/*.md` (the per-article-page layout the rationale set
+migrated to since this sweep started — 134 article files, up from the
+single-page-per-topic layout this document's own top-18-cluster table
+still cites) and `docs/03-unsupported.md`, matched strictly by mechanism
+per this document's own honesty note above, not by family/umbrella
+statement. A row already folded into the top-18-cluster table or into
+Batch 6b/5b's new-gap tables (found while cross-checking, since those two
+passes ran the same day and occasionally reinforced a batch 1–4/7 row with
+a second pinning test) is counted **covered** here without a second
+article — clusters 4, 5, and 7 in particular absorb nine of batch 7's 42
+rows this way. Every remaining genuine gap was verified against the
+transpiler directly (`PYTHONPATH=src .venv/bin/python`, live output
+captured and quoted in the new article) before being written up, and new
+articles cite the sweep's own pinning test(s) in **See Also**.
+
+**Per-batch counts.**
+
+| Batch | Rows | Covered | Gap → new article | Stale | Open (deferred) |
+|---|---|---|---|---|---|
+| 1 — small integration files | 10 | 4 | 6 | 0 | 0 |
+| 2 — mid integration files (triggers/cursors) | 12 | 6 | 5 | 0 | 1 |
+| 3 — dialect assertions A | 31 | 13 | 16 | 0 | 2 |
+| 4 — dialect assertions B | 20 | 8 | 10 | 0 | 2 |
+| 7 — `tests/unit/core/*.py` | 42 | 18 | 16 | 0 | 8 |
+| **Total** | **115** | **49** | **53** | **0** | **13** |
+
+No **stale** rows turned up in these five batches (the ADD_MONTHS stale-doc
+correction batch 1's own row 10 flagged was already fixed same-day, before
+this reconciliation ran — `docs/rationale/datetime/oracle-add-months-to-dateadd.md`
+covers it directly, cited below as **covered**).
+
+**53 gap rows → 41 new articles** (several rows share one underlying
+mechanism and are cited together in one article — e.g. batch 3's `EXECUTE
+IMMEDIATE ... USING` and its own row; the ELT/FIELD pair from batches 1 and
+4; the `CAST ... AS BIT`/unary-bitwise-NOT/COT-PI-TRUNC math-function
+trio; the Oracle `TO_NUMBER`/`DBMS_LOB`/`TRUNC`-dispatch LOB-helper family;
+batch 2's nested-`DECLARE`-hoist row and batch 4's `CATCH`-local-`DECLARE`
+row, one mechanism). New articles, by topic:
+
+- **procedural** (20): `anonymous-block-flattens-to-tsql.md`,
+  `tsql-udf-auto-qualification.md`, `nocount-injected-default.md`,
+  `execute-immediate-into-capture.md`, `base64-xml-idiom-per-target.md`,
+  `error-message-function-per-target.md`, `mid-block-declare-hoist.md`,
+  `mysql-execute-using-session-vars.md`,
+  `pseudo-row-into-mysql-session-vars.md`,
+  `refcursor-package-type-and-inout-mode.md`,
+  `toplevel-batch-do-block-wrap.md`,
+  `oracle-builtin-name-collision-rename.md`,
+  `throw-raiserror-numeric-code-per-target.md`,
+  `constrained-cast-hoisted-select-into-dual.md`,
+  `oracle-formal-parameter-types-unconstrained.md`,
+  `oracle-lob-numeric-helpers-to-tsql.md`,
+  `sqlstate-sqlcode-to-tsql-error-functions.md`,
+  `convert-hashbytes-wrapper-collapse.md`
+- **strings-collation** (9): `charindex-start-argument-zero-guard.md`,
+  `unary-bitwise-not-emulation.md`, `hex-binary-literal-arithmetic-fold.md`,
+  `oracle-ltrim-rtrim-charset-reverse.md`,
+  `decode-mixed-type-branch-cast.md`, `locate-empty-needle-guard.md`,
+  `ilike-upper-comparison.md`, `no-target-spelling-case-chain.md`
+- **ddl** (7): `inline-fk-check-relocated-table-level.md`,
+  `create-type-alias-harvested.md`, `raw-guid-default-bytea.md`,
+  `alter-column-drop-default.md`, `oracle-alter-add-parenthesized-unwrap.md`,
+  `drop-table-idempotent-if-exists.md`
+- **datetime** (3): `schema-harvested-date-literal-to-oracle.md`,
+  `date-typing-propagated-through-derived-table.md`,
+  `convert-style-code-per-target.md`
+- **aggregates-windows** (3): `math-function-per-engine-spelling.md`,
+  `tsql-cast-int-truncation-reverse.md`,
+  `group-concat-synthesized-within-group-oracle.md`
+- **booleans** (2): `oracle-boolean-variable-bare-condition.md`,
+  `tsql-cast-as-bit-normalizes.md`
+- **dml** (1): `group-by-ordinal-resolved.md`
+
+**13 rows left open (deferred, all LOW priority).** Every one of these was
+already marked LOW by the originating batch worker; none is a defect (each
+is a faithful, warning-free rewrite), and each is small enough that a
+future BLUE pass can fold it into an existing article's family rather than
+needing a new one:
+
+- Comment relocation (2 rows, one mechanism): a trailing inline comment
+  that would otherwise swallow a statement terminator
+  (`test_embedded_dml_ir.py::test_procedural_inline_comment_does_not_eat_terminator`),
+  and a mid-condition line comment converted to an inline block comment
+  (`test_oracle_mysql_tail.py::TestCommentInsideIfCondition`) — comments
+  are trivia by this project's own architecture guardrail, and the
+  existing "Comments written before a routine header" entry is the natural
+  home for a "comment relocation" family once a second example lands.
+- `LPAD` multi-character pad emulated via `REPLICATE` (Oracle → T-SQL) —
+  `test_challenge_assertions_oracle.py` (`ora-lpad-multichar`).
+- `WAITFOR DELAY` parsed to seconds, mapped to each engine's sleep
+  primitive — `test_procedural.py::TestWaitFor`.
+- A call argument recognized as an ISO date wrapped in `DATE '...'` for
+  Oracle — `test_procedural.py::TestTSQLToOracle::test_call_wraps_iso_date_argument`
+  (a narrower instance of the schema-harvested date-literal mechanism this
+  reconciliation did write up; this row is a *call-argument*, not a
+  column-typed `INSERT`/`UPDATE` literal).
+- Oracle `CREATE SEQUENCE ... AS <type>` silently dropped —
+  `test_transpiler.py::TestCreateSequence`.
+- Oracle `/` batch-terminator placement rule — `test_transpiler.py::TestTranspiler`
+  (not independently re-verified against current docs beyond the grep
+  pass; likely already implied by the general PL/SQL-block-termination
+  handling, but no article claims it explicitly).
+- `MODE() WITHIN GROUP (ORDER BY s)` → Oracle `STATS_MODE(s)` —
+  `test_ir_first_families.py::TestZeroPushW2Batch`.
+- `SELECT (VALUES (1))` → `SELECT (SELECT 1)` on T-SQL —
+  `test_ir_first_families.py::TestZeroPushW1Batch`.
+- An invalid self-referential variable initializer (`x NUMERIC := x`)
+  silently dropped on Oracle — `test_ir_first_families.py::TestZeroPushW4Batch`
+  /`TestZeroPushW5Batch`. Judged marginal for a rationale entry on
+  reflection: the source itself is nonsensical (a variable referencing
+  itself before it's declared), so this is defensive robustness against
+  malformed input, not a translation of a valid cross-engine construct —
+  the article format's "explain the creative alternative used" framing
+  doesn't fit a case with no valid intent to preserve.
+- `count() OVER ()` gains a synthesized `*` on MySQL —
+  `test_ir_first_families.py::TestZeroPushPgOnlyShapes` (cited by the
+  original batch-7 row; not independently re-located in this pass's time
+  budget).
+- No-op `OFFSET 0` dropped on T-SQL/MySQL —
+  `test_ir_first_families.py::TestZeroPushW2Batch`.
+- `PRIMARY KEY CLUSTERED (col ASC)` drops `CLUSTERED`+ordering on
+  PostgreSQL — `test_output_gate.py::TestGateEndToEnd`.
+
+**Defects flagged (report-only, not fixed, not added to any gap table).**
+None. Every genuine gap found in this pass was a faithful, warning-free
+rewrite on inspection — consistent with batches 5b/6b's own finding that
+this sweep's scope (documentation coverage) rarely turns up a live defect
+as a side effect.

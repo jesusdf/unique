@@ -128,8 +128,116 @@ and sourcing rules.
 |---|---|---|
 | [A lengthless character `CAST` reaching Oracle: valid inside a PL/SQL body, invalid as a bare top-level statement](oracle-cast-length-plsql-body-vs-sql-statement.md) | tsql → oracle | A T-SQL cast to a character type with **no length given at all** (a bare `CAST(x AS VARCHAR)`, as opposed to `VARCHAR(n)`) needs opposite treatment depending on where it lands on Oracle. |
 
+## Anonymous block flattening
+
+| Article | Direction | Description |
+|---|---|---|
+| [Oracle top-level anonymous block (`DECLARE … BEGIN … END;`) → a plain T-SQL batch](anonymous-block-flattens-to-tsql.md) | oracle → tsql | Oracle's top-level anonymous block — `DECLARE ... |
+
 ## Subquery-in-expression assignment restructuring
 
 | Article | Direction | Description |
 |---|---|---|
 | [T-SQL subquery-in-expression assignment → Oracle `SELECT ... INTO ... FROM DUAL`](tsql-subquery-assignment-to-oracle-select-into.md) | tsql → oracle | T-SQL lets a variable assignment's right-hand side embed a subquery directly, either as the whole expression or nested inside another call: `SET @x = (SELECT MAX(a) FROM t)`, or `DECLARE @x INT = (SELECT MAX(a) FROM t)` as an initializer. |
+
+## T-SQL scalar UDF auto-qualification
+
+| Article | Direction | Description |
+|---|---|---|
+| [An unqualified scalar function call → `dbo.`-qualified on T-SQL](tsql-udf-auto-qualification.md) | cross-engine | T-SQL requires a user-defined scalar function call to be schema-qualified (`dbo.fn(...)`); an unqualified call is error 195, "not a recognized built-in function name," even when a function of that name exists in the target database. |
+
+## SET NOCOUNT ON best-practice default
+
+| Article | Direction | Description |
+|---|---|---|
+| [A T-SQL procedure body gains a synthesized `SET NOCOUNT ON;` by default](nocount-injected-default.md) | cross-engine | SQL Server's documented best practice for every stored procedure is `SET NOCOUNT ON` — it suppresses the "N row(s) affected" message that would otherwise ride along on every DML statement, cluttering client output and, over a network round trip, costing real time. |
+
+## Dynamic SQL INTO capture
+
+| Article | Direction | Description |
+|---|---|---|
+| [`EXECUTE IMMEDIATE '<sql>' INTO x` (Oracle) → a two-statement T-SQL capture](execute-immediate-into-capture.md) | oracle → tsql/postgresql | Oracle's `EXECUTE IMMEDIATE '<sql>' INTO x` runs a dynamic query and captures its single-row result directly into a variable — PostgreSQL's `EXECUTE '<sql>' INTO x` is the same idiom natively. |
+
+## Base64 decode idiom
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL's `CAST(N'' AS XML).value('xs:base64Binary(...)', ...)` base64-decode idiom → each target's native call](base64-xml-idiom-per-target.md) | tsql → oracle/postgresql/mysql | T-SQL has no direct `BASE64_DECODE` function; the idiomatic way to decode a base64 string into binary is to route it through the XML type system — `CAST(N'' AS XML).value('xs:base64Binary(sql:variable("@x"))', 'VARBINARY(MAX)')`. |
+
+## ERROR_MESSAGE() function mapping
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `ERROR_MESSAGE()` (inside a `CATCH` block) → each target's own error-text accessor](error-message-function-per-target.md) | tsql → oracle/postgresql/mysql | Inside a T-SQL `CATCH` block, `ERROR_MESSAGE()` reads the text of the error that was just caught. |
+
+## Mid-block DECLARE hoisted to the routine's top declaration section
+
+| Article | Direction | Description |
+|---|---|---|
+| [A `DECLARE` written mid-block (inside an `IF`/`CATCH`) → hoisted to the routine's top declaration section](mid-block-declare-hoist.md) | tsql → postgresql/mysql/oracle | T-SQL allows `DECLARE @v type = init;` anywhere a statement is legal — inside an `IF` body, inside a `CATCH` block, nested arbitrarily deep. |
+
+## SELECT ... INTO :NEW.col pseudo-row targets
+
+| Article | Direction | Description |
+|---|---|---|
+| [`SELECT ... INTO :NEW.col1, :NEW.col2` (Oracle trigger) → PostgreSQL `NEW.col`, MySQL session variables](pseudo-row-into-mysql-session-vars.md) | oracle → postgresql/mysql | An Oracle row-level trigger can `SELECT ... |
+
+## Package ref-cursor type resolution and usage-inferred mode
+
+| Article | Direction | Description |
+|---|---|---|
+| [A package-qualified ref-cursor type (`pkg.my_cursor`) → the target's own ref-cursor type](refcursor-package-type-and-inout-mode.md) | oracle → postgresql/oracle/mysql | An Oracle procedure parameter can be typed with a package-defined `REF CURSOR` subtype (`v_cur OUT pkg_ret.my_cursor`) — `pkg_ret.my_cursor` is only meaningful *inside that package*, never on a target with no package concept at all. |
+
+## Top-level batch wrapped for PL/pgSQL-only constructs
+
+| Article | Direction | Description |
+|---|---|---|
+| [A top-level T-SQL/Oracle batch needing a procedural construct → PostgreSQL `DO $$ ... $$`](toplevel-batch-do-block-wrap.md) | tsql/oracle → postgresql | A standalone (not-inside-a-`CREATE PROCEDURE`) T-SQL batch or Oracle anonymous block can freely mix `PRINT`/`DBMS_OUTPUT`, variable declarations, `IF`, cursor `FOR` loops, and dynamic `EXECUTE` — all procedural constructs that only exist *inside* a routine body on PostgreSQL. |
+
+## Local variable renamed to avoid an Oracle built-in collision
+
+| Article | Direction | Description |
+|---|---|---|
+| [A local variable named after an Oracle built-in (`count`) → renamed everywhere it's used](oracle-builtin-name-collision-rename.md) | postgresql → oracle | `count` is a perfectly legal PL/pgSQL local variable name — PostgreSQL has no keyword collision. |
+
+## THROW/RAISERROR numeric error code
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `THROW`/`RAISERROR`'s numeric error code → each target's own error-code slot](throw-raiserror-numeric-code-per-target.md) | tsql → oracle/postgresql/mysql | T-SQL's `THROW 50001, 'not found', 1` and `RAISERROR('not found', 16, 1)` (with a matching custom message id registered separately) both carry a *numeric error code* alongside the message text. |
+
+## Constrained CAST hoisted through SELECT ... INTO ... FROM DUAL
+
+| Article | Direction | Description |
+|---|---|---|
+| [A constrained numeric `CAST` inside a PL/SQL expression → hoisted through `SELECT ... INTO ... FROM DUAL`](constrained-cast-hoisted-select-into-dual.md) | tsql → oracle | Oracle's PL/SQL forbids a *constrained* type (one with a precision/scale, like `DECIMAL(12, 2)`, or a length) on a `CAST` used directly inside a procedural expression (`PLS-00103`) — only an unconstrained type is legal there. |
+
+## Oracle LOB and numeric-cast helper functions
+
+| Article | Direction | Description |
+|---|---|---|
+| [Oracle `DBMS_LOB`/`UTL_RAW`/`TO_NUMBER`/`TRUNC` helper calls → T-SQL/MySQL built-ins](oracle-lob-numeric-helpers-to-tsql.md) | oracle → tsql/mysql | Several of Oracle's package-qualified LOB helpers and its bare numeric/date built-ins have no shared name on other engines, and one (`DBMS_LOB.SUBSTR`) even reorders its arguments compared to the target's equivalent. |
+
+## Oracle formal parameter/return types stripped of precision and scale
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL sized parameter/return types (`DECIMAL(5,2)`, `NVARCHAR(50)`) → unconstrained on an Oracle routine header](oracle-formal-parameter-types-unconstrained.md) | tsql → oracle | Oracle's PL/SQL forbids length, precision, or scale on a *formal parameter* or *function return* type declaration — `PLS-00103` — even though the identical sized type is perfectly legal on a `CREATE TABLE` column. |
+
+## SQLSTATE/SQLCODE read into T-SQL error functions
+
+| Article | Direction | Description |
+|---|---|---|
+| [PostgreSQL `SQLSTATE` / Oracle `SQLCODE` → `CAST(ERROR_STATE()/ERROR_NUMBER() AS NVARCHAR(n))`](sqlstate-sqlcode-to-tsql-error-functions.md) | postgresql/oracle → tsql | PostgreSQL's `SQLSTATE` and Oracle's `SQLCODE` are bare identifiers, readable directly inside an exception handler as the caught error's state code or numeric code. |
+
+## CONVERT(...,HASHBYTES(...),2) style-2 hex wrapper collapse
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `CONVERT(NVARCHAR(MAX), HASHBYTES(...), 2)` → MySQL's native hash function directly](convert-hashbytes-wrapper-collapse.md) | tsql → mysql | T-SQL has no built-in "digest as a hex string" function — `HASHBYTES(...)` returns raw bytes, so the idiomatic way to get a readable hex digest is to wrap it in `CONVERT(NVARCHAR(MAX), HASHBYTES(...), 2)`, where style `2` is `CONVERT`'s binary-to-hex-string style code. |
+
+## Dynamic SQL bind arguments copied into session variables
+
+| Article | Direction | Description |
+|---|---|---|
+| [`EXECUTE IMMEDIATE '...' USING v1, v2` (Oracle) → MySQL `EXECUTE ... USING @v1, @v2`, bound through session variables](mysql-execute-using-session-vars.md) | oracle → mysql | Oracle's `EXECUTE IMMEDIATE '<sql>' USING bind1, bind2` accepts routine locals and parameters directly as bind arguments. |

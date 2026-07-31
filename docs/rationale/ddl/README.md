@@ -94,3 +94,39 @@ See [README.md](../README.md) for the entry format and sourcing rules.
 | Article | Direction | Description |
 |---|---|---|
 | [PostgreSQL `TRUNCATE ... RESTART IDENTITY / CASCADE` → Oracle/MySQL/T-SQL](truncate-restart-identity-cascade.md) | postgresql → oracle/mysql/tsql | PostgreSQL's `TRUNCATE` defaults to *keeping* an identity column's next value where it was (`CONTINUE IDENTITY` is implicit), and only resets it when you say `RESTART IDENTITY` explicitly; the same statement's `CASCADE` also truncates every table with a foreign key pointing at the truncated one. |
+
+## Inline column-level constraints relocated to table-level
+
+| Article | Direction | Description |
+|---|---|---|
+| [An inline column-level `REFERENCES`/`CHECK` constraint → a table-level constraint clause](inline-fk-check-relocated-table-level.md) | cross-engine | `c INT REFERENCES p(id) ON DELETE CASCADE` and `c INT CHECK (c > 0)` declare a foreign key or check constraint directly on the column, inline inside its own definition — every engine accepts this shorthand. |
+
+## T-SQL CREATE TYPE alias resolved to its base type
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `CREATE TYPE x FROM base` alias type → resolved to its base type everywhere](create-type-alias-harvested.md) | tsql → oracle/postgresql/mysql | T-SQL lets a script define a named alias type (`CREATE TYPE [dbo].[Name] FROM [nvarchar](50) NULL`) and then use `[dbo].[Name]` as an ordinary column type elsewhere in the same script. |
+
+## Oracle RAW(16) DEFAULT SYS_GUID() → PostgreSQL BYTEA default
+
+| Article | Direction | Description |
+|---|---|---|
+| [Oracle `RAW(16) DEFAULT SYS_GUID()` → PostgreSQL `BYTEA` with a matching `DECODE(...)` default](raw-guid-default-bytea.md) | oracle → postgresql | `RAW(16) DEFAULT SYS_GUID()` is Oracle's idiom for a binary-GUID primary key: `SYS_GUID()` generates a 16-byte raw value used directly as the default. |
+
+## ALTER COLUMN DROP DEFAULT
+
+| Article | Direction | Description |
+|---|---|---|
+| [PostgreSQL `ALTER COLUMN a DROP DEFAULT` → Oracle `MODIFY ... DEFAULT NULL`, T-SQL dynamic-SQL script](alter-column-drop-default.md) | postgresql → oracle/tsql | PostgreSQL's `ALTER TABLE t ALTER COLUMN a DROP DEFAULT` removes a column's default expression by name-free reference — no other engine has an equivalent "just remove whatever default is there" clause. |
+
+## Oracle ALTER TABLE ADD (...) parenthesized-list unwrapping
+
+| Article | Direction | Description |
+|---|---|---|
+| [Oracle `ALTER TABLE ... ADD ( ... )` (parenthesized element list) → an unwrapped `ADD` clause](oracle-alter-add-parenthesized-unwrap.md) | oracle → tsql/postgresql/mysql | Oracle allows one or more table elements (columns, constraints) to be added in a single parenthesized list — `ALTER TABLE t ADD (CONSTRAINT fk FOREIGN KEY (col) REFERENCES p(id))`. |
+
+## DROP emitted idempotently
+
+| Article | Direction | Description |
+|---|---|---|
+| [A plain `DROP TABLE t` → `DROP TABLE IF EXISTS t` on PostgreSQL](drop-table-idempotent-if-exists.md) | tsql → postgresql | A migration script is meant to be re-runnable against a target that may already have run it once before — a bare `DROP TABLE t` errors on a second run if the table is already gone, stopping the whole script partway through. |

@@ -48,6 +48,7 @@ degrades to a documented carrier.
 | [`NOT` of a truthy variable, assignment, or function `RETURN` (MySQL, PostgreSQL) → T-SQL, Oracle](not-of-truthy-value.md) | postgresql/mysql → tsql/oracle | The same duality inside procedural bodies: `SET done = NOT done` (MySQL) or `RETURN <predicate>` from a function declared to return a boolean assigns/returns a value, not a predicate. |
 | [Oracle PL/SQL `BOOLEAN` variables and parameters keep native `NOT` (handled)](oracle-plsql-native-boolean.md) | oracle | Oracle's exception to its own "SQL has no boolean value" rule: a PL/SQL variable or parameter declared `BOOLEAN` **is** a first-class value inside procedural code — just not inside a SQL statement issued from that same block. |
 | [Boolean-to-text/char rendering (PostgreSQL `::text` / MySQL `CAST(... AS CHAR)`)](boolean-to-text-rendering.md) | postgresql/mysql → mysql/postgresql | PostgreSQL renders a boolean cast to text as the words `'true'`/`'false'`; MySQL has no boolean text representation at all — its booleans are ordinary integers, so casting one to a character type gives `'1'`/`'0'` instead. |
+| [T-SQL `CAST(x AS BIT)` → Oracle `SIGN(ABS(x))`, not a plain type change](tsql-cast-as-bit-normalizes.md) | tsql → oracle | T-SQL's `CAST(x AS BIT)` is not a value-preserving type change — it *normalizes* any numeric value to `0` or `1` (any non-zero number becomes `1`, zero stays `0`, `NULL` stays `NULL`). |
 
 ## Predicate position: the reverse direction
 
@@ -55,6 +56,7 @@ degrades to a documented carrier.
 |---|---|---|
 | [A numeric/bit value where a genuine predicate or boolean is required (MySQL, PostgreSQL) → T-SQL, Oracle](value-in-predicate-position.md) | postgresql/mysql → tsql/oracle | MySQL/PostgreSQL treat `0`/non-`0` as false/true anywhere a condition is expected (`WHERE 0` never matches); Oracle PL/SQL's `BOOLEAN` return type demands an actual boolean expression, not a `NUMBER`. |
 | [A value-wrapped predicate compared again in predicate position collapses back to the predicate (MySQL) → T-SQL](value-wrapped-predicate-collapse.md) | mysql → tsql | MySQL lets you compare a boolean value against `1`/`0`, or test it with `IS TRUE`, even when that value is itself already a predicate: `WHERE (c2 IS NOT NULL) = 1`. |
+| [A bare Oracle PL/SQL `BOOLEAN` variable used as a condition → `= 1` on T-SQL](oracle-boolean-variable-bare-condition.md) | oracle → tsql | Oracle's PL/SQL `BOOLEAN` variables are used directly as conditions — `IF NOT bexc THEN`, `WHILE bexc LOOP` — since PL/SQL has a real boolean type. |
 
 ## Boolean-column predicates re-spelled for engines with no boolean type
 

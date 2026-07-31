@@ -37,6 +37,7 @@ format and sourcing rules.
 | [`CAST` folding for `LISTAGG`/`STRING_AGG` value arguments (PostgreSQL) → Oracle / T-SQL](cast-folding-listagg-string-agg.md) | postgresql → tsql/oracle | `string_agg(x::text, ',' ORDER BY x)` casts the aggregate argument to `TEXT` before joining. |
 | [`ANY_VALUE` (MySQL / PostgreSQL 16+) → T-SQL](any-value-to-tsql.md) | postgresql/mysql → tsql | `ANY_VALUE(x)` returns an arbitrary (implementation picked) value from the group — used to satisfy a functional-dependency `GROUP BY` without an aggregate wrapper. |
 | [Oracle `LISTAGG(...) WITHIN GROUP (...) OVER (...)` → PostgreSQL / T-SQL / MySQL](oracle-listagg-over.md) | oracle → tsql/postgresql/mysql | Oracle allows `LISTAGG` to be used as a **window** function (`OVER (PARTITION BY …)`), producing a running string aggregation — one output row per input row, not one per group. |
+| [An unordered MySQL `GROUP_CONCAT` → Oracle `LISTAGG` gains a synthesized `WITHIN GROUP (ORDER BY <arg>)`](group-concat-synthesized-within-group-oracle.md) | mysql → oracle | MySQL's `GROUP_CONCAT(expr SEPARATOR sep)` needs no ordering clause — an unordered call is valid MySQL, with whatever order the engine happens to produce. |
 
 ## `DISTINCT ON`
 
@@ -52,9 +53,16 @@ format and sourcing rules.
 | [Integer-truncating vs. decimal division (cross-engine)](integer-vs-decimal-division.md) | cross-engine | `/` truncates two integer operands to an integer on PostgreSQL and T-SQL (`5 / 2` is `2`), but MySQL and Oracle always return a decimal (`5 / 2` is `2.5`) — crossing that line without compensation silently changes the value. |
 | [`CAST(... AS <integer type>)` rounding vs. truncation trade (PostgreSQL / MySQL) → T-SQL](cast-to-integer-rounding.md) | postgresql/mysql → tsql | Casting a fractional value to an integer type rounds half-away-from-zero on PostgreSQL (`CAST(2.7 AS INT)` = `3`, `7.5::int` = `8`) and on MySQL's `SIGNED` cast (`CAST(2.7 AS SIGNED)` = `3`); T-SQL's `CAST`/`CONVERT` to an integer type always **truncates** (a plain `CAST(2.7 AS INT)` would give `2`). |
 | [`MOD`/`%` by a zero divisor (MySQL) → PostgreSQL / T-SQL / Oracle](mod-by-zero-divisor.md) | mysql → tsql/oracle/postgresql | MySQL's `MOD`/`%` returns `NULL` when the divisor is `0` (`5 MOD 0` is `NULL`, not an error); PostgreSQL and T-SQL raise a division-by-zero error, and Oracle's `MOD` returns the **dividend** unchanged (`MOD(5, 0)` = `5`) — three different behaviors for the same input, all different from MySQL's. |
+| [T-SQL `CAST(... AS <integer type>)` truncates; a fractional literal folds, and `AVG(int)` gets a `TRUNC` wrap going the other way](tsql-cast-int-truncation-reverse.md) | tsql → postgresql/oracle/mysql | This is the reverse of [`CAST(... |
 
 ## Topics left out for lack of source support
 
 | Article | Direction | Description |
 |---|---|---|
 | [Topics left out for lack of source support](topics-left-out.md) | overview | - **CI-DISTINCT collation carrier inside the `GROUP_CONCAT`/`STRING_AGG` family specifically** — the corpus has a general case-insensitive-collation carrier for `DISTINCT`/`ORDER BY` (`my-distinct-case`, `docs/03-unsupported.md` §3.14), but no case combining it with a string aggregate's own `DISTINCT`/`ORDER BY` clause, so no dedicated entry is made here to avoid inventing an example. |
+
+## Math functions with no shared spelling
+
+| Article | Direction | Description |
+|---|---|---|
+| [Math functions with no shared spelling: `LOG` argument order, `COT`, `PI()`, `TRUNC(x, n)`](math-function-per-engine-spelling.md) | cross-engine | Several ordinary scalar math functions differ across engines in ways a rename table alone can't bridge — an argument order flip, a missing function entirely, or a same-name function with different rounding behavior. |

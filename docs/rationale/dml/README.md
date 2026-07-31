@@ -95,3 +95,9 @@ format and sourcing rules.
 | Article | Direction | Description |
 |---|---|---|
 | [Recursive CTE synthesis: `WITH RECURSIVE` keyword, Oracle's required column list, and the `MAXRECURSION` hint](recursive-cte-keyword-and-column-list.md) | tsql/mysql → all | A recursive CTE — one whose body queries its own name — needs different declaration syntax on every engine. |
+
+## Positional GROUP BY resolved to a column name
+
+| Article | Direction | Description |
+|---|---|---|
+| [`GROUP BY 1` (positional ordinal) → the actual `SELECT`-list column name](group-by-ordinal-resolved.md) | postgresql → tsql | PostgreSQL accepts a positional ordinal in `GROUP BY` — `GROUP BY 1` groups by whatever the first `SELECT`-list expression is. |
