@@ -464,3 +464,61 @@ class TestOracleCommentBlindHeadWindow:
         executable = [b for b in batches if b.batch_type != BatchType.COMMENT]
         assert len(executable) == 1, [b.sql for b in executable]
         assert "BEGIN" in executable[0].sql and "END" in executable[0].sql
+
+
+class TestPostgresqlDollarQuoteCommentAware:
+    """B42 follow-up: ``_split_postgresql``'s dollar-quote closing-tag search
+    used a blind ``str.find`` that does not skip ``--`` comments/string
+    literals, unlike its sibling scanners (``similarity.py``'s
+    ``_find_close_tag`` already guards against exactly this). A ``$$``-shaped
+    sequence sitting inside a ``--`` comment BEFORE the routine's real
+    closing ``$$`` matched as the closing tag, ending the dollar-quoted body
+    early and shredding the rest of the routine into orphan batches — a real,
+    reproducible desync, not merely a theoretical one.
+    """
+
+    def test_dollar_like_text_in_nested_comment_does_not_close_early(self) -> None:
+        sql = (
+            "CREATE OR REPLACE FUNCTION f1() RETURNS INT LANGUAGE plpgsql AS $$\n"
+            "BEGIN\n"
+            "    -- UNIQUE-9999: some nested note mentioning $$ delimiters\n"
+            "    RETURN 1;\n"
+            "END;\n"
+            "$$;\n"
+        )
+        batches = BatchSplitter.split(sql, "postgresql")
+        assert len(batches) == 1, [b.sql for b in batches]
+        assert batches[0].sql.rstrip().endswith("$$;"), batches[0].sql
+        assert "END;" in batches[0].sql
+
+    def test_realistic_carrier_between_two_real_functions(self) -> None:
+        # The actual B42 shape: a commented-out unsupported-construct carrier
+        # (its own fake $$ open/close, both inside -- lines) sitting between
+        # two real dollar-quoted functions must not disturb either one.
+        sql = (
+            "CREATE OR REPLACE FUNCTION f1() RETURNS INT LANGUAGE plpgsql AS $$\n"
+            "BEGIN\n"
+            "    RETURN 1;\n"
+            "END;\n"
+            "$$;\n"
+            "\n"
+            "-- UNIQUE-1160: something degraded\n"
+            "-- The non-portable translation is commented out below for review:\n"
+            "-- DO $$\n"
+            "-- BEGIN\n"
+            "--     NULL;\n"
+            "-- END $$;\n"
+            "\n"
+            "CREATE OR REPLACE FUNCTION f2() RETURNS INT LANGUAGE plpgsql AS $$\n"
+            "BEGIN\n"
+            "    RETURN 2;\n"
+            "END;\n"
+            "$$;\n"
+        )
+        batches = BatchSplitter.split(sql, "postgresql")
+        assert len(batches) == 2, [b.sql for b in batches]
+        assert batches[0].sql.rstrip().endswith("$$;"), batches[0].sql
+        assert "FUNCTION f1" in batches[0].sql
+        assert batches[1].sql.rstrip().endswith("$$;"), batches[1].sql
+        assert "FUNCTION f2" in batches[1].sql
+        assert "UNIQUE-1160" in batches[1].sql

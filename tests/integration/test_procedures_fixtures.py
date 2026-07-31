@@ -109,35 +109,42 @@ def test_fixture_transpiles_without_crashing(
         assert pattern.search(result.sql) is None
 
 
+#: A PostgreSQL dollar-quote delimiter (``$$`` or ``$tag$``).
+_DOLLAR_TAG_RE = re.compile(r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$")
+
+
 @pytest.mark.parametrize(
     "filename,source",
     [(f, d) for f, d in _FIXTURES if d != "postgresql"],
 )
-def test_pg_pivot_carrier_comments_are_dollar_quote_self_contained(
+def test_pg_pivot_carrier_dollar_quote_does_not_desync_split(
     transpiler: Transpiler, filename: str, source: str
 ) -> None:
-    """A ``--`` carrier line must never carry a generated ``$$`` delimiter.
+    """A degraded routine's generated ``DO $$``/``AS $$`` carrier must not
+    desync the batch split (B42).
 
-    A degraded routine is commented out line by line; when its generated
-    PostgreSQL body contained a ``DO $$``/``AS $$`` dollar-quote wrapper, the
-    ``$$`` leaked into the ``--`` comment. A statement scanner that tracks
-    dollar-quotes then opens/closes a body on a *comment* line and desyncs the
-    split. The carrier must be self-contained: no ``--`` line may hold the
-    ``$$`` delimiter the emitter wraps its own PL/pgSQL output in. (Named
-    ``$tag$`` tokens that appear inside a *source-preservation* carrier are the
-    user's original literal content, preserved byte-exact for hand-porting, and
-    are out of scope here.)
+    Comments are trivia: the carrier quotes its generated PL/pgSQL body
+    VERBATIM — a real ``$$``, not a mangled ``$ $`` — because the
+    dollar-quote scanners that read this output (``batch_splitter.py``'s
+    ``_find_dollar_close``, ``similarity.py``'s ``_find_close_tag``) already
+    skip ``--`` comments while searching for a closing tag, so a tag-shaped
+    sequence inside one of these ``--`` lines cannot be mistaken for a live
+    delimiter. Verify the invariant that actually matters (not the old
+    syntactic "no ``$$`` in a comment line" proxy): every batch's REAL
+    (non-comment) dollar-quote delimiters are balanced — an odd count would
+    mean a genuine open/close pair got split across batches.
     """
     text = (FIXTURE_DIR / filename).read_text(encoding="utf-8")
     out = transpiler.transpile(text, source, "postgresql").sql
-    offenders = [
-        line
-        for line in out.splitlines()
-        if line.lstrip().startswith("--") and "$$" in line
-    ]
-    assert (
-        not offenders
-    ), f"$$ dollar-quote delimiter left in comment lines: {offenders[:5]}"
+    batches = BatchSplitter.split(out, "postgresql")
+    for b in batches:
+        code = "\n".join(
+            line for line in b.sql.splitlines() if not line.lstrip().startswith("--")
+        )
+        tags = _DOLLAR_TAG_RE.findall(code)
+        assert len(tags) % 2 == 0, (
+            "unbalanced dollar-quote delimiter — split desync: " f"{b.sql[:200]!r}"
+        )
 
 
 # Constructs that must never appear as *executable* MySQL in the committed

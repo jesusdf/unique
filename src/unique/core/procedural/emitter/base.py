@@ -66,7 +66,6 @@ from unique.core.ast_nodes import (
     WaitForStatement,
     WhileStatement,
 )
-from unique.core.diagnostics import neutralize_dollar_quotes
 
 logger = logging.getLogger(__name__)
 
@@ -74,12 +73,15 @@ logger = logging.getLogger(__name__)
 def _comment_out(body: str) -> str:
     """Comment out every line of a generated *body* for a carrier.
 
-    Dollar-quote delimiters are neutralized (see
-    :func:`neutralize_dollar_quotes`) so the resulting ``--`` block is
-    self-contained — a ``DO $$``/``AS $$`` wrapper in the body cannot leak a
-    live delimiter into a comment line and desync a dollar-quote-tracking scanner.
+    Comments are trivia: the carrier quotes *body* verbatim (B42) — a
+    ``DO $$``/``AS $$`` wrapper renders as a real ``$$``, not a mangled
+    ``$ $``. The dollar-quote scanners that read this output
+    (``batch_splitter.py``'s ``_find_dollar_close``, ``similarity.py``'s
+    ``_find_close_tag``) already skip ``--`` comments and string literals
+    while searching for a closing tag, so a tag-shaped sequence sitting
+    inside one of these ``--`` lines cannot be mistaken for a live
+    delimiter and desync the split.
     """
-    body = neutralize_dollar_quotes(body)
     return "\n".join(
         f"-- {line}" if line.strip() else "--" for line in body.split("\n")
     )
