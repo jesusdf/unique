@@ -124,12 +124,6 @@ LEDGER: tuple[Excluded, ...] = (
         sql="SELECT CONVERT('abc',BINARY), CONVERT('abc' USING latin1), CAST('abc' AS BINARY)",
     ),
     Excluded(
-        id="my-ts-to-date",
-        tag="defect-pending-fix",
-        reason="Oracle DATE keeps the time component (DATE() should drop it)",
-        sql="SELECT DATE(TIMESTAMP '2020-01-01 14:30') AS r",
-    ),
-    Excluded(
         id="ora-frac-seconds",
         tag="defect-pending-fix",
         reason="EXTRACT(SECOND) fractional vs integer DATEPART on targets",
@@ -170,12 +164,6 @@ LEDGER: tuple[Excluded, ...] = (
         tag="defect-pending-fix",
         reason="DECODE mixed-type default lowers to a rejected int CAST",
         sql="SELECT DECODE(1, 1, 'a', 2, 'b', 99) AS r FROM DUAL",
-    ),
-    Excluded(
-        id="ts-cast-int-datetime",
-        tag="defect-pending-fix",
-        reason="CAST(int AS DATETIME): date vs integer on MySQL",
-        sql="SELECT CAST(1 AS DATETIME) AS r",
     ),
     Excluded(
         id="ts-compress",

@@ -1082,6 +1082,14 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
             "absent": ["TIMESTAMPDIFF"],
         },
     },
+    # MySQL DATE() extracts the date part (drops time); Oracle's DATE type keeps
+    # the clock, so the CAST must be wrapped in TRUNC to drop 14:30.
+    "my-ts-to-date": {
+        "oracle": {
+            "present": ["TRUNC(CAST(TIMESTAMP '2020-01-01 14:30:00' AS DATE))"],
+            "absent": ["DATE("],
+        },
+    },
     "my-trim-both": {
         "tsql": {"present": ["TRIM('x' FROM 'xxabcxx')"], "absent": ["TRIM(BOTH"]},
         "oracle": {

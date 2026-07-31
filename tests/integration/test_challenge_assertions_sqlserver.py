@@ -157,6 +157,20 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
             "absent": ["TRY_CAST", "GETDATE"],
         },
     },
+    # T-SQL CAST(int AS DATETIME) reads the number as days since 1900-01-01.
+    # Oracle/PG add the integer to a DATE; MySQL reads ``DATE + int`` as NUMERIC
+    # addition (19000102), so it must use ADDDATE day arithmetic instead.
+    "ts-cast-int-datetime": {
+        "oracle": {"present": ["DATE '1900-01-01' + 1"], "absent": ["CAST(1 AS DATE"]},
+        "postgresql": {
+            "present": ["CAST('1900-01-01' AS DATE) + 1"],
+            "absent": ["CAST(1 AS"],
+        },
+        "mysql": {
+            "present": ["ADDDATE(CAST('1900-01-01' AS DATE), 1)"],
+            "absent": ["CAST('1900-01-01' AS DATE) + 1"],
+        },
+    },
     "ts-cursor": {
         "oracle": {
             "present": ["CURSOR V_C IS", "WHILE V_C%FOUND LOOP"],

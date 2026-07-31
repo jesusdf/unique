@@ -1473,7 +1473,13 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         # with an explicit CAST for anything that is not a plain literal (those
         # are handled as ANSI date literals elsewhere).
         if fn_name == "TS_OR_DS_TO_DATE" and not isinstance(inner, Literal):
-            return f"CAST({_emit_expression(inner, dialect)} AS DATE)"
+            _cast = f"CAST({_emit_expression(inner, dialect)} AS DATE)"
+            # Oracle's DATE type keeps the time component, so a plain CAST leaves
+            # the clock on (14:30 survives); TRUNC drops it, matching MySQL/T-SQL
+            # DATE(), which extract the date part only.
+            if dialect == "oracle":
+                return f"TRUNC({_cast})"
+            return _cast
         return _emit_expression(inner, dialect)
 
     # GREATEST/LEAST compare strings by collation: PostgreSQL/Oracle are

@@ -48,7 +48,14 @@ from tests.helpers.corpus_diff import is_comparable
 # length/count operands rounded on every target (my-left-float, my-repeat-float:
 # Oracle SUBSTR/RPAD truncated, PG rejected the numeric length). 4 removed: 13
 # defect-pending-fix, 5 documented-inherent, 2 session-dependent = 20.
-LEDGER_SIZE_FLOOR = 20
+#
+# 2026-07-31 (brief T4-B cont.): date-value shapes — MySQL DATE() drops the time
+# but Oracle's DATE type keeps it, so the CAST is now TRUNC-wrapped
+# (my-ts-to-date); and T-SQL CAST(int AS DATETIME) day arithmetic reached MySQL
+# as NUMERIC ``DATE + int`` (19000102) — switched to ADDDATE (ts-cast-int-
+# datetime). 2 removed: 11 defect-pending-fix, 5 documented-inherent, 2
+# session-dependent = 18.
+LEDGER_SIZE_FLOOR = 18
 
 
 def _eligible_cases() -> list[CorpusEntry]:

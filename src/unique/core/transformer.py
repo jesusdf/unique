@@ -313,6 +313,11 @@ class TypeMapper(TransformPass):
                     expression=Literal(value="1900-01-01", dtype="string"),
                     target_type=DataType(name="DATE"),
                 )
+                # MySQL reads ``DATE + int`` as NUMERIC addition (yielding
+                # 19000102, an integer) rather than day arithmetic; ADDDATE adds
+                # the integer as a day count and returns a date.
+                if ctx.target == "mysql":
+                    return FunctionCall(name="ADDDATE", args=(epoch, node.expression))
                 return BinaryOp(
                     operator=BinaryOperator.ADD, left=epoch, right=node.expression
                 )
