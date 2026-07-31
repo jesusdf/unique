@@ -411,19 +411,16 @@ advanced JSON manipulation or PostgreSQL-specific JSONB operators.
 ### 3.10 Bitwise Operators → Oracle
 
 Oracle has no infix bitwise operators (`|` is string concat, `^`/`&` are
-errors). They are now translated via exact integer identities (validated live
-against Oracle; correct for non-negative integers):
-
-| T-SQL | Oracle |
-|-------|--------|
-| `a & b` | `BITAND(a, b)` |
-| `a \| b` | `a + b - BITAND(a, b)` |
-| `a ^ b` | `a + b - 2 * BITAND(a, b)` |
-| `a << b` | `a * POWER(2, b)` |
-| `a >> b` | `FLOOR(a / POWER(2, b))` |
-
+errors); the infix forms (`&`, `|`, `^`, `<<`, `>>`) convert faithfully via
+exact integer identities built from `BITAND`/`POWER` — see
+[the rationale article](rationale/strings-collation/bitwise-operators-to-oracle-identities.md).
 On PostgreSQL `^` becomes `#` (its XOR); MySQL keeps the native operators.
-(A former converter default silently corrupted these to `=`; long fixed.)
+
+The **aggregate** bitwise functions (`BIT_AND`/`BIT_OR`/`BIT_XOR`) are a
+different, genuine limit: Oracle and T-SQL have no bit-aggregate
+equivalent at all (only MySQL and PostgreSQL support them, and translate
+faithfully between each other), so a statement using them on those two
+targets degrades whole via the unmapped-builtin gate (§2.1).
 
 ### 3.11 String Concatenation Between Untyped Columns
 
@@ -438,12 +435,14 @@ by the columns' declared types, which the standalone-DML path does not have (no
 
 ### 3.12 IIF and DATEPART (handled)
 
-`IIF(cond, a, b)` is translated to a searched `CASE WHEN cond THEN a ELSE b END`
-for Oracle/PostgreSQL (kept as `IIF`/`IF` where native), and `DATEPART(part, x)`
-emits the standard `EXTRACT(part FROM x)` (not the comma form every engine
-rejects). Both are validated live. Only date parts outside the common
-year/month/day/hour/minute/second set (e.g. `WEEKDAY`, `QUARTER` on Oracle) may
-still need review.
+Both convert faithfully — `IIF`/MySQL `IF` to a searched `CASE` (see
+[the rationale article](rationale/dml/iif-to-case-or-native.md)), and the
+standard date fields between `DATEPART(part, x)` and `EXTRACT(part FROM
+x)` (see [the rationale article](rationale/datetime/extract-datepart-standard-fields.md)).
+Only date parts outside the common year/month/day/hour/minute/second set
+(e.g. `WEEKDAY`, `QUARTER` on Oracle) need per-field reconstruction
+instead of a plain respelling — see
+[the DATEDIFF/DATEPART unit-map article](rationale/datetime/datediff-datepart-unit-maps.md).
 
 ### 3.25 `GROUPS` Window Frame → T-SQL / MySQL
 
@@ -458,20 +457,13 @@ PostgreSQL keep the native `GROUPS` frame.
 
 ### 3.24 T-SQL Money Literal Shorthand (`$12.50`) — Handled (2026-07-25)
 
-T-SQL's bare currency literal (`$12.50`, `$100`) is mis-parsed by sqlglot as a
-`table.column` reference (`Column(this=Literal(50), table=Identifier($12))`
-for the dotted form, `Column(this=Identifier($100))` for a whole-dollar
-amount) rather than a number — a nonsense shape that used to ship unmodified
-(a quoted `"$12"` identifier and a bare `$` on non-T-SQL targets, both
-invalid SQL there, with zero warnings). The converter now recognizes both
-shapes on T-SQL source and rebuilds the numeric literal (`12.50`, `100`),
-value-preserving on every target — no warning is needed since nothing is
-lost. A **quoted** `"$12".50` / `[$12].[50]` is left untouched (it is
-already-invalid T-SQL, not the money shorthand — live-verified Msg 102), and
-the same `table.column` shape on a dialect with no money-literal syntax
-(Oracle/MySQL source) is now flagged by `validate_source` as invalid input
-instead of validating clean (generalizing the §07-08 "garbage `table.column`"
-detector one level below the top-level bare-statement check).
+Converts faithfully to the plain numeric literal it means — see
+[the rationale article](rationale/dml/money-literal-shorthand.md). A
+**quoted** `"$12".50` / `[$12].[50]` is left untouched (it is
+already-invalid T-SQL, not the money shorthand), and the same
+`table.column` shape on a dialect with no money-literal syntax
+(Oracle/MySQL source) is flagged by source validation as invalid input
+instead of validating clean.
 
 ### 3.22 Annotated Inherent Divergences (2026-07-24 batch)
 
@@ -659,12 +651,10 @@ and reuse it).
 
 ### 3.16 `NCHAR(n)` Unicode Code Point (handled)
 
-T-SQL `NCHAR(n)` returns the character for Unicode code point `n` (an integer — a
-`0x…` argument is a number, not a byte string). It maps to PostgreSQL `CHR(n)`,
-MySQL `CHAR(n USING utf32)`, and Oracle `NCHR(n)`. Oracle's `NCHR` only covers the
-Basic Multilingual Plane and truncates a supplementary code point (`> U+FFFF`) to
-16 bits, so those are emitted as `UNISTR('\HHHH\LLLL')` with the UTF-16 surrogate
-pair (e.g. `NCHAR(0x1F600)` 😀 → `UNISTR('\D83D\DE00')`). Verified live on all three.
+Converts faithfully to PostgreSQL `CHR(n)`, MySQL `CHAR(n USING utf32)`,
+and Oracle `NCHR(n)`/a `UNISTR` surrogate pair for a supplementary code
+point beyond Oracle `NCHR`'s 16-bit range — see
+[the rationale article](rationale/strings-collation/nchar-code-point-per-target.md).
 
 ### 3.15 Error-Tolerant Cast (`DEFAULT … ON CONVERSION ERROR`)
 

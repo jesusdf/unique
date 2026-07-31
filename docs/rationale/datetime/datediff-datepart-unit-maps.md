@@ -67,4 +67,7 @@ expression tied to a known reference Sunday, then offset to match T-SQL's
 [`pg-extract-dow`](../../../tests/fixtures/challenge/challenge_postgresql.sql) ·
 [`TestExtractFieldTranslation`](../../../tests/integration/test_challenge.py) (pinned) ·
 `emit_functions.py::_emit_date_diff`, `emit_functions.py::_weekday_extract_expr`
-· [`UNIQUE-1083`](../../reference/warnings.md#unique-1083).
+· [`UNIQUE-1083`](../../reference/warnings.md#unique-1083) ·
+[`EXTRACT(field FROM x)` ↔ T-SQL `DATEPART(field, x)` for the standard
+fields](extract-datepart-standard-fields.md) (the common-field respelling
+this article's QUARTER/WEEK/WEEKDAY reconstructions are the exception to).
