@@ -104,13 +104,13 @@ On a PostgreSQL target they are preserved faithfully (bracket spelling and
 
 **Engines:** Oracle (PL/SQL), PostgreSQL (plpgsql)
 
-T-SQL and MySQL have no constant local variables. A `name CONSTANT type`
-declaration is emitted as the plain mutable declaration on those targets —
-a safe relaxation for valid programs (the initializer still applies; only
-the compile-time reassignment guard is lost). Oracle↔PostgreSQL keep
-`CONSTANT` intact. Cursor scrollability (`[NO] SCROLL`) is likewise kept on
-PostgreSQL and T-SQL (`SCROLL`) and dropped on MySQL/Oracle, whose cursors
-are forward-only.
+T-SQL and MySQL have no constant local variables, and no cursor
+scrollability modifier. A `name CONSTANT type` declaration and a cursor's
+`[NO] SCROLL` modifier both convert faithfully to the plain, unmarked form
+on any target that cannot express them — a safe relaxation for valid
+programs (the initializer/query still applies; only the compile-time
+reassignment guard or scroll-fetch support is lost) — see
+[the rationale article](rationale/procedural/constant-and-scroll-relaxation.md).
 
 ### 1.6 Function/Procedure Overloading
 

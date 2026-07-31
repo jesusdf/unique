@@ -43,7 +43,7 @@ This is the narrative companion to two machine-checked sources of truth:
 | [Booleans: the value/predicate duality](booleans/README.md) | tri-state `CASE` wrap for value position, `<> 0` synthesis for predicate position, boolean-column `IS TRUE`/`IS FALSE` re-spelling | 10 |
 | [DML: PIVOT/UNPIVOT, MERGE, DELETE, row values](dml/README.md) | PIVOT/UNPIVOT, MERGE/upsert lowering, multi-table DELETE, row caps, row-value comparisons | 29 |
 | [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md) | identity/SERIAL, temp tables, FK actions, sequences, storage options | 26 |
-| [Procedural: cursors, dynamic SQL, system procedures, session directives](procedural/README.md) | cursors, error handling, dynamic SQL, system procedures, session directives | 58 |
+| [Procedural: cursors, dynamic SQL, system procedures, session directives](procedural/README.md) | cursors, error handling, dynamic SQL, system procedures, session directives | 59 |
 
 ## By engine
 
@@ -267,6 +267,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`EXECUTE IMMEDIATE '<sql>' INTO x` (Oracle) → a two-statement T-SQL capture](procedural/execute-immediate-into-capture.md) | Oracle's `EXECUTE IMMEDIATE '<sql>' INTO x` runs a dynamic query and captures its single-row result directly into a variable — PostgreSQL's `EXECUTE '<sql>' INTO x` is the same idiom natively. |
 | [Oracle `DBMS_LOB`/`UTL_RAW`/`TO_NUMBER`/`TRUNC` helper calls → T-SQL/MySQL built-ins](procedural/oracle-lob-numeric-helpers-to-tsql.md) | Several of Oracle's package-qualified LOB helpers and its bare numeric/date built-ins have no shared name on other engines, and one (`DBMS_LOB.SUBSTR`) even reorders its arguments compared to the target's equivalent. |
 | [PostgreSQL `SQLSTATE` / Oracle `SQLCODE` → `CAST(ERROR_STATE()/ERROR_NUMBER() AS NVARCHAR(n))`](procedural/sqlstate-sqlcode-to-tsql-error-functions.md) | PostgreSQL's `SQLSTATE` and Oracle's `SQLCODE` are bare identifiers, readable directly inside an exception handler as the caught error's state code or numeric code. |
+| [`CONSTANT` variable declarations / cursor `[NO] SCROLL` → plain declaration on T-SQL/MySQL](procedural/constant-and-scroll-relaxation.md) | Oracle and PostgreSQL both let a local variable declaration carry `CONSTANT` (`name CONSTANT type := value`, a compile-time reassignment guard) and a cursor declaration carry `[NO] SCROLL` (non-forward fetch support). |
 
 ### Oracle as source
 
@@ -352,6 +353,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [PostgreSQL `SQLSTATE` / Oracle `SQLCODE` → `CAST(ERROR_STATE()/ERROR_NUMBER() AS NVARCHAR(n))`](procedural/sqlstate-sqlcode-to-tsql-error-functions.md) | PostgreSQL's `SQLSTATE` and Oracle's `SQLCODE` are bare identifiers, readable directly inside an exception handler as the caught error's state code or numeric code. |
 | [`EXECUTE IMMEDIATE '...' USING v1, v2` (Oracle) → MySQL `EXECUTE ... USING @v1, @v2`, bound through session variables](procedural/mysql-execute-using-session-vars.md) | Oracle's `EXECUTE IMMEDIATE '<sql>' USING bind1, bind2` accepts routine locals and parameters directly as bind arguments. |
 | [Implicit row count in EXPRESSION position (Oracle `SQL%ROWCOUNT` / T-SQL `@@ROWCOUNT` / MySQL `ROW_COUNT()`) → PostgreSQL `GET DIAGNOSTICS` hoist](procedural/rowcount-expression-hoist-to-postgresql.md) | Oracle's `SQL%ROWCOUNT`, T-SQL's `@@ROWCOUNT`, and MySQL's `ROW_COUNT()` are all readable **inline**, as an expression, anywhere a value is expected (`IF SQL%ROWCOUNT <> 1`, `v := SQL%ROWCOUNT + 1`, a call argument, a `RETURN`). |
+| [`CONSTANT` variable declarations / cursor `[NO] SCROLL` → plain declaration on T-SQL/MySQL](procedural/constant-and-scroll-relaxation.md) | Oracle and PostgreSQL both let a local variable declaration carry `CONSTANT` (`name CONSTANT type := value`, a compile-time reassignment guard) and a cursor declaration carry `[NO] SCROLL` (non-forward fetch support). |
 
 ### Oracle as target
 
@@ -556,6 +558,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [T-SQL scalar function: synthesized trailing `RETURN NULL` after an all-branches-return `IF`/`ELSE`](procedural/scalar-function-trailing-return-null.md) | T-SQL requires a scalar function's **last statement** to literally *be* a `RETURN` (error 455 otherwise) — even when the function's body already returns a value on every possible branch, such as an `IF ... ELSE` where both arms end in `RETURN`. |
 | [A local variable named after an Oracle built-in (`count`) → renamed everywhere it's used](procedural/oracle-builtin-name-collision-rename.md) | `count` is a perfectly legal PL/pgSQL local variable name — PostgreSQL has no keyword collision. |
 | [PostgreSQL `SQLSTATE` / Oracle `SQLCODE` → `CAST(ERROR_STATE()/ERROR_NUMBER() AS NVARCHAR(n))`](procedural/sqlstate-sqlcode-to-tsql-error-functions.md) | PostgreSQL's `SQLSTATE` and Oracle's `SQLCODE` are bare identifiers, readable directly inside an exception handler as the caught error's state code or numeric code. |
+| [`CONSTANT` variable declarations / cursor `[NO] SCROLL` → plain declaration on T-SQL/MySQL](procedural/constant-and-scroll-relaxation.md) | Oracle and PostgreSQL both let a local variable declaration carry `CONSTANT` (`name CONSTANT type := value`, a compile-time reassignment guard) and a cursor declaration carry `[NO] SCROLL` (non-forward fetch support). |
 
 ### PostgreSQL as target
 
@@ -854,6 +857,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [T-SQL `CONVERT(NVARCHAR(MAX), HASHBYTES(...), 2)` → MySQL's native hash function directly](procedural/convert-hashbytes-wrapper-collapse.md) | T-SQL has no built-in "digest as a hex string" function — `HASHBYTES(...)` returns raw bytes, so the idiomatic way to get a readable hex digest is to wrap it in `CONVERT(NVARCHAR(MAX), HASHBYTES(...), 2)`, where style `2` is `CONVERT`'s binary-to-hex-string style code. |
 | [`EXECUTE IMMEDIATE '...' USING v1, v2` (Oracle) → MySQL `EXECUTE ... USING @v1, @v2`, bound through session variables](procedural/mysql-execute-using-session-vars.md) | Oracle's `EXECUTE IMMEDIATE '<sql>' USING bind1, bind2` accepts routine locals and parameters directly as bind arguments. |
 | [T-SQL table variable (`DECLARE @t TABLE`) / in-routine `SELECT ... INTO #tmp` → per-target temp table](procedural/routine-scoped-temp-tables-to-oracle-gtt.md) | A T-SQL table variable (`DECLARE @t TABLE (...)`) and an in-procedure `SELECT ... INTO #tmp` (a temp table, not a variable) both need somewhere to live once the routine converts to PL/SQL — but Oracle's `CREATE TABLE` cannot appear inside a PL/SQL block at all (a `CREATE` is DDL; PL/SQL executes only DML/control-flow statically), so the table has to exist *before* the routine, not inside it. |
+| [`CONSTANT` variable declarations / cursor `[NO] SCROLL` → plain declaration on T-SQL/MySQL](procedural/constant-and-scroll-relaxation.md) | Oracle and PostgreSQL both let a local variable declaration carry `CONSTANT` (`name CONSTANT type := value`, a compile-time reassignment guard) and a cursor declaration carry `[NO] SCROLL` (non-forward fetch support). |
 
 ### Cross-engine / multi-directional
 

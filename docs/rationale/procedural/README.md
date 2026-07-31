@@ -164,8 +164,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### T-SQL as target
 
-| [System procedures](#system-procedures-1) | [SQL*Plus directives preserved as comments](#sqlplus-directives-preserved-as-comments) | [`%TYPE` / `%ROWTYPE` carrier without `--db-url`](#type--rowtype-carrier-without---db-url) | [Cursor attribute mapping](#cursor-attribute-mapping-1) | [Error handling](#error-handling) | [Expression arguments hoisted through a synthesized variable](#expression-arguments-hoisted-through-a-synthesized-variable-1) | [Return-type and signature synthesis](#return-type-and-signature-synthesis-1) | [Loop and cursor desugaring](#loop-and-cursor-desugaring-1) | [Anonymous block flattening](#anonymous-block-flattening) | [Dynamic SQL INTO capture](#dynamic-sql-into-capture) | [Oracle LOB and numeric-cast helper functions](#oracle-lob-and-numeric-cast-helper-functions) | [SQLSTATE/SQLCODE read into T-SQL error functions](#sqlstatesqlcode-read-into-t-sql-error-functions) |
-|---|---|---|---|---|---|---|---|---|---|---|---|
+| [System procedures](#system-procedures-1) | [SQL*Plus directives preserved as comments](#sqlplus-directives-preserved-as-comments) | [`%TYPE` / `%ROWTYPE` carrier without `--db-url`](#type--rowtype-carrier-without---db-url) | [Cursor attribute mapping](#cursor-attribute-mapping-1) | [Error handling](#error-handling) | [Expression arguments hoisted through a synthesized variable](#expression-arguments-hoisted-through-a-synthesized-variable-1) | [Return-type and signature synthesis](#return-type-and-signature-synthesis-1) | [Loop and cursor desugaring](#loop-and-cursor-desugaring-1) | [Anonymous block flattening](#anonymous-block-flattening) | [Dynamic SQL INTO capture](#dynamic-sql-into-capture) | [Oracle LOB and numeric-cast helper functions](#oracle-lob-and-numeric-cast-helper-functions) | [SQLSTATE/SQLCODE read into T-SQL error functions](#sqlstatesqlcode-read-into-t-sql-error-functions) | [Declaration modifier relaxation](#declaration-modifier-relaxation) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
 
 #### System procedures
 
@@ -243,10 +243,16 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [PostgreSQL `SQLSTATE` / Oracle `SQLCODE` → `CAST(ERROR_STATE()/ERROR_NUMBER() AS NVARCHAR(n))`](sqlstate-sqlcode-to-tsql-error-functions.md) | postgresql/oracle → tsql | PostgreSQL's `SQLSTATE` and Oracle's `SQLCODE` are bare identifiers, readable directly inside an exception handler as the caught error's state code or numeric code. |
 
+#### Declaration modifier relaxation
+
+| Article | Direction | Description |
+|---|---|---|
+| [`CONSTANT` variable declarations / cursor `[NO] SCROLL` → plain declaration on T-SQL/MySQL](constant-and-scroll-relaxation.md) | oracle/postgresql → tsql/mysql | Oracle and PostgreSQL both let a local variable declaration carry `CONSTANT` (`name CONSTANT type := value`, a compile-time reassignment guard) and a cursor declaration carry `[NO] SCROLL` (non-forward fetch support). |
+
 ### Oracle as source
 
-| [SQL*Plus directives preserved as comments](#sqlplus-directives-preserved-as-comments-1) | [`%TYPE` / `%ROWTYPE` carrier without `--db-url`](#type--rowtype-carrier-without---db-url-1) | [Cursor attribute mapping](#cursor-attribute-mapping-2) | [Expression arguments hoisted through a synthesized variable](#expression-arguments-hoisted-through-a-synthesized-variable-2) | [Triggers](#triggers-1) | [Loop and cursor desugaring](#loop-and-cursor-desugaring-2) | [Return-type and signature synthesis](#return-type-and-signature-synthesis-2) | [Anonymous block flattening](#anonymous-block-flattening-1) | [Dynamic SQL INTO capture](#dynamic-sql-into-capture-1) | [SELECT ... INTO :NEW.col pseudo-row targets](#select--into-newcol-pseudo-row-targets) | [Package ref-cursor type resolution and usage-inferred mode](#package-ref-cursor-type-resolution-and-usage-inferred-mode) | [Top-level batch wrapped for PL/pgSQL-only constructs](#top-level-batch-wrapped-for-plpgsql-only-constructs-1) | [Oracle LOB and numeric-cast helper functions](#oracle-lob-and-numeric-cast-helper-functions-1) | [SQLSTATE/SQLCODE read into T-SQL error functions](#sqlstatesqlcode-read-into-t-sql-error-functions-1) | [Dynamic SQL bind arguments copied into session variables](#dynamic-sql-bind-arguments-copied-into-session-variables) |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| [SQL*Plus directives preserved as comments](#sqlplus-directives-preserved-as-comments-1) | [`%TYPE` / `%ROWTYPE` carrier without `--db-url`](#type--rowtype-carrier-without---db-url-1) | [Cursor attribute mapping](#cursor-attribute-mapping-2) | [Expression arguments hoisted through a synthesized variable](#expression-arguments-hoisted-through-a-synthesized-variable-2) | [Triggers](#triggers-1) | [Loop and cursor desugaring](#loop-and-cursor-desugaring-2) | [Return-type and signature synthesis](#return-type-and-signature-synthesis-2) | [Anonymous block flattening](#anonymous-block-flattening-1) | [Dynamic SQL INTO capture](#dynamic-sql-into-capture-1) | [SELECT ... INTO :NEW.col pseudo-row targets](#select--into-newcol-pseudo-row-targets) | [Package ref-cursor type resolution and usage-inferred mode](#package-ref-cursor-type-resolution-and-usage-inferred-mode) | [Top-level batch wrapped for PL/pgSQL-only constructs](#top-level-batch-wrapped-for-plpgsql-only-constructs-1) | [Oracle LOB and numeric-cast helper functions](#oracle-lob-and-numeric-cast-helper-functions-1) | [SQLSTATE/SQLCODE read into T-SQL error functions](#sqlstatesqlcode-read-into-t-sql-error-functions-1) | [Dynamic SQL bind arguments copied into session variables](#dynamic-sql-bind-arguments-copied-into-session-variables) | [Declaration modifier relaxation](#declaration-modifier-relaxation-1) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 
 #### SQL*Plus directives preserved as comments
 
@@ -342,6 +348,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [`EXECUTE IMMEDIATE '...' USING v1, v2` (Oracle) → MySQL `EXECUTE ... USING @v1, @v2`, bound through session variables](mysql-execute-using-session-vars.md) | oracle → mysql | Oracle's `EXECUTE IMMEDIATE '<sql>' USING bind1, bind2` accepts routine locals and parameters directly as bind arguments. |
+
+#### Declaration modifier relaxation
+
+| Article | Direction | Description |
+|---|---|---|
+| [`CONSTANT` variable declarations / cursor `[NO] SCROLL` → plain declaration on T-SQL/MySQL](constant-and-scroll-relaxation.md) | oracle/postgresql → tsql/mysql | Oracle and PostgreSQL both let a local variable declaration carry `CONSTANT` (`name CONSTANT type := value`, a compile-time reassignment guard) and a cursor declaration carry `[NO] SCROLL` (non-forward fetch support). |
 
 ### Oracle as target
 
@@ -484,8 +496,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### PostgreSQL as source
 
-| [Cursor attribute mapping](#cursor-attribute-mapping-4) | [Expression arguments hoisted through a synthesized variable](#expression-arguments-hoisted-through-a-synthesized-variable-4) | [Return-type and signature synthesis](#return-type-and-signature-synthesis-4) | [Triggers](#triggers-3) | [Local variable renamed to avoid an Oracle built-in collision](#local-variable-renamed-to-avoid-an-oracle-built-in-collision-1) | [SQLSTATE/SQLCODE read into T-SQL error functions](#sqlstatesqlcode-read-into-t-sql-error-functions-2) |
-|---|---|---|---|---|---|
+| [Cursor attribute mapping](#cursor-attribute-mapping-4) | [Expression arguments hoisted through a synthesized variable](#expression-arguments-hoisted-through-a-synthesized-variable-4) | [Return-type and signature synthesis](#return-type-and-signature-synthesis-4) | [Triggers](#triggers-3) | [Local variable renamed to avoid an Oracle built-in collision](#local-variable-renamed-to-avoid-an-oracle-built-in-collision-1) | [SQLSTATE/SQLCODE read into T-SQL error functions](#sqlstatesqlcode-read-into-t-sql-error-functions-2) | [Declaration modifier relaxation](#declaration-modifier-relaxation-2) |
+|---|---|---|---|---|---|---|
 
 #### Cursor attribute mapping
 
@@ -524,6 +536,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [PostgreSQL `SQLSTATE` / Oracle `SQLCODE` → `CAST(ERROR_STATE()/ERROR_NUMBER() AS NVARCHAR(n))`](sqlstate-sqlcode-to-tsql-error-functions.md) | postgresql/oracle → tsql | PostgreSQL's `SQLSTATE` and Oracle's `SQLCODE` are bare identifiers, readable directly inside an exception handler as the caught error's state code or numeric code. |
+
+#### Declaration modifier relaxation
+
+| Article | Direction | Description |
+|---|---|---|
+| [`CONSTANT` variable declarations / cursor `[NO] SCROLL` → plain declaration on T-SQL/MySQL](constant-and-scroll-relaxation.md) | oracle/postgresql → tsql/mysql | Oracle and PostgreSQL both let a local variable declaration carry `CONSTANT` (`name CONSTANT type := value`, a compile-time reassignment guard) and a cursor declaration carry `[NO] SCROLL` (non-forward fetch support). |
 
 ### PostgreSQL as target
 
@@ -697,8 +715,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### MySQL as target
 
-| [System procedures](#system-procedures-4) | [`SET IDENTITY_INSERT` coherent degrade](#set-identity_insert-coherent-degrade-3) | [SQL*Plus directives preserved as comments](#sqlplus-directives-preserved-as-comments-3) | [`%TYPE` / `%ROWTYPE` carrier without `--db-url`](#type--rowtype-carrier-without---db-url-3) | [Cursor attribute mapping](#cursor-attribute-mapping-7) | [Return-type and signature synthesis](#return-type-and-signature-synthesis-7) | [Other `[limit]` procedural entries](#other-limit-procedural-entries-3) | [Triggers](#triggers-6) | [Loop and cursor desugaring](#loop-and-cursor-desugaring-6) | [Base64 decode idiom](#base64-decode-idiom-3) | [ERROR_MESSAGE() function mapping](#error_message-function-mapping-3) | [Mid-block DECLARE hoisted to the routine's top declaration section](#mid-block-declare-hoisted-to-the-routines-top-declaration-section-3) | [SELECT ... INTO :NEW.col pseudo-row targets](#select--into-newcol-pseudo-row-targets-2) | [Package ref-cursor type resolution and usage-inferred mode](#package-ref-cursor-type-resolution-and-usage-inferred-mode-3) | [THROW/RAISERROR numeric error code](#throwraiserror-numeric-error-code-3) | [Oracle LOB and numeric-cast helper functions](#oracle-lob-and-numeric-cast-helper-functions-2) | [CONVERT(...,HASHBYTES(...),2) style-2 hex wrapper collapse](#converthashbytes2-style-2-hex-wrapper-collapse-1) | [Dynamic SQL bind arguments copied into session variables](#dynamic-sql-bind-arguments-copied-into-session-variables-1) | [Routine-scoped temporary storage](#routine-scoped-temporary-storage-3) |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| [System procedures](#system-procedures-4) | [`SET IDENTITY_INSERT` coherent degrade](#set-identity_insert-coherent-degrade-3) | [SQL*Plus directives preserved as comments](#sqlplus-directives-preserved-as-comments-3) | [`%TYPE` / `%ROWTYPE` carrier without `--db-url`](#type--rowtype-carrier-without---db-url-3) | [Cursor attribute mapping](#cursor-attribute-mapping-7) | [Return-type and signature synthesis](#return-type-and-signature-synthesis-7) | [Other `[limit]` procedural entries](#other-limit-procedural-entries-3) | [Triggers](#triggers-6) | [Loop and cursor desugaring](#loop-and-cursor-desugaring-6) | [Base64 decode idiom](#base64-decode-idiom-3) | [ERROR_MESSAGE() function mapping](#error_message-function-mapping-3) | [Mid-block DECLARE hoisted to the routine's top declaration section](#mid-block-declare-hoisted-to-the-routines-top-declaration-section-3) | [SELECT ... INTO :NEW.col pseudo-row targets](#select--into-newcol-pseudo-row-targets-2) | [Package ref-cursor type resolution and usage-inferred mode](#package-ref-cursor-type-resolution-and-usage-inferred-mode-3) | [THROW/RAISERROR numeric error code](#throwraiserror-numeric-error-code-3) | [Oracle LOB and numeric-cast helper functions](#oracle-lob-and-numeric-cast-helper-functions-2) | [CONVERT(...,HASHBYTES(...),2) style-2 hex wrapper collapse](#converthashbytes2-style-2-hex-wrapper-collapse-1) | [Dynamic SQL bind arguments copied into session variables](#dynamic-sql-bind-arguments-copied-into-session-variables-1) | [Routine-scoped temporary storage](#routine-scoped-temporary-storage-3) | [Declaration modifier relaxation](#declaration-modifier-relaxation-3) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 
 #### System procedures
 
@@ -819,6 +837,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [T-SQL table variable (`DECLARE @t TABLE`) / in-routine `SELECT ... INTO #tmp` → per-target temp table](routine-scoped-temp-tables-to-oracle-gtt.md) | tsql → oracle/postgresql/mysql | A T-SQL table variable (`DECLARE @t TABLE (...)`) and an in-procedure `SELECT ... INTO #tmp` (a temp table, not a variable) both need somewhere to live once the routine converts to PL/SQL — but Oracle's `CREATE TABLE` cannot appear inside a PL/SQL block at all (a `CREATE` is DDL; PL/SQL executes only DML/control-flow statically), so the table has to exist *before* the routine, not inside it. |
+
+#### Declaration modifier relaxation
+
+| Article | Direction | Description |
+|---|---|---|
+| [`CONSTANT` variable declarations / cursor `[NO] SCROLL` → plain declaration on T-SQL/MySQL](constant-and-scroll-relaxation.md) | oracle/postgresql → tsql/mysql | Oracle and PostgreSQL both let a local variable declaration carry `CONSTANT` (`name CONSTANT type := value`, a compile-time reassignment guard) and a cursor declaration carry `[NO] SCROLL` (non-forward fetch support). |
 
 ### Cross-engine / multi-directional
 
@@ -1115,3 +1139,9 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [T-SQL table variable (`DECLARE @t TABLE`) / in-routine `SELECT ... INTO #tmp` → per-target temp table](routine-scoped-temp-tables-to-oracle-gtt.md) | tsql → oracle/postgresql/mysql | A T-SQL table variable (`DECLARE @t TABLE (...)`) and an in-procedure `SELECT ... INTO #tmp` (a temp table, not a variable) both need somewhere to live once the routine converts to PL/SQL — but Oracle's `CREATE TABLE` cannot appear inside a PL/SQL block at all (a `CREATE` is DDL; PL/SQL executes only DML/control-flow statically), so the table has to exist *before* the routine, not inside it. |
+
+## Declaration modifier relaxation
+
+| Article | Direction | Description |
+|---|---|---|
+| [`CONSTANT` variable declarations / cursor `[NO] SCROLL` → plain declaration on T-SQL/MySQL](constant-and-scroll-relaxation.md) | oracle/postgresql → tsql/mysql | Oracle and PostgreSQL both let a local variable declaration carry `CONSTANT` (`name CONSTANT type := value`, a compile-time reassignment guard) and a cursor declaration carry `[NO] SCROLL` (non-forward fetch support). |
