@@ -52,18 +52,12 @@ have boolean-as-value, nothing wraps at all
 (`TestSelectListComparisonsWrap::test_pg_target_keeps_boolean_value`:
 `select a > b as c from t;` mysql → postgresql stays `SELECT a > b AS c`).
 
-**Discussion.** `EXISTS` gets the simpler `ELSE 0` spelling
-(`_emit_value_expression` in `src/unique/core/converter/emit.py`, which
-documents the whole mechanism inline: *"predicates become tri-state
-values… `CASE WHEN p THEN 1 WHEN not-p THEN 0 END` reproduces the tri-state
-exactly (ELSE NULL implicit)"*) because `EXISTS` never evaluates to
-`UNKNOWN` — there is no third state to preserve. `IS NULL`/`IS NOT NULL` are
-logically two-valued for the same reason, but as probed above they are
-actually spelled with the two-`WHEN` form rather than `ELSE 0` — harmless,
-since the `WHEN`/negated-`WHEN` pair is already exhaustive for these
-operators, but worth knowing the emitted shape doesn't always match the
-"two-valued → `ELSE 0`" rule the source comment states for that family; see
-the discrepancy note at the end of this page.
+**Discussion.** `EXISTS` gets the simpler `ELSE 0` spelling because it never
+evaluates to `UNKNOWN` — there is no third state to preserve. `IS
+NULL`/`IS NOT NULL` are also logically two-valued for the same reason, but
+are spelled with the two-`WHEN` form instead: the `WHEN`/negated-`WHEN` pair
+is already exhaustive for these operators, so the result is identical
+either way.
 
 > **Note** faithful — the `CASE` reproduces the exact set of values the
 > source engine would have produced (including `NULL` for an `UNKNOWN`
