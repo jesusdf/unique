@@ -25,7 +25,7 @@ A MySQL-source `DATE_ADD`/`TIMESTAMPADD` reading a **bare ISO string**
 literal is additionally qualified as an ANSI `DATE`/`TIMESTAMP` literal before
 emission — PostgreSQL's interval arithmetic reads an unqualified string as an
 *interval* ("invalid input syntax"), and Oracle rejects the implicit
-string→date cast (`emit_functions.py:111-125`, `reda-ts-date-plus-int`).
+string→date cast.
 
 For `timestamp − timestamp`, PostgreSQL/Oracle produce an `INTERVAL` value
 (e.g. `'02:00:00'`); T-SQL and MySQL have no interval *value* type to hold
@@ -39,14 +39,12 @@ operator: it *numerically coerces* the date to its `YYYYMMDD` integer form
 and adds there, producing garbage (`DATE '2020-03-01' - 7` would need to
 become `20200301 - 7 = 20200294`, not `2020-02-23`). PostgreSQL's own
 `TIMESTAMP`/`DATE - int` is valid, but T-SQL rejects `date - int` outright
-(error 206, "date is incompatible with int"). The `+` and `-` paths are
-independent emitter branches, so a fix for one does not imply the other —
-`pg-date-minus-integer` documents exactly this asymmetry (the `+` path was
-already handled; `-` was not).
+(error 206, "date is incompatible with int"). Both the `+` and `-` forms are
+rewritten into each target's explicit day-interval arithmetic so neither
+relies on an implicit coercion the target does not support.
 
-> **Note** faithful for date±int (live-verified
-> `2020-02-23` on all targets, `pg-date-minus-integer`; `2020-01-02` on
-> mysql/postgresql, `reda-ts-date-plus-int`). The `timestamp − timestamp`
+> **Note** faithful for date±int — live-verified `2020-02-23` on all
+> targets and `2020-01-02` on mysql/postgresql. The `timestamp − timestamp`
 > second-count case is a **documented, warned** shape change (interval → scalar
 > seconds), not silent.
 

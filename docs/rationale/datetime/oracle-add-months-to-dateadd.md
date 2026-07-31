@@ -36,8 +36,7 @@ A literal ISO date operand into PostgreSQL additionally needs an explicit
 `DATE '…'` type: PostgreSQL's `DATE_TRUNC` has no unique overload for an
 untyped string (`"date_trunc(unknown, unknown) is not unique"`), so the
 literal is wrapped before the rewrite runs; a column operand is left
-untyped, since it is already typed
-(`tests/integration/test_challenge.py::TestOracleAddMonthsPgTypedLiteral`):
+untyped, since it is already typed:
 
 ```sql
 -- oracle -> postgresql
@@ -61,12 +60,10 @@ operand against its own month's last day and branching — no single
 expression encodes "day-preserving, except when the operand started on a
 month boundary" directly.
 
-> **Note** faithful — same mechanism and code path
-> (`src/unique/core/converter/emit_functions.py`'s `ADD_MONTHS`,
-> `dialect != "oracle"` branch) as the forward direction. Pinned by
-> `test_add_months_preserves_sticky_last_day` (all three non-Oracle targets
-> get the `CASE WHEN` wrap with each target's own last-day marker) and the
-> PG-typed-literal case above. No warning.
+> **Note** faithful — reproduces the same sticky last-day mechanism as the
+> forward direction: all three non-Oracle targets get the `CASE WHEN` wrap
+> with each target's own last-day marker, including the PG-typed-literal
+> case above. No warning.
 
 **See Also.** [`test_add_months_preserves_sticky_last_day`](../../../tests/integration/test_rc1a_mappings.py), [`TestOracleAddMonthsPgTypedLiteral`](../../../tests/integration/test_challenge.py) ·
 `src/unique/core/converter/emit_functions.py` (`ADD_MONTHS` branch, docstring) ·

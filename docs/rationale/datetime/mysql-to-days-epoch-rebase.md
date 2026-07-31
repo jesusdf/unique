@@ -16,19 +16,19 @@ SELECT TO_DAYS('2020-01-01') AS d;
 SELECT (CAST(DATE '2020-01-01' AS DATE) - CAST(DATE '1970-01-01' AS DATE)) + 719528 AS d;
 ```
 
-`_rebase_to_days` (`convert.py:3271`) recognises the
-`DATEDIFF(x, DATE '0000-01-01', DAY) + 1` shape and re-expresses it against
-`1970-01-01` — a value every engine parses identically — offset by the known
-constant `719528` (`TO_DAYS('1970-01-01')`).
+`TO_DAYS(d)` is defined as a day count against the notional epoch
+`0000-01-01`, which is re-expressed against `1970-01-01` — a value every
+engine parses identically — offset by the known constant `719528`
+(`TO_DAYS('1970-01-01')`).
 
-**Discussion.** sqlglot lowers `TO_DAYS(d)` to
-`DATEDIFF(d, DATE '0000-01-01', DAY) + 1`, but year `0000` is rejected by
-every other engine — PostgreSQL raises `DatetimeFieldOverflow`, T-SQL raises
+**Discussion.** `TO_DAYS(d)` is equivalent to a day-count difference
+against `DATE '0000-01-01'`, but year `0000` is rejected by every other
+engine — PostgreSQL raises `DatetimeFieldOverflow`, T-SQL raises
 "Conversion failed" (241), and Oracle's `DATE` literal range is `-4713..9999`
 (`ORA-01841`) and would in any case put the value on the Julian calendar for
-pre-1582 dates, two days off the proleptic Gregorian count MySQL uses. This
-produced a hard runtime error on every target with no warning
-(`my-to-days-year-zero`).
+pre-1582 dates, two days off the proleptic Gregorian count MySQL uses. A
+literal `0000-01-01` epoch is therefore unusable on any target, which is why
+the rebase against `1970-01-01` is needed rather than a direct copy.
 
 > **Note** faithful — the rebase is an exact algebraic
 > identity (day counts from any two fixed epochs differ by a constant), so the

@@ -20,13 +20,12 @@ SELECT TRUNC(DATE '2020-06-17', 'IW') AS d FROM DUAL;
 SELECT DATETRUNC(ISO_WEEK, CAST('2020-06-17' AS DATE)) AS d;
 ```
 
-A source-unit → target-format table
-(`emit_functions.py:2352`) maps each PostgreSQL/Oracle `DATE_TRUNC` unit to
-Oracle's valid `TRUNC` code — `'week'` → `'IW'` (the ISO, Monday-based week,
-matching PostgreSQL) — and to T-SQL's `DATETRUNC` part, substituting
-`ISO_WEEK` for `week` so the Sunday/Monday mismatch does not leak through.
+Each PostgreSQL `DATE_TRUNC` unit maps to Oracle's valid `TRUNC` code —
+`'week'` → `'IW'` (the ISO, Monday-based week, matching PostgreSQL) — and to
+T-SQL's `DATETRUNC` part, substituting `ISO_WEEK` for `week` so the
+Sunday/Monday mismatch does not leak through.
 
-The same source-unit table backs `EXTRACT(WEEK|QUARTER FROM …)` /
+The same mapping backs `EXTRACT(WEEK|QUARTER FROM …)` /
 `DATE_PART`: Oracle's `EXTRACT` rejects both `WEEK` and `QUARTER`, so they
 route through `TO_CHAR(d, 'IW'|'Q')` instead; MySQL's native
 `EXTRACT(WEEK)` follows the DBMS's `default_week_format` (off by one from
