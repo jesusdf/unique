@@ -662,7 +662,7 @@ both need *some* scalar type and neither has an obvious sentinel for "no
 value"; Oracle instead picks `NUMBER`/`NULL`, since `NULL` is PL/SQL's own
 honest "no value" answer and, unlike MySQL/T-SQL, it can actually be
 returned from any scalar-typed function
-(`src/unique/core/procedural/transformer/oracle.py:52-59`, `_void_return_type`/
+(`src/unique/core/procedural/transformer/oracle.py:52-58`, `_void_return_type`/
 `_void_return_value`). Detection and the guaranteed trailing `RETURN` live in
 `src/unique/core/procedural/transformer/base.py:1995-2023` (the `is_void`
 check and the "not already ending in a `RETURN`" guard); a bare `RETURN;`
@@ -770,7 +770,7 @@ callee in that registry and — only for an Oracle target — rewrites the call
 into a small anonymous block that declares one local `uq_rcN SYS_REFCURSOR`
 variable per cursor and appends them to the call's own argument list. The
 docstring on `_transform_procedure` frames the motivating shape as a T-SQL
-source (`oracle.py:60-64`), but the mechanism itself runs on the already-
+source (`oracle.py:61-64`), but the mechanism itself runs on the already-
 parsed procedural IR with no source-dialect gate — the pinning tests above
 exercise it from MySQL source, and it is a **different** mechanism from the
 older, unrelated "Ref cursor OUT parameters" bullet in
@@ -1006,6 +1006,144 @@ not a semantic one, since each copy only ever fires for its own event.
 **See Also.** [`test_inserting_deleting_predicates_map_to_tsql`](../../tests/integration/test_trigger_predicates_scheduler.py) ·
 [`TestEventPredicates`](../../tests/integration/test_oracle_source_m4_wave.py) ·
 [`TestTriggerUpdatePredicate`](../../tests/integration/test_triggers.py).
+
+### PL/pgSQL trigger context variables (`TG_NAME`/`TG_TABLE_NAME`/`TG_OP`/`TG_WHEN`/`TG_LEVEL`, `TG_ARGV`/`TG_NARGS`) → compile-time constants once the function inlines
+
+**Problem.** Inside a plpgsql trigger function, `TG_NAME`/`TG_TABLE_NAME`/
+`TG_OP`/`TG_WHEN`/`TG_LEVEL` are implicit variables PostgreSQL's trigger
+machinery populates at fire time, and `TG_ARGV[n]`/`TG_NARGS` read the
+argument list supplied by the specific `CREATE TRIGGER ... EXECUTE FUNCTION
+fn(arg1, arg2, ...)` that invoked it. None of these exist on T-SQL — a
+trigger body referencing them ships as a bare, unmapped identifier (error
+128, "The name ... is not permitted in this context").
+
+**Solution.**
+
+```sql
+-- tests/integration/test_pg_source_wave1.py::TestTgContextConstants::test_tg_constants_substitute_tsql (postgresql -> tsql)
+create function cf() returns trigger as $$
+begin
+  insert into log values (TG_NAME, TG_OP, TG_LEVEL);
+  return null;
+end$$ language plpgsql;
+create trigger child1_ins after insert on child1
+for each statement execute function cf();
+-- transpiles to:
+-- UNIQUE-1195: trigger function cf inlined into its T-SQL trigger
+CREATE TRIGGER child1_ins ON child1
+AFTER INSERT
+AS
+BEGIN
+    INSERT INTO log VALUES ('child1_ins', 'INSERT', 'STATEMENT');
+END
+```
+
+```sql
+-- tests/integration/test_pg_source_wave1.py::TestTgArgvSubstitution::test_tg_argv_substitutes_tsql (postgresql -> tsql)
+create function tf() returns trigger as $$
+begin
+  insert into log values (TG_ARGV[0], TG_NARGS);
+  return null;
+end$$ language plpgsql;
+create trigger t1_ins after insert on t1
+for each statement execute function tf('hello', 'world');
+-- transpiles to:
+-- UNIQUE-1195: trigger function tf inlined into its T-SQL trigger
+CREATE TRIGGER t1_ins ON t1
+AFTER INSERT
+AS
+BEGIN
+    INSERT INTO log VALUES ('hello', 2);
+END
+```
+
+An index past the end of the actual argument list
+(`TestTgArgvSubstitution::test_tg_argv_out_of_range_degrades`: `TG_ARGV[3]`
+against a trigger supplying only one argument) has no value to substitute —
+the trigger degrades whole instead of leaving a bare `TG_ARGV` reference
+behind.
+
+**Discussion.** Every one of these is resolvable at *transpile* time, not
+trigger-fire time, because Unique already inlines the trigger function's
+body into its specific `CREATE TRIGGER` (the `-- UNIQUE-1195` comment
+marking the standalone function dropped, documented in
+[`warnings.md`](../reference/warnings.md#unique-1195), is that same
+inlining). `TG_NAME` is the trigger's own name, `TG_OP`/`TG_LEVEL` are fixed
+by which `CREATE TRIGGER` clause is being converted (`AFTER INSERT`/`FOR
+EACH STATEMENT`, here), and `TG_ARGV[n]` is simply the `n`-th literal in
+that trigger's own `EXECUTE FUNCTION fn(...)` argument list — none of these
+vary at runtime for a *specific* compiled trigger the way they do for the
+general-purpose function PostgreSQL lets you attach to many triggers at
+once. Substituting them as literals is exact for that one trigger; it does
+mean a single reusable plpgsql trigger function attached to several `CREATE
+TRIGGER`s compiles into several *different* T-SQL trigger bodies, one per
+attachment — the same per-trigger duplication the MySQL event-predicate
+rewrite above already does, for a different reason.
+
+> **Note** faithful — every constant substituted is fixed for the lifetime
+> of that specific compiled trigger; nothing about it varies from one firing
+> to the next.
+
+**See Also.** [`TestTgContextConstants`](../../tests/integration/test_pg_source_wave1.py),
+[`TestTgArgvSubstitution`](../../tests/integration/test_pg_source_wave1.py) ·
+not the `NEW`/`OLD` `IS DISTINCT FROM` rewrite in the event-predicates entry
+above (that restates Oracle's `UPDATING('col')` predicate; this entry
+substitutes the trigger's own identity/argument metadata) · not the general
+`IS [NOT] DISTINCT FROM` operator, documented separately in
+[booleans.md](booleans.md) ("Null-safe equality: `IS [NOT] DISTINCT FROM`
+has no target operator").
+
+### PG named transition tables (`REFERENCING ... TABLE AS alias`) → T-SQL `inserted`/`deleted` alias rename
+
+**Problem.** A PostgreSQL statement trigger can name its transition tables
+(`REFERENCING NEW TABLE AS newtab`), and the inlined function body reads
+rows through that chosen alias. T-SQL's transition tables are the two fixed
+pseudo-tables `inserted`/`deleted` — there is no way to rename them, so a
+body still referencing `newtab` ships as a table that was never created.
+
+**Solution.**
+
+```sql
+-- tests/integration/test_pg_source_wave1.py::TestTransitionTableAliases::test_new_table_alias_becomes_inserted (postgresql -> tsql)
+create function ttf() returns trigger as $$
+begin
+  insert into log select a from newtab where a <> 'newtab';
+  return null;
+end$$ language plpgsql;
+create trigger tg after insert on d
+referencing new table as newtab
+for each statement execute function ttf();
+-- transpiles to:
+-- UNIQUE-1195: trigger function ttf inlined into its T-SQL trigger
+CREATE TRIGGER tg ON d
+AFTER INSERT
+AS
+BEGIN
+    INSERT INTO log SELECT a FROM inserted WHERE a <> 'newtab';
+END
+```
+
+Only the identifier renames — the string literal `'newtab'`, which happens
+to spell the same word, stays untouched, confirming the rewrite operates on
+the parsed identifier reference, not a text search-and-replace. PostgreSQL
+itself keeps the native `REFERENCING` clause unchanged
+(`TestTransitionTableAliases::test_pg_keeps_referencing`).
+
+**Discussion.** This runs the opposite direction from the one case this
+Triggers section's own opening paragraph already covers
+([§6](../03-unsupported.md), "Set-based trigger pseudo-tables": a T-SQL
+trigger's fixed `inserted`/`deleted` become **named** PostgreSQL transition
+tables going PG-ward). Here the traffic runs the other way — a
+PostgreSQL-authored **custom** alias collapses back down to T-SQL's two
+fixed pseudo-table names, which is why every reference to that alias
+throughout the inlined body has to be renamed rather than simply carried
+through.
+
+> **Note** faithful — `inserted` and the source's named transition table
+> hold exactly the same batch of affected rows; only the spelling changes.
+
+**See Also.** [`TestTransitionTableAliases`](../../tests/integration/test_pg_source_wave1.py) ·
+[§6](../03-unsupported.md) ("Set-based trigger pseudo-tables" — the reverse-direction rename).
 
 ### Row-level trigger re-reading its own table (MySQL/PostgreSQL) ↔ Oracle `COMPOUND TRIGGER`
 

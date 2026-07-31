@@ -469,11 +469,12 @@ intermediate value-shaped spelling never actually reaches SQL output; both
 forms probed above are exactly what a caller sees.
 
 This is a **different mechanism** from the `IS DISTINCT FROM` spelling
-already documented in
-[procedural.md's Triggers section](procedural.md#oracle-event-predicates-insertingdeletingupdatingcol--per-engine-rewrite):
-that one is a predicate Unique itself synthesizes to restate Oracle's
-`UPDATING('col')` trigger predicate. This entry is the general-purpose
-operator, written directly in source SQL and read on its own.
+already documented in [procedural.md](procedural.md)'s Triggers section,
+under "Oracle event predicates (`INSERTING`/`DELETING`/`UPDATING('col')`) →
+per-engine rewrite": that one is a predicate Unique itself synthesizes to
+restate Oracle's `UPDATING('col')` trigger predicate. This entry is the
+general-purpose operator, written directly in source SQL and read on its
+own.
 
 > **Note** faithful — `EXISTS (SELECT a INTERSECT SELECT b)` and MySQL's
 > `<=>` both agree with PostgreSQL's `IS NOT DISTINCT FROM` for every
