@@ -89,6 +89,13 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
 
 ### Small findings (P3 unless noted)
 
+- **B58** (P1-class, found by the A10-P1 harness, live-verified) — a T-SQL
+  OUTPUT parameter is semantically INOUT, but the transpiler emits
+  write-only `OUT` on every target — the caller's input value is dropped:
+  proc_14 (`@query = @query + ' ' + @filter`) returns `'base flt'` on T-SQL
+  and NULL on Oracle/PG/MySQL, ZERO warnings. Class fix: a read OUTPUT
+  param maps to `IN OUT`/`INOUT`; affects any OUTPUT param read in a body
+  (proc_13/14 in the fixtures). Ledgered `defect-pending-fix` meanwhile.
 - **B55** (P2, found during D1b2, live-verified on Oracle) — two invalid
   Oracle CAST-context combinations outside the pinned shapes: an
   explicit-length CAST inside an expression ARGUMENT emits PLS-00103-invalid
