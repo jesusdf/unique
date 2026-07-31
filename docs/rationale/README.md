@@ -41,7 +41,7 @@ This is the narrative companion to two machine-checked sources of truth:
 | [Strings, concatenation and collation](strings-collation/README.md) | concatenation & NULL, LIKE/ESCAPE, character classes, collation/order, Oracle `''` ≡ NULL, byte vs char lengths | 28 |
 | [Aggregates and window functions](aggregates-windows/README.md) | window frames, ordered aggregates, string aggregation, DISTINCT ON, boolean aggregates | 16 |
 | [Booleans: the value/predicate duality](booleans/README.md) | tri-state `CASE` wrap for value position, `<> 0` synthesis for predicate position, boolean-column `IS TRUE`/`IS FALSE` re-spelling | 10 |
-| [DML: PIVOT/UNPIVOT, MERGE, DELETE, row values](dml/README.md) | PIVOT/UNPIVOT, MERGE/upsert lowering, multi-table DELETE, row caps, row-value comparisons | 26 |
+| [DML: PIVOT/UNPIVOT, MERGE, DELETE, row values](dml/README.md) | PIVOT/UNPIVOT, MERGE/upsert lowering, multi-table DELETE, row caps, row-value comparisons | 27 |
 | [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md) | identity/SERIAL, temp tables, FK actions, sequences, storage options | 26 |
 | [Procedural: cursors, dynamic SQL, system procedures, session directives](procedural/README.md) | cursors, error handling, dynamic SQL, system procedures, session directives | 56 |
 
@@ -111,6 +111,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Recursive CTE synthesis: `WITH RECURSIVE` keyword, Oracle's required column list, and the `MAXRECURSION` hint](dml/recursive-cte-keyword-and-column-list.md) | A recursive CTE — one whose body queries its own name — needs different declaration syntax on every engine. |
 | [T-SQL `IIF(cond, a, b)` / MySQL `IF(cond, a, b)` → Oracle/PostgreSQL searched `CASE`](dml/iif-to-case-or-native.md) | T-SQL's `IIF(cond, a, b)` and MySQL's `IF(cond, a, b)` are both a three-argument ternary conditional expression — neither function exists on Oracle or PostgreSQL, so carrying either name across verbatim would be an unresolved-function error there. |
 | [T-SQL bare money literal (`$12.50`) → the numeric literal it means](dml/money-literal-shorthand.md) | T-SQL accepts a bare currency-prefixed literal like `$12.50` or `$100` as a numeric constant, but the underlying parser mis-reads it as a `table.column` reference instead — `$12.50` becomes `Column(this=Literal(50), table=Identifier($12))`, a nonsense "column `50` of table `$12`" — because the digits after the dot look like a member access, not a decimal point. |
+| [Canonical `MERGE` (T-SQL/Oracle) → MySQL `INSERT … SELECT … ON DUPLICATE KEY UPDATE`](dml/merge-to-mysql-on-duplicate-key.md) | MySQL has no `MERGE` statement at all. |
 
 #### [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md)
 
@@ -310,6 +311,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Row-value inequality (PostgreSQL / Oracle / MySQL) → T-SQL](dml/row-value-inequality.md) | `(a, b) > (1, 5)` is a lexicographic row-value comparison — common for keyset pagination — true when `a > 1`, or `a = 1 AND b > 5`. |
 | [Row-value `IN` (Oracle) → T-SQL](dml/row-value-in.md) | `(a, b) IN ((1, 2), (3, 4))` is a row-constructor `IN` list, valid on Oracle/PostgreSQL/MySQL. |
 | [`FROM DUAL` synthesis and removal (bidirectional)](dml/from-dual.md) | Oracle has no table-less `SELECT` — `SELECT 1` is `ORA-00923` — so every scalar `SELECT` needs a `FROM` clause; Oracle's answer is `DUAL`, a one-row system table. |
+| [Canonical `MERGE` (T-SQL/Oracle) → MySQL `INSERT … SELECT … ON DUPLICATE KEY UPDATE`](dml/merge-to-mysql-on-duplicate-key.md) | MySQL has no `MERGE` statement at all. |
 
 #### [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md)
 
@@ -795,6 +797,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`FROM generate_series(…)` (PostgreSQL) → a synthesized numbers source (every target)](dml/from-generate-series.md) | PostgreSQL's `generate_series(start, stop[, step])` is a set-returning function usable directly as a `FROM` item (or, via an implicit lateral unnest, in the `SELECT` list) — a compact way to manufacture one row per integer (or per date, with an `INTERVAL` step) in a range. |
 | [Recursive CTE synthesis: `WITH RECURSIVE` keyword, Oracle's required column list, and the `MAXRECURSION` hint](dml/recursive-cte-keyword-and-column-list.md) | A recursive CTE — one whose body queries its own name — needs different declaration syntax on every engine. |
 | [T-SQL bare money literal (`$12.50`) → the numeric literal it means](dml/money-literal-shorthand.md) | T-SQL accepts a bare currency-prefixed literal like `$12.50` or `$100` as a numeric constant, but the underlying parser mis-reads it as a `table.column` reference instead — `$12.50` becomes `Column(this=Literal(50), table=Identifier($12))`, a nonsense "column `50` of table `$12`" — because the digits after the dot look like a member access, not a decimal point. |
+| [Canonical `MERGE` (T-SQL/Oracle) → MySQL `INSERT … SELECT … ON DUPLICATE KEY UPDATE`](dml/merge-to-mysql-on-duplicate-key.md) | MySQL has no `MERGE` statement at all. |
 
 #### [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md)
 

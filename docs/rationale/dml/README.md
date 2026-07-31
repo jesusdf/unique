@@ -43,6 +43,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`WHEN NOT MATCHED BY SOURCE` (T-SQL) → PostgreSQL / Oracle](merge-when-not-matched-by-source.md) | tsql → oracle/postgresql | T-SQL's `MERGE` can act on target rows that have **no** matching source row at all (`WHEN NOT MATCHED BY SOURCE THEN UPDATE/DELETE`) — an anti-join over the `ON` predicate. |
 | [Conditional `MATCHED` UPDATE+DELETE pair (T-SQL) → Oracle fold](merge-matched-update-delete-fold.md) | tsql → oracle | A T-SQL `MERGE` may carry two conditional `WHEN MATCHED` clauses in sequence — first-match-wins — one `UPDATE`, one `DELETE`. |
 | [A leading CTE feeding `MERGE` (T-SQL) → Oracle / MySQL](merge-with-leading-cte.md) | tsql → oracle/mysql | `WITH src AS (…) MERGE INTO t USING src ON … WHEN MATCHED THEN UPDATE … WHEN NOT MATCHED THEN INSERT …` — the `MERGE`'s `USING` source is itself a named CTE. |
+| [Canonical `MERGE` (T-SQL/Oracle) → MySQL `INSERT … SELECT … ON DUPLICATE KEY UPDATE`](merge-to-mysql-on-duplicate-key.md) | tsql/oracle → mysql | MySQL has no `MERGE` statement at all. |
 
 #### Multi-table `DELETE`
 
@@ -144,8 +145,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### Oracle as source
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-2) | [Row-value comparisons](#row-value-comparisons-1) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-2) |
-|---|---|---|
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-2) | [Row-value comparisons](#row-value-comparisons-1) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-2) | [`MERGE` / upsert lowering](#merge--upsert-lowering-1) |
+|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
 
@@ -167,9 +168,15 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [`FROM DUAL` synthesis and removal (bidirectional)](from-dual.md) | oracle ↔ all | Oracle has no table-less `SELECT` — `SELECT 1` is `ORA-00923` — so every scalar `SELECT` needs a `FROM` clause; Oracle's answer is `DUAL`, a one-row system table. |
 
+#### `MERGE` / upsert lowering
+
+| Article | Direction | Description |
+|---|---|---|
+| [Canonical `MERGE` (T-SQL/Oracle) → MySQL `INSERT … SELECT … ON DUPLICATE KEY UPDATE`](merge-to-mysql-on-duplicate-key.md) | tsql/oracle → mysql | MySQL has no `MERGE` statement at all. |
+
 ### Oracle as target
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-3) | [`MERGE` / upsert lowering](#merge--upsert-lowering-1) | [Multi-table `DELETE`](#multi-table-delete-2) | [Multi-join `UPDATE`](#multi-join-update-1) | [`OUTPUT` / `RETURNING`](#output--returning-1) | [Set-operation `ORDER BY`](#set-operation-order-by-1) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-3) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-1) | [Recursive CTE synthesis](#recursive-cte-synthesis-2) | [Conditional expression translation](#conditional-expression-translation-1) | [Literal parsing recovery](#literal-parsing-recovery-1) |
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-3) | [`MERGE` / upsert lowering](#merge--upsert-lowering-2) | [Multi-table `DELETE`](#multi-table-delete-2) | [Multi-join `UPDATE`](#multi-join-update-1) | [`OUTPUT` / `RETURNING`](#output--returning-1) | [Set-operation `ORDER BY`](#set-operation-order-by-1) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-3) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-1) | [Recursive CTE synthesis](#recursive-cte-synthesis-2) | [Conditional expression translation](#conditional-expression-translation-1) | [Literal parsing recovery](#literal-parsing-recovery-1) |
 |---|---|---|---|---|---|---|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
@@ -280,7 +287,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### PostgreSQL as target
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-4) | [`MERGE` / upsert lowering](#merge--upsert-lowering-2) | [Multi-table `DELETE`](#multi-table-delete-3) | [Multi-join `UPDATE`](#multi-join-update-3) | [`OUTPUT` / `RETURNING`](#output--returning-2) | [Set-operation `ORDER BY`](#set-operation-order-by-2) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-5) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-3) | [Recursive CTE synthesis](#recursive-cte-synthesis-3) | [Conditional expression translation](#conditional-expression-translation-2) | [Literal parsing recovery](#literal-parsing-recovery-2) |
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-4) | [`MERGE` / upsert lowering](#merge--upsert-lowering-3) | [Multi-table `DELETE`](#multi-table-delete-3) | [Multi-join `UPDATE`](#multi-join-update-3) | [`OUTPUT` / `RETURNING`](#output--returning-2) | [Set-operation `ORDER BY`](#set-operation-order-by-2) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-5) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-3) | [Recursive CTE synthesis](#recursive-cte-synthesis-3) | [Conditional expression translation](#conditional-expression-translation-2) | [Literal parsing recovery](#literal-parsing-recovery-2) |
 |---|---|---|---|---|---|---|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
@@ -390,7 +397,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### MySQL as target
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-5) | [`MERGE` / upsert lowering](#merge--upsert-lowering-3) | [Multi-table `DELETE`](#multi-table-delete-5) | [Multi-join `UPDATE`](#multi-join-update-4) | [Set-operation `ORDER BY`](#set-operation-order-by-3) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-7) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-4) | [Recursive CTE synthesis](#recursive-cte-synthesis-5) | [Literal parsing recovery](#literal-parsing-recovery-3) |
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-5) | [`MERGE` / upsert lowering](#merge--upsert-lowering-4) | [Multi-table `DELETE`](#multi-table-delete-5) | [Multi-join `UPDATE`](#multi-join-update-4) | [Set-operation `ORDER BY`](#set-operation-order-by-3) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-7) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-4) | [Recursive CTE synthesis](#recursive-cte-synthesis-5) | [Literal parsing recovery](#literal-parsing-recovery-3) |
 |---|---|---|---|---|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
@@ -405,6 +412,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [A leading CTE feeding `MERGE` (T-SQL) → Oracle / MySQL](merge-with-leading-cte.md) | tsql → oracle/mysql | `WITH src AS (…) MERGE INTO t USING src ON … WHEN MATCHED THEN UPDATE … WHEN NOT MATCHED THEN INSERT …` — the `MERGE`'s `USING` source is itself a named CTE. |
+| [Canonical `MERGE` (T-SQL/Oracle) → MySQL `INSERT … SELECT … ON DUPLICATE KEY UPDATE`](merge-to-mysql-on-duplicate-key.md) | tsql/oracle → mysql | MySQL has no `MERGE` statement at all. |
 
 #### Multi-table `DELETE`
 
@@ -496,6 +504,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`WHEN NOT MATCHED BY SOURCE` (T-SQL) → PostgreSQL / Oracle](merge-when-not-matched-by-source.md) | tsql → oracle/postgresql | T-SQL's `MERGE` can act on target rows that have **no** matching source row at all (`WHEN NOT MATCHED BY SOURCE THEN UPDATE/DELETE`) — an anti-join over the `ON` predicate. |
 | [Conditional `MATCHED` UPDATE+DELETE pair (T-SQL) → Oracle fold](merge-matched-update-delete-fold.md) | tsql → oracle | A T-SQL `MERGE` may carry two conditional `WHEN MATCHED` clauses in sequence — first-match-wins — one `UPDATE`, one `DELETE`. |
 | [A leading CTE feeding `MERGE` (T-SQL) → Oracle / MySQL](merge-with-leading-cte.md) | tsql → oracle/mysql | `WITH src AS (…) MERGE INTO t USING src ON … WHEN MATCHED THEN UPDATE … WHEN NOT MATCHED THEN INSERT …` — the `MERGE`'s `USING` source is itself a named CTE. |
+| [Canonical `MERGE` (T-SQL/Oracle) → MySQL `INSERT … SELECT … ON DUPLICATE KEY UPDATE`](merge-to-mysql-on-duplicate-key.md) | tsql/oracle → mysql | MySQL has no `MERGE` statement at all. |
 
 ## Multi-table `DELETE`
 

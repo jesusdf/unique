@@ -348,10 +348,11 @@ block performs a partial mutation before failing.
 ### 3.6 MERGE Statement → MySQL
 
 MySQL lacks MERGE. The canonical pattern (one unconditional WHEN MATCHED
-UPDATE plus one unconditional WHEN NOT MATCHED INSERT) is rewritten as
-`INSERT ... SELECT ... ON DUPLICATE KEY UPDATE`; the rewrite relies on a
-UNIQUE or PRIMARY KEY covering the ON-clause columns, which is noted in a
-carrier comment and mirrored in `result.warnings`.
+UPDATE plus one unconditional WHEN NOT MATCHED INSERT) converts faithfully to
+`INSERT ... SELECT ... ON DUPLICATE KEY UPDATE`, conditioned on a UNIQUE or
+PRIMARY KEY covering the ON-clause columns (noted in a carrier comment and
+mirrored in `result.warnings`) — see
+[the rationale article](rationale/dml/merge-to-mysql-on-duplicate-key.md).
 
 More complex MERGEs (conditional WHEN clauses, WHEN MATCHED DELETE, multiple
 branches) are preserved as a documented comment and registered in
