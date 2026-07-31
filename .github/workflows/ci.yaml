@@ -91,6 +91,13 @@ jobs:
         # corpus; see docs/TODO.md T8 and scripts/generate_reference_docs.py.
         run: python scripts/generate_reference_docs.py --check
 
+      - name: Rationale index freshness gate (docs/rationale/ indexes + links)
+        # Fails if the generated docs/rationale/ topic/master indexes drift
+        # from the article pages, or if any relative link under
+        # docs/rationale/**.md goes stale; see
+        # scripts/generate_rationale_index.py.
+        run: python scripts/generate_rationale_index.py --check
+
       - name: Upload coverage
         uses: actions/upload-artifact@v5
         with:

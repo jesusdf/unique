@@ -129,6 +129,10 @@ max-statements = 679  # _emit_function
 # The FE exclusions ledger stores each excluded case's exact executable SQL on
 # one line (it is the match key) — a data file, so long SQL literals are fine.
 "tests/helpers/challenge_fe_exclusions.py" = ["E501"]
+# The one-shot rationale-split migration carries title→type/direction/slug
+# mapping tables keyed by exact article titles (the match keys) — a data file,
+# so the long title literals are fine.
+"scripts/migrate_rationale_split.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.13"

@@ -1,0 +1,37 @@
+[← All rationale topics](../README.md)
+
+# Date/time arithmetic and formatting
+
+Why Unique emits what it emits for date/time constructs with no direct
+cross-engine equivalent. See [README.md](../README.md) for how this page is
+built and its entry format.
+
+> **Generated file — do not edit by hand.** Produced by `python scripts/generate_rationale_index.py` from the article pages in this directory; the intro above comes from `_intro.md`. The CI freshness gate (`python scripts/generate_rationale_index.py --check`) fails the build if it drifts.
+
+## Month arithmetic and month-end semantics
+
+| Article | Direction | Description |
+|---|---|---|
+| [DATEADD(MONTH) (T-SQL/MySQL/PostgreSQL) → Oracle ADD_MONTHS](dateadd-month-to-oracle-add-months.md) | tsql/postgresql/mysql → oracle | T-SQL `DATEADD(MONTH, n, d)`, MySQL `DATE_ADD(d, INTERVAL n MONTH)` and PostgreSQL `d + n * INTERVAL '1 month'` all *keep the day-of-month* and clamp down only when the target month is shorter: `DATEADD(MONTH, 1, '2020-02-29')` = `2020-03-29` (not `2020-03-31`). |
+| [ADD_MONTHS (Oracle) → DATEADD/DATE_ADD/interval-add (T-SQL/MySQL/PostgreSQL)](oracle-add-months-to-dateadd.md) | oracle → tsql/postgresql/mysql | Oracle's `ADD_MONTHS` sticks to the *target* month's last day whenever the operand is its own month's last day — `ADD_MONTHS('2020-02-29', 1)` = `2020-03-31`. |
+| [MySQL TIMESTAMPDIFF complete-month adjustment, ported to every target](mysql-timestampdiff-complete-month.md) | mysql → all | MySQL `TIMESTAMPDIFF(MONTH, start, end)` counts **complete** month periods: `TIMESTAMPDIFF(MONTH, '2020-01-15', '2020-03-10')` = `1`, not `2`, because the end's day-of-month (`10`) has not reached the start's (`15`) — the final partial month does not count. |
+
+## Truncation and unit maps
+
+| Article | Direction | Description |
+|---|---|---|
+| [PostgreSQL date_trunc → Oracle TRUNC format codes and T-SQL ISO week](date-trunc-to-oracle-trunc.md) | postgresql → tsql/oracle | PostgreSQL `date_trunc('week', ts)` truncates to the start of the ISO week — **Monday** — and `date_trunc('quarter', ts)` to the first day of the quarter. |
+| [DATEDIFF/DATEPART unit maps: the QUARTER crash and WEEKDAY per-target forms](datediff-datepart-unit-maps.md) | cross-engine | T-SQL `DATEDIFF(QUARTER, d1, d2)` and `DATEDIFF(WEEK, d1, d2)` are valid, translatable unit spellings; `DATEPART(WEEKDAY, d)` returns the day-of-week under the session's `@@DATEFIRST` setting (default: Sunday = 1). |
+
+## Interval and temporal arithmetic
+
+| Article | Direction | Description |
+|---|---|---|
+| [Temporal +/− arithmetic: date ± int, MySQL numeric coercion, timestamp − timestamp](temporal-plus-minus-arithmetic.md) | cross-engine | PostgreSQL/Oracle `date_col + n` / `date_col - n` is day arithmetic; T-SQL `datetime_col + n` likewise adds days. |
+| [Multi-field PostgreSQL INTERVAL decomposition](postgresql-interval-decomposition.md) | postgresql → all | PostgreSQL accepts a verbose, multi-unit interval literal in one string: `INTERVAL '1 year 2 months 3 days'`. |
+
+## Epoch rebasing
+
+| Article | Direction | Description |
+|---|---|---|
+| [MySQL TO_DAYS year-0000 epoch rebase](mysql-to-days-epoch-rebase.md) | mysql → all | MySQL `TO_DAYS(d)` returns the count of days since a notional `0000-01-01`. |

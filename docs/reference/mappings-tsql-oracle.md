@@ -124,7 +124,7 @@ Both pipelines share this data (audit doc 03): the procedural pipeline rewrites 
 | Diagnostic global `SQLSTATE` | `CAST(ERROR_STATE() AS NVARCHAR(5))` | `TO_CHAR(SQLCODE)` |
 | Diagnostic global `SQLCODE` | `CAST(ERROR_NUMBER() AS NVARCHAR(20))` | `SQLCODE` |
 
-> Month/quarter/year `DATEADD` targeting Oracle uses a day-preserving rewrite (`oracle_month_add_daypreserving` in `core/mappings.py`) rather than a bare `ADD_MONTHS` call; see [docs/rationale/datetime.md](../rationale/datetime.md) for the worked example.
+> Month/quarter/year `DATEADD` targeting Oracle uses a day-preserving rewrite (`oracle_month_add_daypreserving` in `core/mappings.py`) rather than a bare `ADD_MONTHS` call; see [docs/rationale/datetime/README.md](../rationale/datetime/README.md) for the worked example.
 
 ## Built-ins of tsql with no cross-engine equivalent
 
