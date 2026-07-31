@@ -138,28 +138,34 @@ most pervasive; (2) a NEW triggers page; (3) loop/cursor desugaring;
 flagged ADD_MONTHS doc CORRECTION. Residual recall debt: test_pg_source_wave1.py
 was only keyword-swept (32/261 classes) — one follow-up pass there.*
 
-### A10 — functional-equivalence coverage audit (P2; after the docs-gap wave)
+### A10 — functional-equivalence coverage (P2) — MEASURED 2026-07-31, implementation pending
 
-*Maintainer suspicion (2026-07-31, shared by the architect): the FE
-execution-comparison layer is far greener than the corpus. Today the nightly
-result-diff covers the curated FUNC_CASES (~12) plus the `[class=func]`
-challenge cases; the other ~900 corpus cases and the procedures corpus have
-parse/structural assertions only — "runs and returns the same result set" is
-unproven for most of what the transpiler claims to convert.*
+*Audit report: [`audit/2026-07-31-a10-fe-coverage.md`](../audit/2026-07-31-a10-fe-coverage.md).
+Suspicion CONFIRMED: 691/960 challenge cases are FE-comparable, only 21
+enrolled. Live sweep of the 501 self-contained `[fixed]` cases: 669 warned
+pairs correctly excluded, 748 clean matches, **86 unwarned problem pairs**
+(66 wrong-value DIFFs + 20 runtime EXEC-FAILs) — taxonomy T1 (comparator
+normalization) / T2 (precision policy) / T3 (documented-inherent, missing
+warning) / T4 (real defects, ~25-30 pairs, named in the report).*
 
-- **Audit shape:** measure the executable-comparable fraction per direction
-  (a case is FE-comparable if deterministic, self-contained or probe-able —
-  the `is_comparable` predicate exists in `tests/helpers/corpus_diff.py`);
-  enumerate what's excluded and WHY (nondeterministic, session-dependent,
-  DDL-only, needs setup data); then drive the comparable-but-uncompared set
-  toward the nightly harness (auto-enroll like `[class=func]` does, probes
-  for state-mutating cases per `test_challenge_live.FuncCase`).
-- **Ratchet:** a counted floor of comparable-but-unenrolled cases that only
-  goes down; nightly wall-time budget respected (batch/sample if needed —
-  but say so, no silent caps).
-- **Procedures corpus:** the 4-dialect same-routine fixtures are
-  execution-comparable by construction (call each, compare effects) — today
-  only live-VALIDATED (compiles), not live-COMPARED. Highest-value gap.
+- **A10-H** — auto-enrollment harness: nightly test derives the enrolled set
+  mechanically (`[fixed]` + comparable + self-contained − a named exclusions
+  ledger, one reason per line); warned pairs skip at transpile time;
+  comparator upgrades (datetime/string, interval, JSON canonicalization —
+  kills T1); monotonic-downward floors on the ledger size and the
+  unenrolled-comparable count.
+- **A10-T2 (maintainer decision)** — precision policy: numeric-tolerance
+  comparison vs. warning on precision-changing conversions (the historical
+  "same value + precision diff = acceptable" rule is nowhere encoded).
+- **A10-T4** — BLUE triage of the ~25-30 real-defect pairs (list in the
+  report §T4: broken CAST emission on tsql/oracle, unnamed derived columns,
+  string+INTERVAL arithmetic, INSERT()/LEFT()/REPEAT() float/OOB semantics,
+  TO_CHAR mask fidelity, …). Ready-made findings, cases already in corpus.
+- **A10-P** — procedures corpus live-COMPARE (4-dialect same-routine
+  fixtures: call with fixed inputs, compare effects). Needs its own design;
+  highest-value remaining gap.
+- The 29 comparable-but-needs-tables cases enroll later via the `FuncCase`
+  probe pattern.
 
 ## Continuously tracked (not a discrete backlog)
 
