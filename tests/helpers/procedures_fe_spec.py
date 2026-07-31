@@ -584,24 +584,23 @@ ROUTINE_CASES: tuple[RoutineCase, ...] = (
         probes=("SELECT col_31, col_32, col_18, col_33 FROM tbl_6 ORDER BY col_31",),
     ),
     # proc_26 is clean (only UNIQUE-1193 + the benign UNIQUE-1231 "OPTION
-    # (RECOMPILE) dropped, execution-plan-only" message) on oracle/postgresql —
+    # (RECOMPILE) dropped, execution-plan-only" message) on every target —
     # live-verified 2026-08-01: seeded tbl_1.col_50 is far enough in the past
     # that, once func1 is frozen, both tbl_6 UPDATEs are deterministic (the
     # first flips col_32 1->0 via the tbl_1/tbl_2/tbl_6 join; the second is a
     # no-op because col_33 is NULL, so COALESCE(col_33,@func1)+5min is never <
-    # @func1). MYSQL IS EXCLUDED from `targets`: live-verified 2026-08-01 the
-    # transpiled MySQL UPDATE ("... WHERE col_31 IN (SELECT ... FROM tbl_6
-    # ...)") throws MySQL error 1093 ("You can't specify target table 'tbl_6'
-    # for update in FROM clause") at CALL — a genuine, UNWARNED runtime defect
-    # (MySQL disallows a subquery referencing the very table being updated
-    # without wrapping it in a derived table). Report-only per brief A10-P3;
-    # not fixed here.
+    # @func1). MySQL used to be excluded from `targets` (brief A10-P3: the
+    # transpiled UPDATE's self-referencing WHERE subquery hit MySQL error 1093,
+    # "You can't specify target table 'tbl_6' for update in FROM clause", at
+    # CALL, unwarned); brief B60 fixed the class (a WHERE/SET subquery that
+    # references the UPDATE/DELETE target is now wrapped in a derived table
+    # for MySQL — same mechanism as the existing SET-clause wrap, extended to
+    # the WHERE clause and to DELETE) and re-enrolled it here.
     RoutineCase(
         name="proc_26",
         kind="table_state",
         freeze_func1=True,
         resultset_tail=True,
-        targets=("oracle", "postgresql"),
         seed=(
             SeedTable("tbl_1", ({"col_1": 1, "col_50": "2020-01-01 00:00:00"},)),
             SeedTable("tbl_2", ({"col_1": 1, "col_6": _GUID_A},)),

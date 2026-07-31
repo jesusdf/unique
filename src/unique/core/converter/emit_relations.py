@@ -18,6 +18,7 @@ cannot resolve, only a call-time one.
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from collections.abc import Callable
 
@@ -245,6 +246,15 @@ _DELETE_CAP: dict[str, Callable[[str, str | None, int, str | None], str]] = {
 
 def _emit_delete(node: DeleteStatement, dialect: str) -> str:
     """Emit a DELETE statement."""
+    if node.where is not None:
+        # MySQL error 1093 hits DELETE the same way it hits UPDATE: a WHERE
+        # subquery can't select FROM the row set being deleted either (a
+        # no-op on every other target — the dialect check lives inside the
+        # helper).
+        node = dataclasses.replace(
+            node,
+            where=_wrap_mysql_update_self_ref(node.where, node.table.name, dialect),
+        )
     table = _emit_table_ref(node.table, dialect)
     if node.using:
         # PG's DELETE … USING (wave 196). PG keeps it; T-SQL/MySQL spell
@@ -352,11 +362,19 @@ def _emit_update(node: UpdateStatement, dialect: str) -> str:
     if node.from_clause is not None or node.joins:
         return _emit_cross_table_update(node, dialect)
 
+    if node.where is not None:
+        # Error 1093: a WHERE subquery can't select FROM the UPDATE target
+        # either (IN/EXISTS/a scalar comparison — same materialization fix
+        # as the SET-clause case below; a no-op on every non-MySQL target).
+        node = dataclasses.replace(
+            node,
+            where=_wrap_mysql_update_self_ref(node.where, node.table.name, dialect),
+        )
+
     table = _emit_table_ref(node.table, dialect)
     set_parts = []
     for col, val in node.assignments:
-        if dialect == "mysql":
-            val = _wrap_mysql_update_self_ref(val, node.table.name)
+        val = _wrap_mysql_update_self_ref(val, node.table.name, dialect)
         val = _coerce_bit_literal(node.table, col, val, dialect)
         val = _coerce_date_literal(node.table, col, val, dialect)
         set_parts.append(

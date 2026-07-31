@@ -3368,7 +3368,13 @@ class TestUsingJoinQualified:
 class TestMysqlUpdateSelfRef:
     """MySQL error 1093: a subquery in SET can't select FROM the UPDATE target.
     Wrap the aliased self-reference in a derived table so the correlated subquery
-    is allowed. Live-verified (1,NULL),(2,10),(3,20)."""
+    is allowed. Live-verified (1,NULL),(2,10),(3,20).
+
+    Brief B60: the same restriction (and the same wrap) also applies to a WHERE
+    subquery (IN/EXISTS) and to DELETE — not only the SET-clause scalar
+    subquery above; this is one mechanism (``_wrap_mysql_update_self_ref``)
+    reused everywhere an UPDATE/DELETE emits a WHERE or SET expression for
+    MySQL, not a per-shape patch."""
 
     def test_self_ref_wrapped_for_mysql(self) -> None:
         out = _tx(
@@ -3376,6 +3382,55 @@ class TestMysqlUpdateSelfRef:
         )
         assert "FROM (SELECT *\nFROM t) x" in out, out
         assert "x.id < t.id" in out, out
+
+    def test_self_ref_in_where_in_subquery_wrapped(self) -> None:
+        out = _tx(
+            _case("challenge_oracle.sql", "ora-upd-selfref-where"), "oracle", "mysql"
+        )
+        assert "FROM (SELECT *\nFROM t) x" in out, out
+        assert "INNER JOIN s ON s.k = x.k" in out, out
+
+    def test_self_ref_in_where_exists_wrapped(self) -> None:
+        out = _tx(
+            "UPDATE t SET flag=0 WHERE EXISTS "
+            "(SELECT 1 FROM t x WHERE x.k=t.k AND x.flag=1)",
+            "oracle",
+            "mysql",
+        )
+        assert "FROM (SELECT *\nFROM t) x" in out, out
+        assert "x.k = t.k" in out, out
+
+    def test_delete_self_ref_in_where_wrapped(self) -> None:
+        out = _tx(
+            "DELETE FROM t WHERE id IN (SELECT x.id FROM t x WHERE x.flag=1)",
+            "oracle",
+            "mysql",
+        )
+        assert "FROM (SELECT *\nFROM t) x" in out, out
+
+    def test_multiple_self_references_each_wrapped(self) -> None:
+        out = _tx(
+            "UPDATE t SET flag=0 WHERE id IN (SELECT x.id FROM t x WHERE x.flag=1) "
+            "OR EXISTS (SELECT 1 FROM t y WHERE y.k=t.k AND y.flag=2)",
+            "oracle",
+            "mysql",
+        )
+        assert "FROM (SELECT *\nFROM t) x" in out, out
+        assert "FROM (SELECT *\nFROM t) y" in out, out
+
+    def test_unaliased_self_reference_gets_synthesized_alias(self) -> None:
+        out = _tx("UPDATE t SET n=(SELECT MAX(n) FROM t)", "oracle", "mysql")
+        assert "FROM (SELECT *\nFROM t) uq_sr" in out, out
+
+    def test_non_self_referencing_subquery_not_wrapped(self) -> None:
+        # No churn: a subquery that reads a DIFFERENT table must stay untouched.
+        out = _tx(
+            "UPDATE t SET flag=0 WHERE id IN (SELECT id FROM s WHERE s.flag=1)",
+            "oracle",
+            "mysql",
+        )
+        assert "FROM (SELECT *" not in out, out
+        assert "FROM s\nWHERE s.flag = 1" in out, out
 
 
 class TestMysqlUpdateJoin:
