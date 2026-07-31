@@ -294,9 +294,31 @@ def _by_engine_section(articles: list[Article]) -> str:
         "(derived from the `direction` metadata). Cross-engine articles — no "
         "single source/target — are listed once at the end.\n\n"
     )
+
+    def _slug(text: str) -> str:
+        # GitHub heading anchor: lowercase, spaces -> hyphens, punctuation
+        # (here: '/') dropped.
+        return text.lower().replace("/", "").replace(" ", "-")
+
+    jump_rows = [
+        (
+            _ENGINE_LABEL[eng],
+            f"[as source](#{_slug(_ENGINE_LABEL[eng] + ' as source')})",
+            f"[as target](#{_slug(_ENGINE_LABEL[eng] + ' as target')})",
+        )
+        for eng in _ENGINES
+    ]
+    jump_rows.append(
+        (
+            "Cross-engine",
+            f"[multi-directional](#{_slug('Cross-engine / multi-directional')})",
+            "",
+        )
+    )
+    parts.append(_table(["Engine", "As source", "As target"], jump_rows))
+    parts.append("\n")
     for eng in _ENGINES:
-        parts.append(f"### {_ENGINE_LABEL[eng]}\n\n")
-        for role, idx in (("As source", 0), ("As target", 1)):
+        for role, idx in (("as source", 0), ("as target", 1)):
             rows = [
                 (
                     f"[{a.title}]({a.topic}/{a.slug}.md)",
@@ -306,7 +328,7 @@ def _by_engine_section(articles: list[Article]) -> str:
                 for a in sorted(real, key=lambda x: (x.topic, x.order))
                 if eng in parsed[a][idx]
             ]
-            parts.append(f"**{role}:**\n\n")
+            parts.append(f"### {_ENGINE_LABEL[eng]} {role}\n\n")
             parts.append(_table(["Article", "Topic", "Description"], rows))
             parts.append("\n")
     cross = [

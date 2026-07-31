@@ -33,9 +33,15 @@ This is the narrative companion to two machine-checked sources of truth:
 
 Each article grouped by the engine it converts **from** and **to** (derived from the `direction` metadata). Cross-engine articles — no single source/target — are listed once at the end.
 
-### T-SQL
+| Engine | As source | As target |
+|---|---|---|
+| T-SQL | [as source](#t-sql-as-source) | [as target](#t-sql-as-target) |
+| Oracle | [as source](#oracle-as-source) | [as target](#oracle-as-target) |
+| PostgreSQL | [as source](#postgresql-as-source) | [as target](#postgresql-as-target) |
+| MySQL | [as source](#mysql-as-source) | [as target](#mysql-as-target) |
+| Cross-engine | [multi-directional](#cross-engine--multi-directional) |  |
 
-**As source:**
+### T-SQL as source
 
 | Article | Topic | Description |
 |---|---|---|
@@ -68,7 +74,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [T-SQL cursor-variable binding (`SET @cur = CURSOR ... FOR q; OPEN @cur;`) → PostgreSQL / Oracle / MySQL](procedural/tsql-cursor-variable-binding.md) | Procedural: cursors, dynamic SQL, system procedures, session directives | T-SQL lets a cursor be bound to a *variable* in two steps: a bare `DECLARE @cur CURSOR;` (no query yet), then `SET @cur = CURSOR ... |
 | [Positional string-splice: `OVERLAY`/`STUFF`/`INSERT` (PostgreSQL/T-SQL/MySQL) → all targets](strings-collation/overlay-stuff-insert-splice.md) | Strings, concatenation and collation | Three engines each have a native "replace `len` characters of `string` at 1-based position `start` with `new`" function: PostgreSQL's `OVERLAY(string PLACING new FROM start [FOR len])`, T-SQL's `STUFF(string, start, len, new)`, MySQL's `INSERT(string, start, len, new)`. |
 
-**As target:**
+### T-SQL as target
 
 | Article | Topic | Description |
 |---|---|---|
@@ -119,9 +125,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Oracle `'' ≡ NULL`](strings-collation/oracle-empty-string-is-null.md) | Strings, concatenation and collation | Every other engine stores and compares an empty string `''` as a distinct, zero-length value: `'' IS NULL` is false, `COALESCE('', 'x')` is `''`. |
 | [Positional string-splice: `OVERLAY`/`STUFF`/`INSERT` (PostgreSQL/T-SQL/MySQL) → all targets](strings-collation/overlay-stuff-insert-splice.md) | Strings, concatenation and collation | Three engines each have a native "replace `len` characters of `string` at 1-based position `start` with `new`" function: PostgreSQL's `OVERLAY(string PLACING new FROM start [FOR len])`, T-SQL's `STUFF(string, start, len, new)`, MySQL's `INSERT(string, start, len, new)`. |
 
-### Oracle
-
-**As source:**
+### Oracle as source
 
 | Article | Topic | Description |
 |---|---|---|
@@ -148,7 +152,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Numeric range `FOR i IN a..b LOOP` (Oracle) → MySQL / T-SQL explicit `WHILE` + counter](procedural/numeric-range-for-loop.md) | Procedural: cursors, dynamic SQL, system procedures, session directives | `FOR i IN 1..13 LOOP` (optionally `REVERSE`) is Oracle's counting loop — no cursor at all, just an integer range. |
 | [Oracle `'' ≡ NULL`](strings-collation/oracle-empty-string-is-null.md) | Strings, concatenation and collation | Every other engine stores and compares an empty string `''` as a distinct, zero-length value: `'' IS NULL` is false, `COALESCE('', 'x')` is `''`. |
 
-**As target:**
+### Oracle as target
 
 | Article | Topic | Description |
 |---|---|---|
@@ -199,9 +203,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Oracle `'' ≡ NULL`](strings-collation/oracle-empty-string-is-null.md) | Strings, concatenation and collation | Every other engine stores and compares an empty string `''` as a distinct, zero-length value: `'' IS NULL` is false, `COALESCE('', 'x')` is `''`. |
 | [Positional string-splice: `OVERLAY`/`STUFF`/`INSERT` (PostgreSQL/T-SQL/MySQL) → all targets](strings-collation/overlay-stuff-insert-splice.md) | Strings, concatenation and collation | Three engines each have a native "replace `len` characters of `string` at 1-based position `start` with `new`" function: PostgreSQL's `OVERLAY(string PLACING new FROM start [FOR len])`, T-SQL's `STUFF(string, start, len, new)`, MySQL's `INSERT(string, start, len, new)`. |
 
-### PostgreSQL
-
-**As source:**
+### PostgreSQL as source
 
 | Article | Topic | Description |
 |---|---|---|
@@ -237,7 +239,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Row-level trigger re-reading its own table (MySQL/PostgreSQL) ↔ Oracle `COMPOUND TRIGGER`](procedural/trigger-reading-own-table.md) | Procedural: cursors, dynamic SQL, system procedures, session directives | A row-level trigger that aggregates a parent row from its children (`UPDATE invoice SET total = (SELECT SUM(...) FROM invoice_line WHERE invoice_id = NEW.invoice_id) WHERE id = NEW.invoice_id`) re-reads the table it's attached to. |
 | [Positional string-splice: `OVERLAY`/`STUFF`/`INSERT` (PostgreSQL/T-SQL/MySQL) → all targets](strings-collation/overlay-stuff-insert-splice.md) | Strings, concatenation and collation | Three engines each have a native "replace `len` characters of `string` at 1-based position `start` with `new`" function: PostgreSQL's `OVERLAY(string PLACING new FROM start [FOR len])`, T-SQL's `STUFF(string, start, len, new)`, MySQL's `INSERT(string, start, len, new)`. |
 
-**As target:**
+### PostgreSQL as target
 
 | Article | Topic | Description |
 |---|---|---|
@@ -280,9 +282,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Oracle `'' ≡ NULL`](strings-collation/oracle-empty-string-is-null.md) | Strings, concatenation and collation | Every other engine stores and compares an empty string `''` as a distinct, zero-length value: `'' IS NULL` is false, `COALESCE('', 'x')` is `''`. |
 | [Positional string-splice: `OVERLAY`/`STUFF`/`INSERT` (PostgreSQL/T-SQL/MySQL) → all targets](strings-collation/overlay-stuff-insert-splice.md) | Strings, concatenation and collation | Three engines each have a native "replace `len` characters of `string` at 1-based position `start` with `new`" function: PostgreSQL's `OVERLAY(string PLACING new FROM start [FOR len])`, T-SQL's `STUFF(string, start, len, new)`, MySQL's `INSERT(string, start, len, new)`. |
 
-### MySQL
-
-**As source:**
+### MySQL as source
 
 | Article | Topic | Description |
 |---|---|---|
@@ -310,7 +310,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Leading `DECLARE` block reordered (MySQL): variables before cursors](procedural/mysql-declare-reorder.md) | Procedural: cursors, dynamic SQL, system procedures, session directives | MySQL requires every `DECLARE <cursor>` to come *after* every `DECLARE <variable>` in the same block (error 1337, "Variable or condition declaration after cursor or handler declaration") — a rule no other target engine imposes, so a source routine that declares its cursor before its scalar variables (a legal order on Oracle/T-SQL/PostgreSQL) needs its leading declaration block reordered for MySQL specifically. |
 | [Positional string-splice: `OVERLAY`/`STUFF`/`INSERT` (PostgreSQL/T-SQL/MySQL) → all targets](strings-collation/overlay-stuff-insert-splice.md) | Strings, concatenation and collation | Three engines each have a native "replace `len` characters of `string` at 1-based position `start` with `new`" function: PostgreSQL's `OVERLAY(string PLACING new FROM start [FOR len])`, T-SQL's `STUFF(string, start, len, new)`, MySQL's `INSERT(string, start, len, new)`. |
 
-**As target:**
+### MySQL as target
 
 | Article | Topic | Description |
 |---|---|---|
