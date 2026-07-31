@@ -74,7 +74,13 @@ from tests.helpers.corpus_diff import is_comparable
 # carriers (UNIQUE-1238) instead of silently shipping different bytes
 # (ts-compress). 1 removed: 8 defect-pending-fix, 5 documented-inherent, 2
 # session-dependent = 15.
-LEDGER_SIZE_FLOOR = 15
+#
+# 2026-07-31 (brief T4-B cont.): PG ascii() returns the Unicode code point but
+# MySQL ASCII returns the first BYTE (ASCII('é')=195, not 233); read the code
+# point via ORD(CONVERT(x USING utf32)) on the MySQL target (pg-chr-ascii-
+# unicode; the ASCII-range and CHR legs already matched). 1 removed: 7
+# defect-pending-fix, 5 documented-inherent, 2 session-dependent = 14.
+LEDGER_SIZE_FLOOR = 14
 
 
 def _eligible_cases() -> list[CorpusEntry]:

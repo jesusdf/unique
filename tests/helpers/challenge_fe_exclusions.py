@@ -148,12 +148,6 @@ LEDGER: tuple[Excluded, ...] = (
         sql="SELECT 255::bit(8)::text,to_hex(255),255::text",
     ),
     Excluded(
-        id="pg-chr-ascii-unicode",
-        tag="defect-pending-fix",
-        reason="multibyte CHR/ASCII not reproduced on MySQL",
-        sql="SELECT chr(233), ascii('é')",
-    ),
-    Excluded(
         id="ts-frac-seconds",
         tag="defect-pending-fix",
         reason="fractional-second rounding .123456 vs .123457",

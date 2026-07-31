@@ -271,6 +271,15 @@ CASES.update(
                 ),
             },
         ),
+        # PG ascii() returns the Unicode code point; MySQL ASCII returns the
+        # first BYTE (ASCII('é')=195, not 233). Read the code point via
+        # ORD over a UTF-32 conversion. (CHR maps to CHAR/NCHR/NCHAR elsewhere.)
+        "pg-chr-ascii-unicode": Case(
+            "pg-chr-ascii-unicode ",
+            {
+                "mysql": Expect(("ORD(CONVERT('é' USING utf32))",), ("ascii('é')",)),
+            },
+        ),
         "pg-chr-concat": Case(
             "pg-chr-concat ",
             {
