@@ -27,12 +27,12 @@ when the faithful conversion is non-obvious. Written for readers outside the
 project; every claim is traceable to a verified corpus case.
 
 - **[rationale/README.md](rationale/README.md)** — how the pages work + index.
-- By topic: [datetime](rationale/datetime.md) ·
-  [strings & collation](rationale/strings-collation.md) ·
-  [aggregates & windows](rationale/aggregates-windows.md) ·
-  [booleans](rationale/booleans.md) ·
-  [DML](rationale/dml.md) · [DDL](rationale/ddl.md) ·
-  [procedural](rationale/procedural.md)
+- By topic: [datetime](rationale/datetime/README.md) ·
+  [strings & collation](rationale/strings-collation/README.md) ·
+  [aggregates & windows](rationale/aggregates-windows/README.md) ·
+  [booleans](rationale/booleans/README.md) ·
+  [DML](rationale/dml/README.md) · [DDL](rationale/ddl/README.md) ·
+  [procedural](rationale/procedural/README.md)
 - **[reference/warnings.md](reference/warnings.md)** — every `UNIQUE-NNNN`
   diagnostic code the transpiler can emit, with its rationale. If you found a
   code in your migrated SQL, look it up here.

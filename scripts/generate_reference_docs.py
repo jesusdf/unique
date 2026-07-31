@@ -292,8 +292,8 @@ def _render_mapping_page(source: str, target: str) -> str:
             "\n> Month/quarter/year `DATEADD` targeting Oracle uses a "
             "day-preserving rewrite (`oracle_month_add_daypreserving` in "
             "`core/mappings.py`) rather than a bare `ADD_MONTHS` call; see "
-            "[docs/rationale/datetime.md](../rationale/datetime.md) for the "
-            "worked example.\n"
+            "[docs/rationale/datetime/README.md](../rationale/datetime/README.md) "
+            "for the worked example.\n"
         )
     parts.append(f"\n## Built-ins of {source} with no cross-engine equivalent\n\n")
     parts.append(_degrade_section(source))

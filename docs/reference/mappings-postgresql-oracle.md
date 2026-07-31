@@ -98,7 +98,7 @@ _No procedural function renames recorded for this pair._
 | Diagnostic global `SQLSTATE` | `SQLSTATE` | `TO_CHAR(SQLCODE)` |
 | Diagnostic global `SQLCODE` | — | `SQLCODE` |
 
-> Month/quarter/year `DATEADD` targeting Oracle uses a day-preserving rewrite (`oracle_month_add_daypreserving` in `core/mappings.py`) rather than a bare `ADD_MONTHS` call; see [docs/rationale/datetime.md](../rationale/datetime.md) for the worked example.
+> Month/quarter/year `DATEADD` targeting Oracle uses a day-preserving rewrite (`oracle_month_add_daypreserving` in `core/mappings.py`) rather than a bare `ADD_MONTHS` call; see [docs/rationale/datetime/README.md](../rationale/datetime/README.md) for the worked example.
 
 ## Built-ins of postgresql with no cross-engine equivalent
 
