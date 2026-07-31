@@ -70,3 +70,27 @@ See [README.md](../README.md) for the entry format and sourcing rules.
 | Article | Direction | Description |
 |---|---|---|
 | [Topics left out for lack of source support](topics-left-out.md) | overview | - **PostgreSQL `SET`-type MySQL columns** (unordered multi-value combination) degrade the same way `ENUM` does (to a `VARCHAR` wide enough for all values plus a documented note), but no challenge-corpus case exercises `SET` specifically, so no dedicated entry is made to avoid inventing an example. |
+
+## Computed columns
+
+| Article | Direction | Description |
+|---|---|---|
+| [`GENERATED ALWAYS AS (expr)` computed columns (cross-engine)](computed-columns-generated-always.md) | cross-engine | A computed (generated) column derives its value from an expression over other columns in the same row, recalculated automatically on every read or write — a fundamentally different thing from an auto-incrementing identity column, even though MySQL spells the two very differently and PostgreSQL's `GENERATED ALWAYS AS (...)` clause is shared syntax for both. |
+
+## Inline DDL attributes decomposed into standalone statements
+
+| Article | Direction | Description |
+|---|---|---|
+| [Inline DDL attributes decomposed into standalone statements: MySQL `COMMENT`, T-SQL inline `INDEX`](inline-attribute-to-standalone-statement.md) | cross-engine | MySQL lets a column or table carry a `COMMENT '...'` right inside its `CREATE TABLE`, and T-SQL lets a table element declare an `INDEX` inline alongside its columns. |
+
+## Non-negativity constraint synthesis
+
+| Article | Direction | Description |
+|---|---|---|
+| [MySQL `UNSIGNED` → widened signed type + synthesized `CHECK (col >= 0)`](mysql-unsigned-check-synthesis.md) | mysql → tsql/oracle/postgresql | A MySQL `UNSIGNED` integer column can never hold a negative value — that's enforced structurally by the column's own type, not by a constraint. |
+
+## TRUNCATE options
+
+| Article | Direction | Description |
+|---|---|---|
+| [PostgreSQL `TRUNCATE ... RESTART IDENTITY / CASCADE` → Oracle/MySQL/T-SQL](truncate-restart-identity-cascade.md) | postgresql → oracle/mysql/tsql | PostgreSQL's `TRUNCATE` defaults to *keeping* an identity column's next value where it was (`CONTINUE IDENTITY` is implicit), and only resets it when you say `RESTART IDENTITY` explicitly; the same statement's `CASCADE` also truncates every table with a foreign key pointing at the truncated one. |

@@ -67,6 +67,7 @@ and sourcing rules.
 | [Return-type and signature synthesis](return-type-synthesis-overview.md) | overview | Two shapes where a routine's own declared **signature** has to change shape to satisfy the target grammar, not just its body: a PostgreSQL function that declares no return value at all, and a procedure whose body streams a result set that PL/SQL cannot express without an extra parameter. |
 | [`RETURNS void` (PostgreSQL) → neutral scalar return type + synthesized `RETURN` (MySQL / T-SQL / Oracle)](returns-void-signature-synthesis.md) | postgresql → tsql/oracle/mysql | A PostgreSQL function declared `RETURNS void` returns nothing — per the corpus's own count, the single most common plpgsql function shape (62 occurrences), typically a side-effecting helper invoked for its `INSERT`/`UPDATE`, never for a value. |
 | [A bare result `SELECT` inside a procedure body (MySQL / PostgreSQL / T-SQL) → Oracle `SYS_REFCURSOR` OUT parameter, propagated to `CALL` sites](bare-result-select-to-refcursor.md) | tsql/postgresql/mysql → oracle | A MySQL or T-SQL procedure can hand back a result set simply by running a `SELECT` with no `INTO` target partway through the body. |
+| [T-SQL scalar function: synthesized trailing `RETURN NULL` after an all-branches-return `IF`/`ELSE`](scalar-function-trailing-return-null.md) | postgresql/oracle → tsql | T-SQL requires a scalar function's **last statement** to literally *be* a `RETURN` (error 455 otherwise) — even when the function's body already returns a value on every possible branch, such as an `IF ... |
 
 ## Other `[limit]` procedural entries
 
@@ -106,9 +107,22 @@ and sourcing rules.
 | [Numeric range `FOR i IN a..b LOOP` (Oracle) → MySQL / T-SQL explicit `WHILE` + counter](numeric-range-for-loop.md) | oracle → tsql/mysql | `FOR i IN 1..13 LOOP` (optionally `REVERSE`) is Oracle's counting loop — no cursor at all, just an integer range. |
 | [Bare `RETURN` in a MySQL procedure → labeled `proc_exit:` block + `LEAVE`](mysql-bare-return-to-leave.md) | cross-engine | MySQL forbids `RETURN` anywhere inside a `PROCEDURE` body ("RETURN is only allowed in a FUNCTION") — but an early-exit bare `RETURN` (no value) is ordinary control flow in T-SQL/Oracle/PostgreSQL procedures. |
 | [Leading `DECLARE` block reordered (MySQL): variables before cursors](mysql-declare-reorder.md) | mysql | MySQL requires every `DECLARE <cursor>` to come *after* every `DECLARE <variable>` in the same block (error 1337, "Variable or condition declaration after cursor or handler declaration") — a rule no other target engine imposes, so a source routine that declares its cursor before its scalar variables (a legal order on Oracle/T-SQL/PostgreSQL) needs its leading declaration block reordered for MySQL specifically. |
+| [T-SQL loop control (`BREAK`/`CONTINUE`, compound assignment) → MySQL labeled `LEAVE`/`ITERATE`](tsql-loop-control-to-mysql-labels.md) | tsql → mysql | T-SQL's `BREAK`/`CONTINUE` act on the *nearest enclosing* loop with no name required. |
 
 ## Topics left out for lack of source support
 
 | Article | Direction | Description |
 |---|---|---|
 | [Topics left out for lack of source support](topics-left-out.md) | overview | - **Ref cursor `OUT` parameters** (`SYS_REFCURSOR`) and **`EXECUTE IMMEDIATE … USING bind1, bind2`** Oracle→T-SQL specifics are documented in `docs/03-unsupported.md` §6, but no challenge-corpus case exercises either construct, so no dedicated entry is made here to avoid inventing an example. |
+
+## Dynamic-SQL loop-to-aggregate rewrite
+
+| Article | Direction | Description |
+|---|---|---|
+| [A row-by-row dynamic-SQL string build (T-SQL) → a single Oracle `LISTAGG` + `EXECUTE IMMEDIATE`](dynamic-sql-loop-to-listagg.md) | tsql → oracle | A common T-SQL pattern builds a dynamic-SQL string by looping over a result set implicitly, appending to the same variable on every row: `SELECT @sql = @sql + expr FROM t`. |
+
+## Oracle CAST length: PL/SQL body vs. top-level SQL
+
+| Article | Direction | Description |
+|---|---|---|
+| [A lengthless character `CAST` reaching Oracle: valid inside a PL/SQL body, invalid as a bare top-level statement](oracle-cast-length-plsql-body-vs-sql-statement.md) | tsql → oracle | A T-SQL cast to a character type with **no length given at all** (a bare `CAST(x AS VARCHAR)`, as opposed to `VARCHAR(n)`) needs opposite treatment depending on where it lands on Oracle. |

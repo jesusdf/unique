@@ -21,13 +21,13 @@ This is the narrative companion to two machine-checked sources of truth:
 
 | Topic | Covers | Articles |
 |---|---|---|
-| [Date/time arithmetic and formatting](datetime/README.md) | date/time arithmetic, truncation, unit maps, month-end semantics, epoch rebasing | 8 |
-| [Strings, concatenation and collation](strings-collation/README.md) | concatenation & NULL, LIKE/ESCAPE, character classes, collation/order, Oracle `''` ≡ NULL, byte vs char lengths | 13 |
+| [Date/time arithmetic and formatting](datetime/README.md) | date/time arithmetic, truncation, unit maps, month-end semantics, epoch rebasing | 10 |
+| [Strings, concatenation and collation](strings-collation/README.md) | concatenation & NULL, LIKE/ESCAPE, character classes, collation/order, Oracle `''` ≡ NULL, byte vs char lengths | 18 |
 | [Aggregates and window functions](aggregates-windows/README.md) | window frames, ordered aggregates, string aggregation, DISTINCT ON, boolean aggregates | 13 |
-| [Booleans: the value/predicate duality](booleans/README.md) | tri-state `CASE` wrap for value position, `<> 0` synthesis for predicate position, boolean-column `IS TRUE`/`IS FALSE` re-spelling | 7 |
-| [DML: PIVOT/UNPIVOT, MERGE, DELETE, row values](dml/README.md) | PIVOT/UNPIVOT, MERGE/upsert lowering, multi-table DELETE, row caps, row-value comparisons | 22 |
-| [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md) | identity/SERIAL, temp tables, FK actions, sequences, storage options | 14 |
-| [Procedural: cursors, dynamic SQL, system procedures, session directives](procedural/README.md) | cursors, error handling, dynamic SQL, system procedures, session directives | 29 |
+| [Booleans: the value/predicate duality](booleans/README.md) | tri-state `CASE` wrap for value position, `<> 0` synthesis for predicate position, boolean-column `IS TRUE`/`IS FALSE` re-spelling | 8 |
+| [DML: PIVOT/UNPIVOT, MERGE, DELETE, row values](dml/README.md) | PIVOT/UNPIVOT, MERGE/upsert lowering, multi-table DELETE, row caps, row-value comparisons | 23 |
+| [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md) | identity/SERIAL, temp tables, FK actions, sequences, storage options | 18 |
+| [Procedural: cursors, dynamic SQL, system procedures, session directives](procedural/README.md) | cursors, error handling, dynamic SQL, system procedures, session directives | 33 |
 
 ## By engine
 
@@ -73,6 +73,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`OUTPUT … INTO` redirect (T-SQL) → PostgreSQL](dml/output-into-redirect.md) | `OUTPUT INSERTED.a INTO log(a)` redirects the output rows into a second table instead of returning them to the caller. |
 | [Trailing `ORDER BY` on `UNION`/`EXCEPT`/`INTERSECT` (T-SQL) → PostgreSQL / Oracle / MySQL](dml/set-op-trailing-order-by.md) | `SELECT … EXCEPT SELECT … ORDER BY a` orders the **combined** result of the whole set operation. |
 | [`FROM DUAL` synthesis and removal (bidirectional)](dml/from-dual.md) | Oracle has no table-less `SELECT` — `SELECT 1` is `ORA-00923` — so every scalar `SELECT` needs a `FROM` clause; Oracle's answer is `DUAL`, a one-row system table. |
+| [Recursive CTE synthesis: `WITH RECURSIVE` keyword, Oracle's required column list, and the `MAXRECURSION` hint](dml/recursive-cte-keyword-and-column-list.md) | A recursive CTE — one whose body queries its own name — needs different declaration syntax on every engine. |
 
 #### [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md)
 
@@ -98,6 +99,9 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Scroll cursor `FETCH PRIOR/FIRST/LAST/ABSOLUTE/RELATIVE` (T-SQL) → Oracle / PostgreSQL / MySQL](procedural/scroll-cursor-fetch.md) | A T-SQL `SCROLL` cursor supports non-forward fetches: `FETCH LAST`, `FETCH PRIOR`, `FETCH ABSOLUTE n`, etc. |
 | [T-SQL `INSTEAD OF` trigger → PostgreSQL (native on views, emulated on tables)](procedural/tsql-instead-of-trigger.md) | T-SQL allows `INSTEAD OF` on both views *and* base tables — the trigger body runs **instead of** the attempted INSERT/UPDATE/DELETE, which is never applied on its own. |
 | [T-SQL cursor-variable binding (`SET @cur = CURSOR ... FOR q; OPEN @cur;`) → PostgreSQL / Oracle / MySQL](procedural/tsql-cursor-variable-binding.md) | T-SQL lets a cursor be bound to a *variable* in two steps: a bare `DECLARE @cur CURSOR;` (no query yet), then `SET @cur = CURSOR ... |
+| [T-SQL loop control (`BREAK`/`CONTINUE`, compound assignment) → MySQL labeled `LEAVE`/`ITERATE`](procedural/tsql-loop-control-to-mysql-labels.md) | T-SQL's `BREAK`/`CONTINUE` act on the *nearest enclosing* loop with no name required. |
+| [A row-by-row dynamic-SQL string build (T-SQL) → a single Oracle `LISTAGG` + `EXECUTE IMMEDIATE`](procedural/dynamic-sql-loop-to-listagg.md) | A common T-SQL pattern builds a dynamic-SQL string by looping over a result set implicitly, appending to the same variable on every row: `SELECT @sql = @sql + expr FROM t`. |
+| [A lengthless character `CAST` reaching Oracle: valid inside a PL/SQL body, invalid as a bare top-level statement](procedural/oracle-cast-length-plsql-body-vs-sql-statement.md) | A T-SQL cast to a character type with **no length given at all** (a bare `CAST(x AS VARCHAR)`, as opposed to `VARCHAR(n)`) needs opposite treatment depending on where it lands on Oracle. |
 
 ### T-SQL as target
 
@@ -113,6 +117,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [MySQL TIMESTAMPDIFF complete-month adjustment, ported to every target](datetime/mysql-timestampdiff-complete-month.md) | MySQL `TIMESTAMPDIFF(MONTH, start, end)` counts **complete** month periods: `TIMESTAMPDIFF(MONTH, '2020-01-15', '2020-03-10')` = `1`, not `2`, because the end's day-of-month (`10`) has not reached the start's (`15`) — the final partial month does not count. |
 | [MySQL TO_DAYS year-0000 epoch rebase](datetime/mysql-to-days-epoch-rebase.md) | MySQL `TO_DAYS(d)` returns the count of days since a notional `0000-01-01`. |
 | [Multi-field PostgreSQL INTERVAL decomposition](datetime/postgresql-interval-decomposition.md) | PostgreSQL accepts a verbose, multi-unit interval literal in one string: `INTERVAL '1 year 2 months 3 days'`. |
+| [MySQL compound `EXTRACT` units (`YEAR_MONTH`, `DAY_HOUR`, …) → all targets](datetime/mysql-compound-extract-units.md) | MySQL's `EXTRACT` accepts several **compound** units — `YEAR_MONTH`, `DAY_HOUR`, `DAY_MINUTE`, `DAY_SECOND`, and others — that pack two or more calendar fields into a single decimal-weighted number in one call. |
+| [Oracle `MONTHS_BETWEEN` fractional value → T-SQL exact `CASE` formula](datetime/months-between-fractional.md) | Oracle's `MONTHS_BETWEEN(date1, date2)` returns a **fractional** number of months: whole months plus `(day1 - day2) / 31` for the remainder, collapsing to a whole number only when both dates are the last day of their month or share the same day-of-month. |
 
 #### [Strings, concatenation and collation](strings-collation/README.md)
 
@@ -159,6 +165,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`FROM DUAL` synthesis and removal (bidirectional)](dml/from-dual.md) | Oracle has no table-less `SELECT` — `SELECT 1` is `ORA-00923` — so every scalar `SELECT` needs a `FROM` clause; Oracle's answer is `DUAL`, a one-row system table. |
 | [`FROM (VALUES …)` / a quantified bare-`VALUES` subquery (PostgreSQL) → `UNION ALL` chain (every target)](dml/from-values-to-union-all.md) | PostgreSQL's `VALUES (1),(2),(3)` is a first-class row source, usable directly as a `FROM` item, as the operand of a quantified comparison (`n > ALL (VALUES …)`), or with a column-aliased `v(x)`. |
 | [`FROM generate_series(…)` (PostgreSQL) → a synthesized numbers source (every target)](dml/from-generate-series.md) | PostgreSQL's `generate_series(start, stop[, step])` is a set-returning function usable directly as a `FROM` item (or, via an implicit lateral unnest, in the `SELECT` list) — a compact way to manufacture one row per integer (or per date, with an `INTERVAL` step) in a range. |
+| [Recursive CTE synthesis: `WITH RECURSIVE` keyword, Oracle's required column list, and the `MAXRECURSION` hint](dml/recursive-cte-keyword-and-column-list.md) | A recursive CTE — one whose body queries its own name — needs different declaration syntax on every engine. |
 
 #### [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md)
 
@@ -168,6 +175,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [One-word vs two-word negative options (Oracle `NOMAXVALUE`/`NOCYCLE` vs T-SQL/PostgreSQL `NO MAXVALUE`/`NO CYCLE`)](ddl/sequence-negative-option-spelling.md) | `CREATE SEQUENCE … NO MAXVALUE NO CYCLE` (T-SQL, PostgreSQL) and `CREATE SEQUENCE … NOMAXVALUE NOCYCLE` (Oracle) both mean "no upper bound, do not wrap around" — the same option, spelled as two words on some engines and fused to one word on Oracle. |
 | [`ENUM('lo','mid','hi')` (MySQL) → PostgreSQL / T-SQL / Oracle VARCHAR + CHECK](ddl/mysql-enum-to-varchar-check.md) | A MySQL `ENUM` column stores one of a fixed value list, and — the part that matters here — **orders by declaration index**, not alphabetically: `ENUM('lo','mid','hi')` sorts `lo < mid < hi` regardless of the values' lexical order. |
 | [Nameless `CREATE INDEX ON t(col)` (PostgreSQL) → T-SQL](ddl/nameless-create-index-to-tsql.md) | PostgreSQL allows `CREATE INDEX ON t (col)` with no index name — the server picks one internally (`t_col_idx`-shaped, but never surfaced to the script). |
+| [MySQL `UNSIGNED` → widened signed type + synthesized `CHECK (col >= 0)`](ddl/mysql-unsigned-check-synthesis.md) | A MySQL `UNSIGNED` integer column can never hold a negative value — that's enforced structurally by the column's own type, not by a constraint. |
+| [PostgreSQL `TRUNCATE ... RESTART IDENTITY / CASCADE` → Oracle/MySQL/T-SQL](ddl/truncate-restart-identity-cascade.md) | PostgreSQL's `TRUNCATE` defaults to *keeping* an identity column's next value where it was (`CONTINUE IDENTITY` is implicit), and only resets it when you say `RESTART IDENTITY` explicitly; the same statement's `CASCADE` also truncates every table with a foreign key pointing at the truncated one. |
 
 #### [Procedural: cursors, dynamic SQL, system procedures, session directives](procedural/README.md)
 
@@ -184,6 +193,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`RETURNS void` (PostgreSQL) → neutral scalar return type + synthesized `RETURN` (MySQL / T-SQL / Oracle)](procedural/returns-void-signature-synthesis.md) | A PostgreSQL function declared `RETURNS void` returns nothing — per the corpus's own count, the single most common plpgsql function shape (62 occurrences), typically a side-effecting helper invoked for its `INSERT`/`UPDATE`, never for a value. |
 | [PL/SQL `FOR rec IN cur LOOP` (Oracle) → T-SQL explicit cursor scaffold](procedural/cursor-for-loop-to-tsql.md) | A PL/SQL cursor `FOR` loop declares nothing: it implicitly opens the cursor, fetches one row per iteration into a record `rec`, and closes it when the cursor is exhausted — `rec.col` reads that iteration's column. |
 | [Numeric range `FOR i IN a..b LOOP` (Oracle) → MySQL / T-SQL explicit `WHILE` + counter](procedural/numeric-range-for-loop.md) | `FOR i IN 1..13 LOOP` (optionally `REVERSE`) is Oracle's counting loop — no cursor at all, just an integer range. |
+| [T-SQL scalar function: synthesized trailing `RETURN NULL` after an all-branches-return `IF`/`ELSE`](procedural/scalar-function-trailing-return-null.md) | T-SQL requires a scalar function's **last statement** to literally *be* a `RETURN` (error 455 otherwise) — even when the function's body already returns a value on every possible branch, such as an `IF ... |
 
 ### Oracle as source
 
@@ -195,6 +205,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Description |
 |---|---|
 | [ADD_MONTHS (Oracle) → DATEADD/DATE_ADD/interval-add (T-SQL/MySQL/PostgreSQL)](datetime/oracle-add-months-to-dateadd.md) | Oracle's `ADD_MONTHS` sticks to the *target* month's last day whenever the operand is its own month's last day — `ADD_MONTHS('2020-02-29', 1)` = `2020-03-31`. |
+| [Oracle `MONTHS_BETWEEN` fractional value → T-SQL exact `CASE` formula](datetime/months-between-fractional.md) | Oracle's `MONTHS_BETWEEN(date1, date2)` returns a **fractional** number of months: whole months plus `(day1 - day2) / 31` for the remainder, collapsing to a whole number only when both dates are the last day of their month or share the same day-of-month. |
 
 #### [Strings, concatenation and collation](strings-collation/README.md)
 
@@ -246,6 +257,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [PL/SQL `FOR rec IN cur LOOP` (Oracle) → T-SQL explicit cursor scaffold](procedural/cursor-for-loop-to-tsql.md) | A PL/SQL cursor `FOR` loop declares nothing: it implicitly opens the cursor, fetches one row per iteration into a record `rec`, and closes it when the cursor is exhausted — `rec.col` reads that iteration's column. |
 | [PL/SQL cursor `FOR` loop (Oracle) → MySQL explicit cursor scaffold](procedural/cursor-for-loop-to-mysql.md) | The same implicit fetch-and-bind PL/SQL construct as above, but onto MySQL, whose procedural dialect additionally requires every `DECLARE` to sit at the very top of its enclosing `BEGIN` block (MySQL error 1337) and has no `WHILE @@FETCH_STATUS` equivalent — loop termination is driven by a `CONTINUE HANDLER FOR NOT FOUND`. |
 | [Numeric range `FOR i IN a..b LOOP` (Oracle) → MySQL / T-SQL explicit `WHILE` + counter](procedural/numeric-range-for-loop.md) | `FOR i IN 1..13 LOOP` (optionally `REVERSE`) is Oracle's counting loop — no cursor at all, just an integer range. |
+| [T-SQL scalar function: synthesized trailing `RETURN NULL` after an all-branches-return `IF`/`ELSE`](procedural/scalar-function-trailing-return-null.md) | T-SQL requires a scalar function's **last statement** to literally *be* a `RETURN` (error 455 otherwise) — even when the function's body already returns a value on every possible branch, such as an `IF ... |
 
 ### Oracle as target
 
@@ -261,6 +273,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [MySQL TIMESTAMPDIFF complete-month adjustment, ported to every target](datetime/mysql-timestampdiff-complete-month.md) | MySQL `TIMESTAMPDIFF(MONTH, start, end)` counts **complete** month periods: `TIMESTAMPDIFF(MONTH, '2020-01-15', '2020-03-10')` = `1`, not `2`, because the end's day-of-month (`10`) has not reached the start's (`15`) — the final partial month does not count. |
 | [MySQL TO_DAYS year-0000 epoch rebase](datetime/mysql-to-days-epoch-rebase.md) | MySQL `TO_DAYS(d)` returns the count of days since a notional `0000-01-01`. |
 | [Multi-field PostgreSQL INTERVAL decomposition](datetime/postgresql-interval-decomposition.md) | PostgreSQL accepts a verbose, multi-unit interval literal in one string: `INTERVAL '1 year 2 months 3 days'`. |
+| [MySQL compound `EXTRACT` units (`YEAR_MONTH`, `DAY_HOUR`, …) → all targets](datetime/mysql-compound-extract-units.md) | MySQL's `EXTRACT` accepts several **compound** units — `YEAR_MONTH`, `DAY_HOUR`, `DAY_MINUTE`, `DAY_SECOND`, and others — that pack two or more calendar fields into a single decimal-weighted number in one call. |
 
 #### [Strings, concatenation and collation](strings-collation/README.md)
 
@@ -268,6 +281,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|
 | [Oracle `'' ≡ NULL`](strings-collation/oracle-empty-string-is-null.md) | Every other engine stores and compares an empty string `''` as a distinct, zero-length value: `'' IS NULL` is false, `COALESCE('', 'x')` is `''`. |
 | [Positional string-splice: `OVERLAY`/`STUFF`/`INSERT` (PostgreSQL/T-SQL/MySQL) → all targets](strings-collation/overlay-stuff-insert-splice.md) | Three engines each have a native "replace `len` characters of `string` at 1-based position `start` with `new`" function: PostgreSQL's `OVERLAY(string PLACING new FROM start [FOR len])`, T-SQL's `STUFF(string, start, len, new)`, MySQL's `INSERT(string, start, len, new)`. |
+| [PostgreSQL `regexp_replace` flags → Oracle/MySQL positional occurrence + backreference respelling](strings-collation/regexp-replace-flags-and-backreferences.md) | PostgreSQL's `regexp_replace(source, pattern, replacement, flags)` fourth argument is a **flags string** (`'g'` for global, `'i'` for case-insensitive, …); Oracle's and MySQL's `REGEXP_REPLACE` instead take a **numeric** occurrence/position argument in that slot, and both already replace every match by default. |
 
 #### [Aggregates and window functions](aggregates-windows/README.md)
 
@@ -306,6 +320,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`FROM DUAL` synthesis and removal (bidirectional)](dml/from-dual.md) | Oracle has no table-less `SELECT` — `SELECT 1` is `ORA-00923` — so every scalar `SELECT` needs a `FROM` clause; Oracle's answer is `DUAL`, a one-row system table. |
 | [`FROM (VALUES …)` / a quantified bare-`VALUES` subquery (PostgreSQL) → `UNION ALL` chain (every target)](dml/from-values-to-union-all.md) | PostgreSQL's `VALUES (1),(2),(3)` is a first-class row source, usable directly as a `FROM` item, as the operand of a quantified comparison (`n > ALL (VALUES …)`), or with a column-aliased `v(x)`. |
 | [`FROM generate_series(…)` (PostgreSQL) → a synthesized numbers source (every target)](dml/from-generate-series.md) | PostgreSQL's `generate_series(start, stop[, step])` is a set-returning function usable directly as a `FROM` item (or, via an implicit lateral unnest, in the `SELECT` list) — a compact way to manufacture one row per integer (or per date, with an `INTERVAL` step) in a range. |
+| [Recursive CTE synthesis: `WITH RECURSIVE` keyword, Oracle's required column list, and the `MAXRECURSION` hint](dml/recursive-cte-keyword-and-column-list.md) | A recursive CTE — one whose body queries its own name — needs different declaration syntax on every engine. |
 
 #### [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md)
 
@@ -317,6 +332,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [One-word vs two-word negative options (Oracle `NOMAXVALUE`/`NOCYCLE` vs T-SQL/PostgreSQL `NO MAXVALUE`/`NO CYCLE`)](ddl/sequence-negative-option-spelling.md) | `CREATE SEQUENCE … NO MAXVALUE NO CYCLE` (T-SQL, PostgreSQL) and `CREATE SEQUENCE … NOMAXVALUE NOCYCLE` (Oracle) both mean "no upper bound, do not wrap around" — the same option, spelled as two words on some engines and fused to one word on Oracle. |
 | [T-SQL index `WITH (FILLFACTOR = n)` → Oracle / MySQL](ddl/tsql-index-fillfactor.md) | `FILLFACTOR` reserves free space per index page for future inserts — a physical storage tuning knob with no logical effect on query results. |
 | [`ENUM('lo','mid','hi')` (MySQL) → PostgreSQL / T-SQL / Oracle VARCHAR + CHECK](ddl/mysql-enum-to-varchar-check.md) | A MySQL `ENUM` column stores one of a fixed value list, and — the part that matters here — **orders by declaration index**, not alphabetically: `ENUM('lo','mid','hi')` sorts `lo < mid < hi` regardless of the values' lexical order. |
+| [MySQL `UNSIGNED` → widened signed type + synthesized `CHECK (col >= 0)`](ddl/mysql-unsigned-check-synthesis.md) | A MySQL `UNSIGNED` integer column can never hold a negative value — that's enforced structurally by the column's own type, not by a constraint. |
+| [PostgreSQL `TRUNCATE ... RESTART IDENTITY / CASCADE` → Oracle/MySQL/T-SQL](ddl/truncate-restart-identity-cascade.md) | PostgreSQL's `TRUNCATE` defaults to *keeping* an identity column's next value where it was (`CONTINUE IDENTITY` is implicit), and only resets it when you say `RESTART IDENTITY` explicitly; the same statement's `CASCADE` also truncates every table with a foreign key pointing at the truncated one. |
 
 #### [Procedural: cursors, dynamic SQL, system procedures, session directives](procedural/README.md)
 
@@ -332,6 +349,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Scroll cursor `FETCH PRIOR/FIRST/LAST/ABSOLUTE/RELATIVE` (T-SQL) → Oracle / PostgreSQL / MySQL](procedural/scroll-cursor-fetch.md) | A T-SQL `SCROLL` cursor supports non-forward fetches: `FETCH LAST`, `FETCH PRIOR`, `FETCH ABSOLUTE n`, etc. |
 | [Row-level trigger re-reading its own table (MySQL/PostgreSQL) ↔ Oracle `COMPOUND TRIGGER`](procedural/trigger-reading-own-table.md) | A row-level trigger that aggregates a parent row from its children (`UPDATE invoice SET total = (SELECT SUM(...) FROM invoice_line WHERE invoice_id = NEW.invoice_id) WHERE id = NEW.invoice_id`) re-reads the table it's attached to. |
 | [T-SQL cursor-variable binding (`SET @cur = CURSOR ... FOR q; OPEN @cur;`) → PostgreSQL / Oracle / MySQL](procedural/tsql-cursor-variable-binding.md) | T-SQL lets a cursor be bound to a *variable* in two steps: a bare `DECLARE @cur CURSOR;` (no query yet), then `SET @cur = CURSOR ... |
+| [A row-by-row dynamic-SQL string build (T-SQL) → a single Oracle `LISTAGG` + `EXECUTE IMMEDIATE`](procedural/dynamic-sql-loop-to-listagg.md) | A common T-SQL pattern builds a dynamic-SQL string by looping over a result set implicitly, appending to the same variable on every row: `SELECT @sql = @sql + expr FROM t`. |
+| [A lengthless character `CAST` reaching Oracle: valid inside a PL/SQL body, invalid as a bare top-level statement](procedural/oracle-cast-length-plsql-body-vs-sql-statement.md) | A T-SQL cast to a character type with **no length given at all** (a bare `CAST(x AS VARCHAR)`, as opposed to `VARCHAR(n)`) needs opposite treatment depending on where it lands on Oracle. |
 
 ### PostgreSQL as source
 
@@ -351,6 +370,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Description |
 |---|---|
 | [Positional string-splice: `OVERLAY`/`STUFF`/`INSERT` (PostgreSQL/T-SQL/MySQL) → all targets](strings-collation/overlay-stuff-insert-splice.md) | Three engines each have a native "replace `len` characters of `string` at 1-based position `start` with `new`" function: PostgreSQL's `OVERLAY(string PLACING new FROM start [FOR len])`, T-SQL's `STUFF(string, start, len, new)`, MySQL's `INSERT(string, start, len, new)`. |
+| [PostgreSQL `regexp_replace` flags → Oracle/MySQL positional occurrence + backreference respelling](strings-collation/regexp-replace-flags-and-backreferences.md) | PostgreSQL's `regexp_replace(source, pattern, replacement, flags)` fourth argument is a **flags string** (`'g'` for global, `'i'` for case-insensitive, …); Oracle's and MySQL's `REGEXP_REPLACE` instead take a **numeric** occurrence/position argument in that slot, and both already replace every match by default. |
 
 #### [Aggregates and window functions](aggregates-windows/README.md)
 
@@ -374,6 +394,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [A numeric/bit value where a genuine predicate or boolean is required (MySQL, PostgreSQL) → T-SQL, Oracle](booleans/value-in-predicate-position.md) | MySQL/PostgreSQL treat `0`/non-`0` as false/true anywhere a condition is expected (`WHERE 0` never matches); Oracle PL/SQL's `BOOLEAN` return type demands an actual boolean expression, not a `NUMBER`. |
 | [`flag IS [NOT] TRUE/FALSE` on a boolean column (PostgreSQL) → T-SQL, Oracle](booleans/boolean-column-is-true-false.md) | PostgreSQL's `IS TRUE`/`IS FALSE`/`IS NOT TRUE`/`IS NOT FALSE` predicate accepts `TRUE`/`FALSE`/`NULL`/`UNKNOWN` as its right-hand side — never an integer. |
 | [`IS [NOT] DISTINCT FROM` (PostgreSQL null-safe comparison) → MySQL `<=>` / T-SQL, Oracle `EXISTS`/`INTERSECT`](booleans/is-distinct-from.md) | PostgreSQL's `IS [NOT] DISTINCT FROM` is a null-safe equality: unlike `=`, it never itself evaluates to `UNKNOWN` — `NULL IS NOT DISTINCT FROM NULL` is `TRUE`, `1 IS DISTINCT FROM NULL` is `TRUE`. |
+| [Boolean-to-text/char rendering (PostgreSQL `::text` / MySQL `CAST(... AS CHAR)`)](booleans/boolean-to-text-rendering.md) | PostgreSQL renders a boolean cast to text as the words `'true'`/`'false'`; MySQL has no boolean text representation at all — its booleans are ordinary integers, so casting one to a character type gives `'1'`/`'0'` instead. |
 
 #### [DML: PIVOT/UNPIVOT, MERGE, DELETE, row values](dml/README.md)
 
@@ -393,6 +414,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`ON UPDATE <action>` (PostgreSQL / T-SQL / MySQL) → Oracle](ddl/fk-on-update-action-to-oracle.md) | `REFERENCES p(id) ON DELETE CASCADE ON UPDATE CASCADE` propagates both a delete and a primary-key update on the parent to the child. |
 | [One-word vs two-word negative options (Oracle `NOMAXVALUE`/`NOCYCLE` vs T-SQL/PostgreSQL `NO MAXVALUE`/`NO CYCLE`)](ddl/sequence-negative-option-spelling.md) | `CREATE SEQUENCE … NO MAXVALUE NO CYCLE` (T-SQL, PostgreSQL) and `CREATE SEQUENCE … NOMAXVALUE NOCYCLE` (Oracle) both mean "no upper bound, do not wrap around" — the same option, spelled as two words on some engines and fused to one word on Oracle. |
 | [Nameless `CREATE INDEX ON t(col)` (PostgreSQL) → T-SQL](ddl/nameless-create-index-to-tsql.md) | PostgreSQL allows `CREATE INDEX ON t (col)` with no index name — the server picks one internally (`t_col_idx`-shaped, but never surfaced to the script). |
+| [PostgreSQL `TRUNCATE ... RESTART IDENTITY / CASCADE` → Oracle/MySQL/T-SQL](ddl/truncate-restart-identity-cascade.md) | PostgreSQL's `TRUNCATE` defaults to *keeping* an identity column's next value where it was (`CONTINUE IDENTITY` is implicit), and only resets it when you say `RESTART IDENTITY` explicitly; the same statement's `CASCADE` also truncates every table with a foreign key pointing at the truncated one. |
 
 #### [Procedural: cursors, dynamic SQL, system procedures, session directives](procedural/README.md)
 
@@ -403,11 +425,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`RETURNS void` (PostgreSQL) → neutral scalar return type + synthesized `RETURN` (MySQL / T-SQL / Oracle)](procedural/returns-void-signature-synthesis.md) | A PostgreSQL function declared `RETURNS void` returns nothing — per the corpus's own count, the single most common plpgsql function shape (62 occurrences), typically a side-effecting helper invoked for its `INSERT`/`UPDATE`, never for a value. |
 | [A bare result `SELECT` inside a procedure body (MySQL / PostgreSQL / T-SQL) → Oracle `SYS_REFCURSOR` OUT parameter, propagated to `CALL` sites](procedural/bare-result-select-to-refcursor.md) | A MySQL or T-SQL procedure can hand back a result set simply by running a `SELECT` with no `INTO` target partway through the body. |
 | [Row-level trigger re-reading its own table (MySQL/PostgreSQL) ↔ Oracle `COMPOUND TRIGGER`](procedural/trigger-reading-own-table.md) | A row-level trigger that aggregates a parent row from its children (`UPDATE invoice SET total = (SELECT SUM(...) FROM invoice_line WHERE invoice_id = NEW.invoice_id) WHERE id = NEW.invoice_id`) re-reads the table it's attached to. |
+| [T-SQL scalar function: synthesized trailing `RETURN NULL` after an all-branches-return `IF`/`ELSE`](procedural/scalar-function-trailing-return-null.md) | T-SQL requires a scalar function's **last statement** to literally *be* a `RETURN` (error 455 otherwise) — even when the function's body already returns a value on every possible branch, such as an `IF ... |
 
 ### PostgreSQL as target
 
-| [Date/time](#datetime-arithmetic-and-formatting-5) | [Strings](#strings-concatenation-and-collation-5) | [Aggregates & windows](#aggregates-and-window-functions-4) | [DML](#dml-pivotunpivot-merge-delete-row-values-5) | [DDL](#ddl-identity-temp-tables-foreign-keys-sequences-storage-options-5) | [Procedural](#procedural-cursors-dynamic-sql-system-procedures-session-directives-5) |
-|---|---|---|---|---|---|
+| [Date/time](#datetime-arithmetic-and-formatting-5) | [Strings](#strings-concatenation-and-collation-5) | [Aggregates & windows](#aggregates-and-window-functions-4) | [Booleans](#booleans-the-valuepredicate-duality-4) | [DML](#dml-pivotunpivot-merge-delete-row-values-5) | [DDL](#ddl-identity-temp-tables-foreign-keys-sequences-storage-options-5) | [Procedural](#procedural-cursors-dynamic-sql-system-procedures-session-directives-5) |
+|---|---|---|---|---|---|---|
 
 #### [Date/time arithmetic and formatting](datetime/README.md)
 
@@ -417,6 +440,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [MySQL TIMESTAMPDIFF complete-month adjustment, ported to every target](datetime/mysql-timestampdiff-complete-month.md) | MySQL `TIMESTAMPDIFF(MONTH, start, end)` counts **complete** month periods: `TIMESTAMPDIFF(MONTH, '2020-01-15', '2020-03-10')` = `1`, not `2`, because the end's day-of-month (`10`) has not reached the start's (`15`) — the final partial month does not count. |
 | [MySQL TO_DAYS year-0000 epoch rebase](datetime/mysql-to-days-epoch-rebase.md) | MySQL `TO_DAYS(d)` returns the count of days since a notional `0000-01-01`. |
 | [Multi-field PostgreSQL INTERVAL decomposition](datetime/postgresql-interval-decomposition.md) | PostgreSQL accepts a verbose, multi-unit interval literal in one string: `INTERVAL '1 year 2 months 3 days'`. |
+| [MySQL compound `EXTRACT` units (`YEAR_MONTH`, `DAY_HOUR`, …) → all targets](datetime/mysql-compound-extract-units.md) | MySQL's `EXTRACT` accepts several **compound** units — `YEAR_MONTH`, `DAY_HOUR`, `DAY_MINUTE`, `DAY_SECOND`, and others — that pack two or more calendar fields into a single decimal-weighted number in one call. |
 
 #### [Strings, concatenation and collation](strings-collation/README.md)
 
@@ -434,6 +458,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Oracle `LISTAGG(...) WITHIN GROUP (...) OVER (...)` → PostgreSQL / T-SQL / MySQL](aggregates-windows/oracle-listagg-over.md) | Oracle allows `LISTAGG` to be used as a **window** function (`OVER (PARTITION BY …)`), producing a running string aggregation — one output row per input row, not one per group. |
 | [`MOD`/`%` by a zero divisor (MySQL) → PostgreSQL / T-SQL / Oracle](aggregates-windows/mod-by-zero-divisor.md) | MySQL's `MOD`/`%` returns `NULL` when the divisor is `0` (`5 MOD 0` is `NULL`, not an error); PostgreSQL and T-SQL raise a division-by-zero error, and Oracle's `MOD` returns the **dividend** unchanged (`MOD(5, 0)` = `5`) — three different behaviors for the same input, all different from MySQL's. |
 
+#### [Booleans: the value/predicate duality](booleans/README.md)
+
+| Article | Description |
+|---|---|
+| [Boolean-to-text/char rendering (PostgreSQL `::text` / MySQL `CAST(... AS CHAR)`)](booleans/boolean-to-text-rendering.md) | PostgreSQL renders a boolean cast to text as the words `'true'`/`'false'`; MySQL has no boolean text representation at all — its booleans are ordinary integers, so casting one to a character type gives `'1'`/`'0'` instead. |
+
 #### [DML: PIVOT/UNPIVOT, MERGE, DELETE, row values](dml/README.md)
 
 | Article | Description |
@@ -450,6 +480,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`FROM DUAL` synthesis and removal (bidirectional)](dml/from-dual.md) | Oracle has no table-less `SELECT` — `SELECT 1` is `ORA-00923` — so every scalar `SELECT` needs a `FROM` clause; Oracle's answer is `DUAL`, a one-row system table. |
 | [`FROM (VALUES …)` / a quantified bare-`VALUES` subquery (PostgreSQL) → `UNION ALL` chain (every target)](dml/from-values-to-union-all.md) | PostgreSQL's `VALUES (1),(2),(3)` is a first-class row source, usable directly as a `FROM` item, as the operand of a quantified comparison (`n > ALL (VALUES …)`), or with a column-aliased `v(x)`. |
 | [`FROM generate_series(…)` (PostgreSQL) → a synthesized numbers source (every target)](dml/from-generate-series.md) | PostgreSQL's `generate_series(start, stop[, step])` is a set-returning function usable directly as a `FROM` item (or, via an implicit lateral unnest, in the `SELECT` list) — a compact way to manufacture one row per integer (or per date, with an `INTERVAL` step) in a range. |
+| [Recursive CTE synthesis: `WITH RECURSIVE` keyword, Oracle's required column list, and the `MAXRECURSION` hint](dml/recursive-cte-keyword-and-column-list.md) | A recursive CTE — one whose body queries its own name — needs different declaration syntax on every engine. |
 
 #### [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md)
 
@@ -460,6 +491,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [T-SQL `ALTER COLUMN <c> <type>` re-states the column's last-known nullability → PostgreSQL (both directions)](ddl/alter-column-nullability.md) | T-SQL's `ALTER COLUMN <c> <type>` bakes type *and* nullability into one clause — omitting a `NULL`/`NOT NULL` keyword does not mean "leave nullability alone," it means "make the column nullable," silently dropping an existing `NOT NULL` the statement never mentioned. |
 | [One-word vs two-word negative options (Oracle `NOMAXVALUE`/`NOCYCLE` vs T-SQL/PostgreSQL `NO MAXVALUE`/`NO CYCLE`)](ddl/sequence-negative-option-spelling.md) | `CREATE SEQUENCE … NO MAXVALUE NO CYCLE` (T-SQL, PostgreSQL) and `CREATE SEQUENCE … NOMAXVALUE NOCYCLE` (Oracle) both mean "no upper bound, do not wrap around" — the same option, spelled as two words on some engines and fused to one word on Oracle. |
 | [`ENUM('lo','mid','hi')` (MySQL) → PostgreSQL / T-SQL / Oracle VARCHAR + CHECK](ddl/mysql-enum-to-varchar-check.md) | A MySQL `ENUM` column stores one of a fixed value list, and — the part that matters here — **orders by declaration index**, not alphabetically: `ENUM('lo','mid','hi')` sorts `lo < mid < hi` regardless of the values' lexical order. |
+| [MySQL `UNSIGNED` → widened signed type + synthesized `CHECK (col >= 0)`](ddl/mysql-unsigned-check-synthesis.md) | A MySQL `UNSIGNED` integer column can never hold a negative value — that's enforced structurally by the column's own type, not by a constraint. |
 
 #### [Procedural: cursors, dynamic SQL, system procedures, session directives](procedural/README.md)
 
@@ -479,7 +511,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### MySQL as source
 
-| [Date/time](#datetime-arithmetic-and-formatting-6) | [Strings](#strings-concatenation-and-collation-6) | [Aggregates & windows](#aggregates-and-window-functions-5) | [Booleans](#booleans-the-valuepredicate-duality-4) | [DML](#dml-pivotunpivot-merge-delete-row-values-6) | [DDL](#ddl-identity-temp-tables-foreign-keys-sequences-storage-options-6) | [Procedural](#procedural-cursors-dynamic-sql-system-procedures-session-directives-6) |
+| [Date/time](#datetime-arithmetic-and-formatting-6) | [Strings](#strings-concatenation-and-collation-6) | [Aggregates & windows](#aggregates-and-window-functions-5) | [Booleans](#booleans-the-valuepredicate-duality-5) | [DML](#dml-pivotunpivot-merge-delete-row-values-6) | [DDL](#ddl-identity-temp-tables-foreign-keys-sequences-storage-options-6) | [Procedural](#procedural-cursors-dynamic-sql-system-procedures-session-directives-6) |
 |---|---|---|---|---|---|---|
 
 #### [Date/time arithmetic and formatting](datetime/README.md)
@@ -489,6 +521,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [DATEADD(MONTH) (T-SQL/MySQL/PostgreSQL) → Oracle ADD_MONTHS](datetime/dateadd-month-to-oracle-add-months.md) | T-SQL `DATEADD(MONTH, n, d)`, MySQL `DATE_ADD(d, INTERVAL n MONTH)` and PostgreSQL `d + n * INTERVAL '1 month'` all *keep the day-of-month* and clamp down only when the target month is shorter: `DATEADD(MONTH, 1, '2020-02-29')` = `2020-03-29` (not `2020-03-31`). |
 | [MySQL TIMESTAMPDIFF complete-month adjustment, ported to every target](datetime/mysql-timestampdiff-complete-month.md) | MySQL `TIMESTAMPDIFF(MONTH, start, end)` counts **complete** month periods: `TIMESTAMPDIFF(MONTH, '2020-01-15', '2020-03-10')` = `1`, not `2`, because the end's day-of-month (`10`) has not reached the start's (`15`) — the final partial month does not count. |
 | [MySQL TO_DAYS year-0000 epoch rebase](datetime/mysql-to-days-epoch-rebase.md) | MySQL `TO_DAYS(d)` returns the count of days since a notional `0000-01-01`. |
+| [MySQL compound `EXTRACT` units (`YEAR_MONTH`, `DAY_HOUR`, …) → all targets](datetime/mysql-compound-extract-units.md) | MySQL's `EXTRACT` accepts several **compound** units — `YEAR_MONTH`, `DAY_HOUR`, `DAY_MINUTE`, `DAY_SECOND`, and others — that pack two or more calendar fields into a single decimal-weighted number in one call. |
 
 #### [Strings, concatenation and collation](strings-collation/README.md)
 
@@ -513,6 +546,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`NOT` of a truthy variable, assignment, or function `RETURN` (MySQL, PostgreSQL) → T-SQL, Oracle](booleans/not-of-truthy-value.md) | The same duality inside procedural bodies: `SET done = NOT done` (MySQL) or `RETURN <predicate>` from a function declared to return a boolean assigns/returns a value, not a predicate. |
 | [A numeric/bit value where a genuine predicate or boolean is required (MySQL, PostgreSQL) → T-SQL, Oracle](booleans/value-in-predicate-position.md) | MySQL/PostgreSQL treat `0`/non-`0` as false/true anywhere a condition is expected (`WHERE 0` never matches); Oracle PL/SQL's `BOOLEAN` return type demands an actual boolean expression, not a `NUMBER`. |
 | [A value-wrapped predicate compared again in predicate position collapses back to the predicate (MySQL) → T-SQL](booleans/value-wrapped-predicate-collapse.md) | MySQL lets you compare a boolean value against `1`/`0`, or test it with `IS TRUE`, even when that value is itself already a predicate: `WHERE (c2 IS NOT NULL) = 1`. |
+| [Boolean-to-text/char rendering (PostgreSQL `::text` / MySQL `CAST(... AS CHAR)`)](booleans/boolean-to-text-rendering.md) | PostgreSQL renders a boolean cast to text as the words `'true'`/`'false'`; MySQL has no boolean text representation at all — its booleans are ordinary integers, so casting one to a character type gives `'1'`/`'0'` instead. |
 
 #### [DML: PIVOT/UNPIVOT, MERGE, DELETE, row values](dml/README.md)
 
@@ -521,6 +555,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Multi-table `DELETE … JOIN` (MySQL) → PostgreSQL / T-SQL / Oracle](dml/multi-table-delete-join.md) | `DELETE t1 FROM t1 JOIN t2 ON … WHERE t2.flag = 1` deletes rows from `t1` filtered by a join against `t2`. |
 | [Row-value inequality (PostgreSQL / Oracle / MySQL) → T-SQL](dml/row-value-inequality.md) | `(a, b) > (1, 5)` is a lexicographic row-value comparison — common for keyset pagination — true when `a > 1`, or `a = 1 AND b > 5`. |
 | [`FROM DUAL` synthesis and removal (bidirectional)](dml/from-dual.md) | Oracle has no table-less `SELECT` — `SELECT 1` is `ORA-00923` — so every scalar `SELECT` needs a `FROM` clause; Oracle's answer is `DUAL`, a one-row system table. |
+| [Recursive CTE synthesis: `WITH RECURSIVE` keyword, Oracle's required column list, and the `MAXRECURSION` hint](dml/recursive-cte-keyword-and-column-list.md) | A recursive CTE — one whose body queries its own name — needs different declaration syntax on every engine. |
 
 #### [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md)
 
@@ -530,6 +565,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`ON UPDATE <action>` (PostgreSQL / T-SQL / MySQL) → Oracle](ddl/fk-on-update-action-to-oracle.md) | `REFERENCES p(id) ON DELETE CASCADE ON UPDATE CASCADE` propagates both a delete and a primary-key update on the parent to the child. |
 | [Self-referencing FK cascade (MySQL) → T-SQL](ddl/self-referencing-fk-cascade.md) | `FOREIGN KEY (mgr) REFERENCES emp(id) ON DELETE SET NULL`, where the FK references its **own** table (an employee/manager hierarchy). |
 | [`ENUM('lo','mid','hi')` (MySQL) → PostgreSQL / T-SQL / Oracle VARCHAR + CHECK](ddl/mysql-enum-to-varchar-check.md) | A MySQL `ENUM` column stores one of a fixed value list, and — the part that matters here — **orders by declaration index**, not alphabetically: `ENUM('lo','mid','hi')` sorts `lo < mid < hi` regardless of the values' lexical order. |
+| [MySQL `UNSIGNED` → widened signed type + synthesized `CHECK (col >= 0)`](ddl/mysql-unsigned-check-synthesis.md) | A MySQL `UNSIGNED` integer column can never hold a negative value — that's enforced structurally by the column's own type, not by a constraint. |
 
 #### [Procedural: cursors, dynamic SQL, system procedures, session directives](procedural/README.md)
 
@@ -542,7 +578,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### MySQL as target
 
-| [Date/time](#datetime-arithmetic-and-formatting-7) | [Strings](#strings-concatenation-and-collation-7) | [Aggregates & windows](#aggregates-and-window-functions-6) | [Booleans](#booleans-the-valuepredicate-duality-5) | [DML](#dml-pivotunpivot-merge-delete-row-values-7) | [DDL](#ddl-identity-temp-tables-foreign-keys-sequences-storage-options-7) | [Procedural](#procedural-cursors-dynamic-sql-system-procedures-session-directives-7) |
+| [Date/time](#datetime-arithmetic-and-formatting-7) | [Strings](#strings-concatenation-and-collation-7) | [Aggregates & windows](#aggregates-and-window-functions-6) | [Booleans](#booleans-the-valuepredicate-duality-6) | [DML](#dml-pivotunpivot-merge-delete-row-values-7) | [DDL](#ddl-identity-temp-tables-foreign-keys-sequences-storage-options-7) | [Procedural](#procedural-cursors-dynamic-sql-system-procedures-session-directives-7) |
 |---|---|---|---|---|---|---|
 
 #### [Date/time arithmetic and formatting](datetime/README.md)
@@ -553,6 +589,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [MySQL TIMESTAMPDIFF complete-month adjustment, ported to every target](datetime/mysql-timestampdiff-complete-month.md) | MySQL `TIMESTAMPDIFF(MONTH, start, end)` counts **complete** month periods: `TIMESTAMPDIFF(MONTH, '2020-01-15', '2020-03-10')` = `1`, not `2`, because the end's day-of-month (`10`) has not reached the start's (`15`) — the final partial month does not count. |
 | [MySQL TO_DAYS year-0000 epoch rebase](datetime/mysql-to-days-epoch-rebase.md) | MySQL `TO_DAYS(d)` returns the count of days since a notional `0000-01-01`. |
 | [Multi-field PostgreSQL INTERVAL decomposition](datetime/postgresql-interval-decomposition.md) | PostgreSQL accepts a verbose, multi-unit interval literal in one string: `INTERVAL '1 year 2 months 3 days'`. |
+| [MySQL compound `EXTRACT` units (`YEAR_MONTH`, `DAY_HOUR`, …) → all targets](datetime/mysql-compound-extract-units.md) | MySQL's `EXTRACT` accepts several **compound** units — `YEAR_MONTH`, `DAY_HOUR`, `DAY_MINUTE`, `DAY_SECOND`, and others — that pack two or more calendar fields into a single decimal-weighted number in one call. |
 
 #### [Strings, concatenation and collation](strings-collation/README.md)
 
@@ -560,6 +597,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|
 | [Oracle `'' ≡ NULL`](strings-collation/oracle-empty-string-is-null.md) | Every other engine stores and compares an empty string `''` as a distinct, zero-length value: `'' IS NULL` is false, `COALESCE('', 'x')` is `''`. |
 | [Positional string-splice: `OVERLAY`/`STUFF`/`INSERT` (PostgreSQL/T-SQL/MySQL) → all targets](strings-collation/overlay-stuff-insert-splice.md) | Three engines each have a native "replace `len` characters of `string` at 1-based position `start` with `new`" function: PostgreSQL's `OVERLAY(string PLACING new FROM start [FOR len])`, T-SQL's `STUFF(string, start, len, new)`, MySQL's `INSERT(string, start, len, new)`. |
+| [PostgreSQL `regexp_replace` flags → Oracle/MySQL positional occurrence + backreference respelling](strings-collation/regexp-replace-flags-and-backreferences.md) | PostgreSQL's `regexp_replace(source, pattern, replacement, flags)` fourth argument is a **flags string** (`'g'` for global, `'i'` for case-insensitive, …); Oracle's and MySQL's `REGEXP_REPLACE` instead take a **numeric** occurrence/position argument in that slot, and both already replace every match by default. |
 
 #### [Aggregates and window functions](aggregates-windows/README.md)
 
@@ -576,6 +614,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Description |
 |---|---|
 | [`IS [NOT] DISTINCT FROM` (PostgreSQL null-safe comparison) → MySQL `<=>` / T-SQL, Oracle `EXISTS`/`INTERSECT`](booleans/is-distinct-from.md) | PostgreSQL's `IS [NOT] DISTINCT FROM` is a null-safe equality: unlike `=`, it never itself evaluates to `UNKNOWN` — `NULL IS NOT DISTINCT FROM NULL` is `TRUE`, `1 IS DISTINCT FROM NULL` is `TRUE`. |
+| [Boolean-to-text/char rendering (PostgreSQL `::text` / MySQL `CAST(... AS CHAR)`)](booleans/boolean-to-text-rendering.md) | PostgreSQL renders a boolean cast to text as the words `'true'`/`'false'`; MySQL has no boolean text representation at all — its booleans are ordinary integers, so casting one to a character type gives `'1'`/`'0'` instead. |
 
 #### [DML: PIVOT/UNPIVOT, MERGE, DELETE, row values](dml/README.md)
 
@@ -590,6 +629,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`FROM DUAL` synthesis and removal (bidirectional)](dml/from-dual.md) | Oracle has no table-less `SELECT` — `SELECT 1` is `ORA-00923` — so every scalar `SELECT` needs a `FROM` clause; Oracle's answer is `DUAL`, a one-row system table. |
 | [`FROM (VALUES …)` / a quantified bare-`VALUES` subquery (PostgreSQL) → `UNION ALL` chain (every target)](dml/from-values-to-union-all.md) | PostgreSQL's `VALUES (1),(2),(3)` is a first-class row source, usable directly as a `FROM` item, as the operand of a quantified comparison (`n > ALL (VALUES …)`), or with a column-aliased `v(x)`. |
 | [`FROM generate_series(…)` (PostgreSQL) → a synthesized numbers source (every target)](dml/from-generate-series.md) | PostgreSQL's `generate_series(start, stop[, step])` is a set-returning function usable directly as a `FROM` item (or, via an implicit lateral unnest, in the `SELECT` list) — a compact way to manufacture one row per integer (or per date, with an `INTERVAL` step) in a range. |
+| [Recursive CTE synthesis: `WITH RECURSIVE` keyword, Oracle's required column list, and the `MAXRECURSION` hint](dml/recursive-cte-keyword-and-column-list.md) | A recursive CTE — one whose body queries its own name — needs different declaration syntax on every engine. |
 
 #### [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md)
 
@@ -597,6 +637,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|
 | [T-SQL identity-scope reads (`SCOPE_IDENTITY()`/`@@IDENTITY`/`IDENT_CURRENT()`) → PostgreSQL / Oracle / MySQL](ddl/tsql-identity-scope-reads.md) | T-SQL exposes the last-generated identity value through three functions with different scoping rules (current scope / current session / a named table). |
 | [T-SQL index `WITH (FILLFACTOR = n)` → Oracle / MySQL](ddl/tsql-index-fillfactor.md) | `FILLFACTOR` reserves free space per index page for future inserts — a physical storage tuning knob with no logical effect on query results. |
+| [PostgreSQL `TRUNCATE ... RESTART IDENTITY / CASCADE` → Oracle/MySQL/T-SQL](ddl/truncate-restart-identity-cascade.md) | PostgreSQL's `TRUNCATE` defaults to *keeping* an identity column's next value where it was (`CONTINUE IDENTITY` is implicit), and only resets it when you say `RESTART IDENTITY` explicitly; the same statement's `CASCADE` also truncates every table with a foreign key pointing at the truncated one. |
 
 #### [Procedural: cursors, dynamic SQL, system procedures, session directives](procedural/README.md)
 
@@ -615,6 +656,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [T-SQL cursor-variable binding (`SET @cur = CURSOR ... FOR q; OPEN @cur;`) → PostgreSQL / Oracle / MySQL](procedural/tsql-cursor-variable-binding.md) | T-SQL lets a cursor be bound to a *variable* in two steps: a bare `DECLARE @cur CURSOR;` (no query yet), then `SET @cur = CURSOR ... |
 | [PL/SQL cursor `FOR` loop (Oracle) → MySQL explicit cursor scaffold](procedural/cursor-for-loop-to-mysql.md) | The same implicit fetch-and-bind PL/SQL construct as above, but onto MySQL, whose procedural dialect additionally requires every `DECLARE` to sit at the very top of its enclosing `BEGIN` block (MySQL error 1337) and has no `WHILE @@FETCH_STATUS` equivalent — loop termination is driven by a `CONTINUE HANDLER FOR NOT FOUND`. |
 | [Numeric range `FOR i IN a..b LOOP` (Oracle) → MySQL / T-SQL explicit `WHILE` + counter](procedural/numeric-range-for-loop.md) | `FOR i IN 1..13 LOOP` (optionally `REVERSE`) is Oracle's counting loop — no cursor at all, just an integer range. |
+| [T-SQL loop control (`BREAK`/`CONTINUE`, compound assignment) → MySQL labeled `LEAVE`/`ITERATE`](procedural/tsql-loop-control-to-mysql-labels.md) | T-SQL's `BREAK`/`CONTINUE` act on the *nearest enclosing* loop with no name required. |
 
 ### Cross-engine / multi-directional
 
@@ -643,6 +685,10 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [DATALENGTH byte-vs-char lengths (UTF-16 caveat)](strings-collation/datalength-byte-vs-char.md) | T-SQL `DATALENGTH(x)` returns the storage **byte** length of `x`, not its character count. |
 | [SOUNDEX as the canonical unmapped-builtin gate example](strings-collation/soundex-unmapped-builtin-gate.md) | Oracle and T-SQL's `SOUNDEX(s)` is a native phonetic built-in. |
 | [Collation and ordering divergences — documented limits](strings-collation/collation-and-ordering-limits.md) | String equality, `ORDER BY`, `DISTINCT`, `GROUP BY` and `LIKE` all compare under the source engine's **default collation** — case sensitivity, accent sensitivity, and trailing-space handling are properties of that collation, not of the SQL text. |
+| [Case-sensitivity compensation on string-literal operands (cross-engine)](strings-collation/literal-collation-compensation.md) | PostgreSQL and Oracle's default collations compare strings **case-sensitively**; MySQL's and T-SQL's default collations compare **case-insensitively**. |
+| [String-function positional-argument edge cases: negative `LEFT`, T-SQL `LEN` trailing spaces, MySQL fractional rounding](strings-collation/string-function-argument-edge-cases.md) | `LEFT`/`SUBSTRING`/`REPEAT`'s position and length arguments, and T-SQL `LEN`, each have one engine-specific edge-case rule that a literal translation would silently drop: PostgreSQL's `LEFT(s, -n)` means something different from a plain clamp, T-SQL's `LEN` counts differently from every other engine's length function, and MySQL rounds a fractional numeric argument where the other engines truncate it. |
+| [Numeric-operand `\|\|`/`CONCAT` casting (Oracle/MySQL → T-SQL, → PostgreSQL)](strings-collation/numeric-operand-concatenation-casting.md) | Oracle's `\|\|` and MySQL's `CONCAT` implicitly stringify a numeric operand: `2 \|\| 3` is the two-character string `'23'`. |
+| [Bitwise/arithmetic operator-precedence parentheses (MySQL/Oracle ↔ PostgreSQL/T-SQL)](strings-collation/bitwise-arithmetic-precedence-parens.md) | `&`, `\|` and `<<`/`>>` bind **looser** than `+`/`*` on MySQL and Oracle, but **tighter** than `+`/`*` on PostgreSQL and T-SQL. |
 
 #### [Aggregates and window functions](aggregates-windows/README.md)
 
@@ -669,6 +715,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Oracle bare `NUMBER` (no precision/scale) → role-aware numeric](ddl/oracle-bare-number-role-aware.md) | Oracle's unqualified `NUMBER` — no precision or scale — is overloaded. |
 | [`CREATE TABLE AS SELECT` ↔ `SELECT ... INTO` for ordinary (non-temporary) tables](ddl/ctas-vs-select-into.md) | This extends the entry above from *temp* tables specifically to *any* table: T-SQL has no `CREATE TABLE ... |
 | [Unnamed derived-table / `SELECT ... INTO` projections → synthesized `uq_col1` (T-SQL)](ddl/unnamed-projection-synthesized-name.md) | `SELECT (SELECT a) t` or `SELECT (SELECT 1) t` — a derived table whose single projected column is a bare parameter reference or a literal, with no alias — is legal on PostgreSQL/MySQL/Oracle (the column gets an engine-assigned display name that nothing else references). |
+| [`GENERATED ALWAYS AS (expr)` computed columns (cross-engine)](ddl/computed-columns-generated-always.md) | A computed (generated) column derives its value from an expression over other columns in the same row, recalculated automatically on every read or write — a fundamentally different thing from an auto-incrementing identity column, even though MySQL spells the two very differently and PostgreSQL's `GENERATED ALWAYS AS (...)` clause is shared syntax for both. |
+| [Inline DDL attributes decomposed into standalone statements: MySQL `COMMENT`, T-SQL inline `INDEX`](ddl/inline-attribute-to-standalone-statement.md) | MySQL lets a column or table carry a `COMMENT '...'` right inside its `CREATE TABLE`, and T-SQL lets a table element declare an `INDEX` inline alongside its columns. |
 
 #### [Procedural: cursors, dynamic SQL, system procedures, session directives](procedural/README.md)
 

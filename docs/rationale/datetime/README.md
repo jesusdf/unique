@@ -15,6 +15,7 @@ built and its entry format.
 | [DATEADD(MONTH) (T-SQL/MySQL/PostgreSQL) → Oracle ADD_MONTHS](dateadd-month-to-oracle-add-months.md) | tsql/postgresql/mysql → oracle | T-SQL `DATEADD(MONTH, n, d)`, MySQL `DATE_ADD(d, INTERVAL n MONTH)` and PostgreSQL `d + n * INTERVAL '1 month'` all *keep the day-of-month* and clamp down only when the target month is shorter: `DATEADD(MONTH, 1, '2020-02-29')` = `2020-03-29` (not `2020-03-31`). |
 | [ADD_MONTHS (Oracle) → DATEADD/DATE_ADD/interval-add (T-SQL/MySQL/PostgreSQL)](oracle-add-months-to-dateadd.md) | oracle → tsql/postgresql/mysql | Oracle's `ADD_MONTHS` sticks to the *target* month's last day whenever the operand is its own month's last day — `ADD_MONTHS('2020-02-29', 1)` = `2020-03-31`. |
 | [MySQL TIMESTAMPDIFF complete-month adjustment, ported to every target](mysql-timestampdiff-complete-month.md) | mysql → all | MySQL `TIMESTAMPDIFF(MONTH, start, end)` counts **complete** month periods: `TIMESTAMPDIFF(MONTH, '2020-01-15', '2020-03-10')` = `1`, not `2`, because the end's day-of-month (`10`) has not reached the start's (`15`) — the final partial month does not count. |
+| [Oracle `MONTHS_BETWEEN` fractional value → T-SQL exact `CASE` formula](months-between-fractional.md) | oracle → tsql | Oracle's `MONTHS_BETWEEN(date1, date2)` returns a **fractional** number of months: whole months plus `(day1 - day2) / 31` for the remainder, collapsing to a whole number only when both dates are the last day of their month or share the same day-of-month. |
 
 ## Truncation and unit maps
 
@@ -35,3 +36,9 @@ built and its entry format.
 | Article | Direction | Description |
 |---|---|---|
 | [MySQL TO_DAYS year-0000 epoch rebase](mysql-to-days-epoch-rebase.md) | mysql → all | MySQL `TO_DAYS(d)` returns the count of days since a notional `0000-01-01`. |
+
+## Compound EXTRACT units
+
+| Article | Direction | Description |
+|---|---|---|
+| [MySQL compound `EXTRACT` units (`YEAR_MONTH`, `DAY_HOUR`, …) → all targets](mysql-compound-extract-units.md) | mysql → all | MySQL's `EXTRACT` accepts several **compound** units — `YEAR_MONTH`, `DAY_HOUR`, `DAY_MINUTE`, `DAY_SECOND`, and others — that pack two or more calendar fields into a single decimal-weighted number in one call. |

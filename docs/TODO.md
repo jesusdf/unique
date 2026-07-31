@@ -72,6 +72,15 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
 
 ### Small findings (P3 unless noted)
 
+- **B55** (P2, found during D1b2, live-verified on Oracle) — two invalid
+  Oracle CAST-context combinations outside the pinned shapes: an
+  explicit-length CAST inside an expression ARGUMENT emits PLS-00103-invalid
+  output, and a lengthless CAST inside an embedded SQL statement (e.g.
+  `SELECT … INTO`) emits ORA-00906-invalid output (the `IR_EMBEDDED`
+  length-stripping decision keys on in-body vs not, missing these two
+  quadrants). The rationale article
+  `procedural/oracle-cast-length-plsql-body-vs-sql-statement.md` documents
+  only the two verified-safe combinations.
 - **B54** (P3, found during T4-B, probed) — a standalone `to_hex(x)` →
   T-SQL/Oracle emits an unwarned phantom `dbo.HEX` / `HEX` call that errors
   at runtime (not in the FE ledger — different shape than pg-baseconv's

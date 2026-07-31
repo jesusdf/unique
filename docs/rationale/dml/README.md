@@ -89,3 +89,9 @@ format and sourcing rules.
 | Article | Direction | Description |
 |---|---|---|
 | [`INTERSECT ALL` / `EXCEPT ALL` → Oracle / T-SQL](intersect-except-all.md) | cross-engine | `INTERSECT ALL` and `EXCEPT ALL` compare rows the same way as the plain `INTERSECT`/`EXCEPT`, but **keep duplicates**: `INTERSECT ALL` returns `min(count in left, count in right)` copies of each matching row, and `EXCEPT ALL` returns `max(count in left − count in right, 0)` copies. |
+
+## Recursive CTE synthesis
+
+| Article | Direction | Description |
+|---|---|---|
+| [Recursive CTE synthesis: `WITH RECURSIVE` keyword, Oracle's required column list, and the `MAXRECURSION` hint](recursive-cte-keyword-and-column-list.md) | tsql/mysql → all | A recursive CTE — one whose body queries its own name — needs different declaration syntax on every engine. |
