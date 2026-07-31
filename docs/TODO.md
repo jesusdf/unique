@@ -45,11 +45,13 @@ routines-unblocked and severity:*
   SYS_REFCURSOR type map, FROM-DUAL tail strip in SELECT INTO,
   NUMTODSINTERVAL/NUMTOYMINTERVAL → PG interval (both pipelines; 3 challenge
   cases lifted to faithful). Cause 3 became B37b below.
-- **B37b** — extend B37's GET DIAGNOSTICS hoist to be spelling-general:
-  consume MySQL `ROW_COUNT()` (`_ROWCOUNT_FN_PATTERN`, `_expr.py:149`) →
-  clears the 8 remaining mysql→pg 1151 routines; ALSO fixes the latent
-  tsql→pg `@@ROWCOUNT`→bare-`ROW_COUNT` silent-invalid substitution
-  (`procedural/transformer/postgresql.py:38`).
+- ~~B37b~~ — DONE 2026-07-31: hoist made spelling-general (`SQL%ROWCOUNT` /
+  `@@ROWCOUNT`→`ROW_COUNT()` map / MySQL `ROW_COUNT()` all converge on the
+  one B37 hoist; `AlterProcedureStatement` wired in — the tsql stub pattern
+  lands bodies there). mysql→pg 1151-rowcount routines 8→0; the tsql→pg
+  bare-`ROW_COUNT` silent-invalid is gone (fixture regenerated, live-run on
+  pg). mysql-source hoists warn the changed-vs-matched divergence (reuses
+  the base.py UNIQUE-1192 rationale). `test_rowcount_hoist_b37b.py`.
 - **B36b** — two more unmapped-builtin gaps surfaced out-of-brief: mysql
   `UNIX_TIMESTAMP()` (func2) and oracle `RAWTOHEX`/`STANDARD_HASH` (func4).
 - ~~B37~~ — DONE 2026-07-31: expression-position hoist with honest re-evaluated-condition degrade; corpus 1033 count 8 → 0.
