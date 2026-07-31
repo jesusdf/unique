@@ -62,16 +62,8 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
   approved for P3. Implementation briefs: **A10-P1** (scalar/OUT/table-state
   start set) → **A10-P2** (result sets after B56) → **A10-P3**
   (func1-freeze, trigger, TVF).
-- **B56** (P2, found by the A10-P prototype, live-verified) — tsql
-  result-set PROCEDURES → PG emit a bare `SELECT` (no INTO/RETURN) inside a
-  PROCEDURE — runtime SQLSTATE 42601 "no destination for result data";
-  passes the compile gate. Faithful conversion needs the refcursor-OUT
-  pattern PG-side (the same signature rewrite Oracle gets) or an honest
-  degrade — never runtime-invalid.
-- **B57** (P2, same source) — `func4`→PG emits `sha256(text)` (no such
-  function; PG's sha256 takes bytea). B36b's mapping covered the
-  CONVERT_TO(bytea) path in DML shapes; this fixture shape misses the
-  conversion — close the gap and add the missing-leg test.
+- ~~B56~~ — DONE 2026-07-31: PG result-set procs get the shared refcursor rewrite (`INOUT refcursor`, argmode-first for sqlglot; Oracle byte-identical); 12 fixture procs now runnable, live-fetched.
+- ~~B57~~ — DONE 2026-07-31: SHA-n over character args wraps CONVERT_TO in the IR path too; runtime error gone; NVARCHAR/UTF-16 divergence documented inherent.
 - The 29 comparable-but-needs-tables cases enroll later via the `FuncCase`
   probe pattern (5 already curated by NF-1).
 
@@ -89,6 +81,10 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
 
 ### Small findings (P3 unless noted)
 
+- **B59** (P3, found during B54) — pg→pg identity of `to_hex(x)` also emits
+  the invalid phantom `HEX(x)` (the identity direction bypasses the new
+  mapping); route identity through passthrough.
+
 - **B58** (P1-class, found by the A10-P1 harness, live-verified) — a T-SQL
   OUTPUT parameter is semantically INOUT, but the transpiler emits
   write-only `OUT` on every target — the caller's input value is dropped:
@@ -105,35 +101,13 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
   quadrants). The rationale article
   `procedural/oracle-cast-length-plsql-body-vs-sql-statement.md` documents
   only the two verified-safe combinations.
-- **B54** (P3, found during T4-B, probed) — a standalone `to_hex(x)` →
-  T-SQL/Oracle emits an unwarned phantom `dbo.HEX` / `HEX` call that errors
-  at runtime (not in the FE ledger — different shape than pg-baseconv's
-  fixed leg). Map faithfully (tsql `CONVERT(VARCHAR, x, 2)`-family / oracle
-  `TO_CHAR(x,'FMXX...')` or LOWER(RAWTOHEX)-family — live-verify) or degrade
-  warned.
-- **B53** (P3, architect finding 2026-07-31) — the `shared_dialect_compares`
-  architecture ratchet counts only `== "<dialect>"` spellings; two same-day
-  fixes (B49, B51) legitimately added dialect dispatch written as
-  `dialect != "mysql"` / `dialect in ("tsql",)` — counter stays flat while
-  the real dispatch debt grows. Re-baseline the metric to count `==`, `!=`,
-  and tuple-membership forms, set the new floor at the re-measured value,
-  and keep it monotonic from there.
+- ~~B54~~ — DONE 2026-07-31: `to_hex` mapped faithfully to tsql (VARBINARY+style-2+pad-strip) and oracle (TO_CHAR XXXX), live-verified 0/255/2^32/max-bigint.
+- ~~B53~~ — DONE 2026-07-31: ratchet re-baselined counting `==`/`!=`/dialect-tuple membership; new floor 924.
 
-- **B40** (found during B39) — the "no warning covers this carrier →
-  synthesize a duplicate" reconciliation path emits a second
-  `lossy_conversion` warning alongside a correctly-coded parse warning for
-  the same carrier (cosmetic duplication) — a `_warning_covers`
-  shingle-matching limitation, pre-existing.
-- **B42** (verified pre-existing) — re-rendered `$$` splits into `$ $`
-  inside *commented* degraded-routine carriers; cosmetic, but keeps the
-  generated fixture perpetually dirty vs regeneration.
-- **B43** (found during B37b) — mysql→tsql/oracle `ROW_COUNT()` inside an
-  IF condition still degrades whole with warned UNIQUE-1151; warned/honest,
-  coverage follow-up.
-- **B44** (found during B38) — `_split_oracle`'s `plsql_start.search`
-  matches "CREATE PROCEDURE" inside a *comment*, setting `in_plsql` early.
-  Latent guardrail-3 wrinkle; harmless post-B38 (the peel undoes it) but
-  the splitter should not read comment text.
+- ~~B40~~ — DONE 2026-07-31: reconciliation no longer duplicates an identically-coded warning.
+- ~~B42~~ — DONE 2026-07-31: dollar-quote close-tag scanner desync bug found+fixed first, then the `$$`→`$ $` mangling removed as dead; fixture regen shows exactly the 4 fixes.
+- ~~B43~~ — DONE 2026-07-31: inline `ROW_COUNT()`→`@@ROWCOUNT`/`SQL%ROWCOUNT` pre-IR shell step for tsql/oracle (general, not IF-only), live-compiled.
+- ~~B44~~ — DONE 2026-07-31: `_split_oracle` head-window scan comment-blind via the shared strip.
 - ~~B50~~ — DONE 2026-07-31: Oracle native passthrough (`INTERSECT ALL` /
   `MINUS ALL`, live-probed on 23c); T-SQL gets the bounded ROW_NUMBER-pairing
   rewrite (top-down traversal so chain shapes read the original structure),
