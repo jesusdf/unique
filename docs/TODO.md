@@ -65,6 +65,23 @@ routines-unblocked and severity:*
   `lossy_conversion` warning alongside a correctly-coded parse warning for
   the same carrier (same code twice, cosmetic duplication) — a
   `_warning_covers` shingle-matching limitation, pre-existing.
+- **B41** (P1 — severity-first, found during B37b review; PRE-EXISTING on
+  main) — mysql `SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '…'` →
+  postgresql ships **invalid executable** `SIGNAL AS SQLSTATE;` (raw-sqlglot
+  embedded fallback mangles it; sqlglot's lenient pg parser lets it through
+  the validity gate) with only the generic "review the statement" warning —
+  guardrail-4 violation AND the error message is silently lost (the
+  THROW/RAISERROR-message-must-survive class). Faithful target: `RAISE
+  EXCEPTION '<msg>' USING ERRCODE = '<state>'`; cover RESIGNAL and the
+  oracle/tsql targets too.
+- **B42** (P3, verified pre-existing) — re-rendered `$$` splits into `$ $`
+  inside *commented* degraded-routine carriers (4 occurrences in a fresh
+  tsql→pg fixture regeneration); cosmetic, but it keeps the generated
+  fixture perpetually dirty vs regeneration.
+- **B43** (P3, found during B37b) — mysql→tsql/oracle `ROW_COUNT()` inside
+  an IF condition still degrades whole with warned UNIQUE-1151 (the
+  `_ROWCOUNT_FN_EXPR` inline substitution isn't applied to IF-condition
+  RawSQL on those targets); warned/honest, coverage follow-up.
 
 ---
 
