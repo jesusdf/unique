@@ -155,17 +155,6 @@ LEDGER: tuple[Excluded, ...] = (
         reason="UNIQUE-1191: OUTPUT inserted.col_31 INTO dropped -> IDENTITY "
         "capture lost (same class as proc_8). Real defect",
     ),
-    # -- OUTPUT INOUT semantics dropped (surfaced by this harness) ----------- #
-    Excluded(
-        name="proc_14",
-        tag="defect-pending-fix",
-        reason="T-SQL OUTPUT params are INOUT and the body READS @query "
-        "(@query = @query + ' ' + @filter), but the transpiler emits write-only "
-        "OUT on every target, so the caller's input value is dropped: live-verified "
-        "tsql @query='base',@filter='flt' -> 'base flt' while oracle/pg/mysql "
-        "return NULL. 0-warning-clean. Real unwarned defect (read OUTPUT param "
-        "must map to IN OUT/INOUT); backlog for BLUE",
-    ),
     # -- dynamic SQL orchestrators ------------------------------------------- #
     Excluded(
         name="proc_12",

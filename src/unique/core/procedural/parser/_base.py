@@ -1074,7 +1074,13 @@ class ParserBase:
                 )
 
             if self._match_keyword("OUTPUT", "OUT"):
-                direction = "OUT"
+                # T-SQL OUTPUT is semantically INOUT: the caller passes a value
+                # in and the routine may read it before overwriting (there is no
+                # write-only param mode in T-SQL). Mapping it to a write-only OUT
+                # silently drops the caller's input, so a body that reads its
+                # OUTPUT param computes on NULL on the target (UNIQUE B58). The
+                # faithful mapping is unconditional -> IN OUT / INOUT downstream.
+                direction = "INOUT"
         elif self._dialect == "mysql":
             # MySQL: [IN|OUT|INOUT] name type
             if self._match_keyword("INOUT"):

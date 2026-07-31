@@ -165,7 +165,7 @@ CREATE TABLE IF NOT EXISTS tbl_8 (
 DELIMITER $$
 CREATE PROCEDURE proc_13
 (
-    OUT v_where LONGTEXT,
+    INOUT v_where LONGTEXT,
     IN v_col VARCHAR(200),
     IN v_op VARCHAR(10),
     IN v_param VARCHAR(200),
@@ -184,9 +184,9 @@ DELIMITER ;
 DELIMITER $$
 CREATE PROCEDURE proc_14
 (
-    OUT v_query LONGTEXT,
+    INOUT v_query LONGTEXT,
     IN v_filter LONGTEXT,
-    OUT v_page LONGTEXT
+    INOUT v_page LONGTEXT
 )
 BEGIN
     /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
@@ -710,7 +710,7 @@ DELIMITER ;
 DELIMITER $$
 CREATE PROCEDURE proc_7
 (
-    OUT v_col_6 CHAR(36),
+    INOUT v_col_6 CHAR(36),
     IN v_col_7 INT,
     IN v_col_91 VARCHAR(4000),
     IN v_col_19 VARCHAR(10),
@@ -743,7 +743,7 @@ DELIMITER ;
 DELIMITER $$
 CREATE PROCEDURE proc_8
 (
-    OUT v_col_93 INT,
+    INOUT v_col_93 INT,
     IN v_col_15 VARCHAR(10),
     IN v_col_18 DATETIME,
     IN v_col_31 INT,
@@ -775,7 +775,7 @@ DELIMITER ;
 DELIMITER $$
 CREATE PROCEDURE proc_9
 (
-    OUT v_col_31 INT,
+    INOUT v_col_31 INT,
     IN v_col_6 CHAR(36),
     IN v_col_32 INT,
     IN v_col_33 DATETIME,
