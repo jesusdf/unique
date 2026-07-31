@@ -76,6 +76,14 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
 
 ### Small findings (P3 unless noted)
 
+- **B53** (P3, architect finding 2026-07-31) — the `shared_dialect_compares`
+  architecture ratchet counts only `== "<dialect>"` spellings; two same-day
+  fixes (B49, B51) legitimately added dialect dispatch written as
+  `dialect != "mysql"` / `dialect in ("tsql",)` — counter stays flat while
+  the real dispatch debt grows. Re-baseline the metric to count `==`, `!=`,
+  and tuple-membership forms, set the new floor at the re-measured value,
+  and keep it monotonic from there.
+
 - **B40** (found during B39) — the "no warning covers this carrier →
   synthesize a duplicate" reconciliation path emits a second
   `lossy_conversion` warning alongside a correctly-coded parse warning for
@@ -103,29 +111,24 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
   (`convert.py`) never reads it. Semi-warned (the UNIQUE-1228 unread-args
   tripwire fires) but the CTE text is gone from the output — promote to a
   real handler that converts the WITH.
-- **B51** (P3, found during D1-recall-2, probed) — T-SQL
-  `OPTION (MAXRECURSION n)` on a recursive CTE is dropped with only the
-  generic unread-args tripwire warning (`UNIQUE-1228` "internal: unread
-  sqlglot arg 'options'"). Promote to a real handler: drop with a proper
-  documented warning (semantics genuinely diverge: T-SQL errors at the
-  limit, PG recurses unbounded).
+- ~~B51~~ — DONE 2026-07-31: `options` consumed into
+  `SelectStatement.query_hints`; MAXRECURSION drops under `UNIQUE-1238`
+  (divergence stated), other hints under `UNIQUE-1239`; tsql→tsql keeps the
+  clause (live-proven load-bearing: 500-level recursion). 1228 gone for
+  this shape.
 - **D1b2** (P3, docs) — the 18 new gap rows from the batch-5b full-recall
   pass (2 HIGH: binary-collation compensation family, recursive-CTE
   synthesis family) — table in `audit/2026-07-31-docs-gap-sweep.md`
   §Batch 5b; write as articles after the navigation restructure lands.
-- **B49** (P2, found during D1b, live-probed) — `REPLACE t SET a=1 …` (MySQL)
-  emits a `UNIQUE-1003` comment-only carrier on EVERY target — including
-  `mysql → mysql` (the identity direction should round-trip valid MySQL
-  syntax); AND its pinning test
-  (`TestWave189BitwiseNotReplaceSet::test_replace_set_converts`) passes via a
-  regex that matches the carrier's echoed-comment text — a test-quality
-  false positive of the identity-mutant class. Fix both: convert
-  `REPLACE … SET` (at least identity + the INSERT…SET-equivalent rewrite)
-  and make the assertion real.
-- **B48** (found during D1-W9, live-probed) — `_gate_column_alias_ref`
-  degrades the derived-table column-alias list (`(SELECT …) AS xx(c1,c2)`)
-  for MySQL claiming "no spelling" — live MySQL 8 accepts it; only Oracle's
-  degrade is genuine (ORA-03048). Un-gate the mysql target.
+- ~~B49~~ — DONE 2026-07-31: both REPLACE forms parse through the INSERT
+  IR (`is_replace` flag; pre-parse keyword shim per the compound-assignment
+  precedent, original kept in `source_text`); mysql identity emits real
+  `REPLACE INTO` (live delete-then-insert verified incl. PK-collation
+  collision); other targets degrade honestly; the lying assertion now fails
+  under the identity mutant.
+- ~~B48~~ — DONE 2026-07-31: mysql un-gated (routed through the same
+  derived-table rewrite tsql gets; live-executed on MySQL 8); Oracle's
+  ORA-03048 degrade re-verified genuine and kept.
 
 ### D1b/D1c — rationale residue (P3)
 
