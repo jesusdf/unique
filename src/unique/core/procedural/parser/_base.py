@@ -43,6 +43,18 @@ from unique.core.procedural.lexer import Lexer, Token, TokenType
 
 logger = logging.getLogger(__name__)
 
+#: The exact warning text ``_parse_fallback`` emits when it gives up on a
+#: statement and preserves it as a ``RawSQL`` carrier (paired 1:1 with the
+#: ``-- UNIQUE-1170: …`` carrier the emitter renders for that same node's
+#: ``reason``). ``_core.py`` matches this literal (an exact equality check
+#: against a constant this module owns, not a fuzzy scan of arbitrary SQL) to
+#: stamp the warning with the carrier's own code instead of the generic
+#: parse-note fallback (B39).
+PARSE_FALLBACK_WARNING = (
+    "Could not parse procedural construct; preserved as a documented "
+    "carrier for manual review"
+)
+
 
 @dataclass
 class ParseError:
@@ -2452,10 +2464,7 @@ class ParserBase:
             parts.append(tok.value)
             prev_line = tok.line
             self._advance()
-        self._warnings.append(
-            "Could not parse procedural construct; preserved as a documented "
-            "carrier for manual review"
-        )
+        self._warnings.append(PARSE_FALLBACK_WARNING)
         return RawSQL(
             sql="".join(parts).strip(),
             reason="Could not parse procedural construct",

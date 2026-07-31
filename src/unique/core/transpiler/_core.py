@@ -71,7 +71,7 @@ from unique.core.output_gate import (
     gate_reason,
 )
 from unique.core.procedural.emitter import ProceduralEmitter
-from unique.core.procedural.parser import ProceduralParser
+from unique.core.procedural.parser import PARSE_FALLBACK_WARNING, ProceduralParser
 from unique.core.procedural.transformer import ProceduralTransformer
 from unique.core.registry import DialectRegistry
 from unique.core.sql_split import split_leading_trivia
@@ -790,6 +790,23 @@ class Transpiler:
                                 unsupported_seen.add(frag)
                                 all_unsupported.append(frag)
 
+                # Honest fallback (B39): a procedural parse/transform warning
+                # ships with code=None (see _transpile_procedural) so the
+                # backfill above can stamp the SPECIFIC carrier code onto it
+                # when one exists in this batch's rendered output (e.g.
+                # UNIQUE-1171/1193). Only once no carrier covered it do we
+                # fall back to the generic "parse note"/"transform note"
+                # code — this also covers cases with no carrier at all (a
+                # same-dialect SET-option warning has nothing to backfill
+                # from).
+                for w in result.warnings:
+                    if w.code is not None:
+                        continue
+                    if w.feature == "procedural_parse":
+                        w.code = "UNIQUE-1230"
+                    elif w.feature == "procedural_transform":
+                        w.code = "UNIQUE-1231"
+
             output_sql = self._join_parts(output_parts, target)
 
             # A T-SQL split TVF becomes an Oracle ODCIVARCHAR2LIST function; its
@@ -910,20 +927,36 @@ class Transpiler:
 
             if parse_result.errors:
                 for err in parse_result.errors:
+                    # code=None: the outer batch loop's carrier reconciliation
+                    # (B39) backfills the specific code embedded in this
+                    # batch's rendered carrier when one exists, falling back
+                    # to the generic UNIQUE-1230 only when no carrier covers
+                    # this warning (see the fallback pass in _core.py's main
+                    # transpile loop).
                     warnings.append(
                         _warn(
                             f"Parse error: {err.message}",
                             "procedural_parse",
                             source,
                             target,
-                            code="UNIQUE-1230",
+                            code=None,
                         )
                     )
 
             if parse_result.warnings:
                 for w in parse_result.warnings:
+                    # The parse-fallback ("could not parse, preserved as a
+                    # carrier") warning maps 1:1 to the RawSQL node's own
+                    # UNIQUE-1170 carrier, but its wording differs enough from
+                    # the carrier text that the shingle-based backfill below
+                    # can miss it — this is an exact match against a literal
+                    # this module owns (PARSE_FALLBACK_WARNING), not a scan of
+                    # arbitrary SQL, so it stays a structural, not fragile,
+                    # check. Other parse warnings fall through to code=None
+                    # for the same reconciliation/fallback reason as errors.
+                    code = "UNIQUE-1170" if w == PARSE_FALLBACK_WARNING else None
                     warnings.append(
-                        _warn(w, "procedural_parse", source, target, code="UNIQUE-1230")
+                        _warn(w, "procedural_parse", source, target, code=code)
                     )
 
             if parse_result.node is None:
@@ -946,13 +979,15 @@ class Transpiler:
                 transformer = ProceduralTransformer(source, target, metadata_resolver)
                 node = transformer.transform(parsed_node)
                 for w in transformer.warnings:
+                    # code=None: same B39 reconciliation/fallback contract as
+                    # the parse warnings above (falls back to UNIQUE-1231).
                     warnings.append(
                         _warn(
                             w,
                             "procedural_transform",
                             source,
                             target,
-                            code="UNIQUE-1231",
+                            code=None,
                         )
                     )
             else:
