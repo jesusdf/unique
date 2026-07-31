@@ -190,12 +190,6 @@ LEDGER: tuple[Excluded, ...] = (
         sql="SELECT chr(233), ascii('é')",
     ),
     Excluded(
-        id="postgresql-qdrop",
-        tag="defect-pending-fix",
-        reason="FOR UPDATE over a derived table rejected on Oracle (ORA-02014)",
-        sql="SELECT x FROM (VALUES (1),(2)) v(x) FOR UPDATE",
-    ),
-    Excluded(
         id="reda-ora-decode-mixed-type",
         tag="defect-pending-fix",
         reason="DECODE mixed-type default lowers to a rejected int CAST",

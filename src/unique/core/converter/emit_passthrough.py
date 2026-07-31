@@ -79,6 +79,25 @@ def _rewrite_select_into_identity(sql: str, read: str) -> exp.Expression | None:
     return cast(exp.Expression, parsed) if found else None
 
 
+def _lock_over_nonlockable(node_expr: exp.Expression) -> bool:
+    """True when a FOR UPDATE select reads from a non-key-preserved source Oracle
+    cannot lock: a VALUES constructor, a set operation, or a DISTINCT/GROUP BY
+    inline view (ORA-02014). A plain base table (or a simple key-preserved inline
+    view) is lockable and returns False."""
+    if list(node_expr.find_all(exp.Values)):
+        return True
+    for sub in node_expr.find_all(exp.Subquery):
+        inner = sub.this
+        if isinstance(inner, (exp.Union, exp.Except, exp.Intersect)):
+            return True
+        if isinstance(inner, exp.Select) and (
+            inner.args.get("distinct") is not None
+            or inner.args.get("group") is not None
+        ):
+            return True
+    return False
+
+
 def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     """Re-transpile a passthrough statement to the target dialect.
 
@@ -405,25 +424,43 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 f"ALTER TABLE {_tdc} DROP COLUMN {_cdc}"
             )
 
-    # MySQL/PostgreSQL FOR SHARE (a shared row lock) has no Oracle form — Oracle
-    # SELECT locking is FOR UPDATE (exclusive) only. Drop it and document the
-    # absent shared lock.
-    if (
-        dialect == "oracle"
-        and node.source_dialect in ("mysql", "postgresql")
-        and re.search(r"(?i)\bFOR\s+SHARE\b", node.sql)
-    ):
-        _fs = re.sub(r"(?i)\s*\bFOR\s+SHARE\b", "", node.sql)
+    # Oracle-target row-lock degradations (source PostgreSQL/MySQL).
+    if dialect == "oracle" and node.source_dialect in ("mysql", "postgresql"):
+        # FOR SHARE (a shared row lock) has no Oracle form — Oracle SELECT
+        # locking is FOR UPDATE (exclusive) only. Drop it and document it.
+        if re.search(r"(?i)\bFOR\s+SHARE\b", node.sql):
+            _fs = re.sub(r"(?i)\s*\bFOR\s+SHARE\b", "", node.sql)
+            try:
+                _fsr = sqlglot.transpile(_fs, read=read, write=write)
+                _fsb = _fsr[0] if _fsr and _fsr[0].strip() else _fs
+            except Exception:  # noqa: BLE001 - keep the stripped spelling on failure
+                _fsb = _fs
+            return (
+                "-- UNIQUE-1103: FOR SHARE (shared row lock) has no Oracle "
+                "equivalent (Oracle SELECT locking is FOR UPDATE, exclusive); the "
+                f"shared lock is dropped (docs/03-unsupported.md)\n{_fsb}"
+            )
+        # FOR UPDATE over a non-key-preserved inline view — a VALUES constructor,
+        # a set operation, or DISTINCT/GROUP BY (ORA-02014). Those rows are not
+        # lockable, so drop the lock on the parsed tree (an AST edit, not a text
+        # rewrite) and regenerate; a plain base-table FOR UPDATE keeps its lock.
+        _lk_ast: exp.Expression | None
         try:
-            _fsr = sqlglot.transpile(_fs, read=read, write=write)
-            _fsb = _fsr[0] if _fsr and _fsr[0].strip() else _fs
-        except Exception:  # noqa: BLE001 - keep the stripped spelling on failure
-            _fsb = _fs
-        return (
-            "-- UNIQUE-1103: FOR SHARE (shared row lock) has no Oracle equivalent "
-            "(Oracle SELECT locking is FOR UPDATE, exclusive); the shared lock "
-            f"is dropped (docs/03-unsupported.md)\n{_fsb}"
-        )
+            _lk_ast = cast(exp.Expression, sqlglot.parse_one(node.sql, read=read))
+        except Exception:  # noqa: BLE001
+            _lk_ast = None
+        if (
+            _lk_ast is not None
+            and _lk_ast.args.get("locks")
+            and _lock_over_nonlockable(_lk_ast)
+        ):
+            _lk_ast.set("locks", None)
+            return (
+                "-- UNIQUE-1237: Oracle cannot FOR UPDATE from a view built on "
+                "VALUES / a set operation / DISTINCT / GROUP BY (ORA-02014); the "
+                "rows are not lockable, so the row lock is dropped "
+                f"(docs/03-unsupported.md)\n{_lk_ast.sql(dialect=write)}"
+            )
 
     # Oracle FOR UPDATE WAIT <n> (block up to n seconds for the row lock) has no
     # PostgreSQL/MySQL form — they offer only FOR UPDATE (block) and NOWAIT. Drop

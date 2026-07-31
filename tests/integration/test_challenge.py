@@ -2459,8 +2459,10 @@ class TestGroupByRollup:
 
 class TestForUpdateLockCarrier:
     """PostgreSQL's FOR UPDATE row lock has no trailing-clause form on T-SQL
-    (sqlglot drops it silently); Oracle/MySQL keep it. On T-SQL the loss is now
-    surfaced as a documented carrier + warning, and the SQL stays valid."""
+    (sqlglot drops it silently); MySQL keeps it. Oracle keeps a base-table lock
+    but rejects FOR UPDATE over this VALUES inline view (ORA-02014), so the lock
+    is dropped there too. Every loss is surfaced as a documented carrier +
+    warning, and the SQL stays valid."""
 
     def test_tsql_surfaces_a_warning_and_carrier(self) -> None:
         result = Transpiler().transpile(
@@ -2472,9 +2474,18 @@ class TestForUpdateLockCarrier:
             w.message for w in result.warnings
         ]
 
-    @pytest.mark.parametrize("target", ("oracle", "mysql"))
-    def test_oracle_mysql_keep_the_lock(self, target: str) -> None:
-        out = _tx(_case("challenge_postgresql.sql", "qdrop-FOR"), "postgresql", target)
+    def test_oracle_drops_the_unlockable_view_lock_with_a_warning(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_postgresql.sql", "qdrop-FOR"), "postgresql", "oracle"
+        )
+        assert "FOR UPDATE" not in _exec_lines(result.sql).upper(), result.sql
+        assert "UNIQUE-1237" in result.sql, result.sql
+        assert any("ORA-02014" in w.message for w in result.warnings), [
+            w.message for w in result.warnings
+        ]
+
+    def test_mysql_keeps_the_lock(self) -> None:
+        out = _tx(_case("challenge_postgresql.sql", "qdrop-FOR"), "postgresql", "mysql")
         assert "FOR UPDATE" in out.upper(), out
         assert "UNIQUE-" not in out, out
 

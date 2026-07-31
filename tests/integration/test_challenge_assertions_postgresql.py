@@ -829,11 +829,14 @@ CASES.update(
                 "mysql": Expect(("FOREIGN KEY (pid) REFERENCES p (id) MATCH FULL",)),
             },
         ),
+        # Oracle rejects FOR UPDATE over this VALUES inline view (ORA-02014), so
+        # the lock is dropped with a UNIQUE-1145 warning (was blessing the invalid
+        # `AS v(x) FOR UPDATE` output); T-SQL has no clause at all; MySQL keeps it.
         "postgresql-qdrop-for": Case(
             "qdrop-for",
             {
                 "tsql": Expect(absent=("FOR UPDATE",), warn=True),
-                "oracle": Expect(("AS v(x) FOR UPDATE",)),
+                "oracle": Expect(absent=("FOR UPDATE",), warn=True),
                 "mysql": Expect(("AS v FOR UPDATE",)),
             },
         ),

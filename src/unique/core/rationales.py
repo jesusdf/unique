@@ -3049,4 +3049,23 @@ RATIONALES: dict[str, Rationale] = {
             "digits are not representable; PostgreSQL keeps the full precision."
         ),
     ),
+    "UNIQUE-1237": _R(
+        construct=(
+            "SELECT ... FOR UPDATE over a non-key-preserved view "
+            "(VALUES / set operation / DISTINCT / GROUP BY) → Oracle"
+        ),
+        reason=(
+            "Oracle rejects FOR UPDATE when the locked relation is not "
+            "key-preserved — an inline view built on a VALUES constructor, a set "
+            "operation, or DISTINCT/GROUP BY has no lockable base rows "
+            "(ORA-02014). T-SQL/PostgreSQL/MySQL tolerate the same query, so the "
+            "restriction bites only Oracle; a plain base-table FOR UPDATE keeps "
+            "its lock."
+        ),
+        example_case="postgresql-qdrop-FOR",
+        divergence=(
+            "Warned limit — the unlockable row lock is dropped rather than left "
+            "as an ORA-02014 runtime error; the result set is unchanged."
+        ),
+    ),
 }
