@@ -37,10 +37,12 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
   function-semantics family (~16 cases: INSERT()/LEFT()/REPEAT() float/OOB,
   STUFF/OVERLAY guards on oracle/pg, TO_CHAR masks, base conversion,
   multibyte CHR/ASCII, COMPRESS container, cast-int-datetime, ts-to-date,
-  frac-seconds, cast-binary padding, REPLACE non-literal NULL) plus the two
-  D1-W8 additions (STUFF/OVERLAY out-of-range guard on oracle/pg; REPLACE
-  with non-literal NULL → oracle). Each fix removes its ledger entry (the
-  ratchet enforces the direction). *Round 2 (T4-B) in progress.*
+  frac-seconds, cast-binary padding, REPLACE non-literal NULL). *Round 2
+  (T4-B) DONE 2026-07-31: every remaining `defect-pending-fix` entry
+  cleared — 11 mechanisms fixed faithfully, COMPRESS container = honest
+  warned degrade (`UNIQUE-1240`), 4 retagged `documented-inherent` with
+  live evidence, 1 cleared by the tolerance comparator. Ledger 24→11
+  (9 inherent + 2 session-dependent), floor 11.* **A10-T4 COMPLETE.**
 - ~~A10-T2~~ — DECIDED (maintainer, 2026-07-31: numeric tolerance) and DONE:
   two numeric cells match when equal after rounding to the COARSER operand's
   own precision, with a zero-adjacent absolute guard and a tight (1e-9)
