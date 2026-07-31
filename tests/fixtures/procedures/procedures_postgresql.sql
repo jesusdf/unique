@@ -241,7 +241,7 @@ RETURNS TEXT
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    RETURN SHA256(v_payload || v_secret);
+    RETURN UPPER(ENCODE(SHA256(CONVERT_TO(v_payload || v_secret, 'UTF8')), 'hex'));
 END;
 $$;
 

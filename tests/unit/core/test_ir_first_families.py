@@ -225,7 +225,13 @@ class TestStyledConvertInIr:
             "postgresql",
             "SELECT CONVERT(NVARCHAR(MAX), HASHBYTES('SHA2_256', x), 2) FROM t",
         )
-        assert out is not None and "SHA256(x)" in out
+        # PG's sha256 takes bytea: the char arg is wrapped CONVERT_TO(x,'UTF8')
+        # and the digest rendered as an uppercase hex string (B57); a bare
+        # sha256(text) is a runtime error.
+        assert (
+            out is not None
+            and "UPPER(ENCODE(SHA256(CONVERT_TO(x, 'UTF8')), 'hex'))" in out
+        )
 
     def test_styled_convert_verbatim_on_tsql(self) -> None:
         out = _ir("oracle", "tsql", "SELECT TO_CHAR(SYSDATE) FROM DUAL")

@@ -1089,9 +1089,13 @@ class TestPostgreSQLProcedureFixes:
             "END"
         )
         out = _transpile(src, "tsql", "postgresql")
-        assert "SHA256" in out.upper()
+        # PG's sha256 takes bytea: the char arg is wrapped CONVERT_TO(x,'UTF8')
+        # and the digest rendered as an uppercase hex string (B57) — a bare
+        # sha256(text) is a runtime error the compile gate passed. The T-SQL
+        # CONVERT(type, …, style) stringify wrapper is gone (only CONVERT_TO,
+        # PG's encoding builtin, remains).
+        assert "UPPER(ENCODE(SHA256(CONVERT_TO(v_p, 'UTF8')), 'hex'))" in out, out
         assert "HASHBYTES" not in out.upper()
-        assert "CONVERT" not in out.upper()
 
     def test_output_into_maps_to_returning(self) -> None:
         src = (
