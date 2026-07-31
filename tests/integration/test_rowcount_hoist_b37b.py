@@ -264,3 +264,73 @@ class TestRoundTripPgDiagnosticsToMysql:
         out = _flat(_t(self._PG, "postgresql", "mysql").sql)
         assert "ROW_COUNT()" in out, out
         assert "GET DIAGNOSTICS" not in out, out
+
+
+def _parse_dialect(out: str, dialect: str) -> None:
+    sqlglot.parse(out, read=dialect, error_level=sqlglot.ErrorLevel.RAISE)
+
+
+class TestMysqlRowCountToTsqlOracleInline:
+    """B43: mysql ROW_COUNT() inside an IF condition (or a plain assignment)
+    reaching T-SQL/Oracle used to degrade the WHOLE routine with a warned
+    UNIQUE-1151 (untranslated builtin): the shell-context substitution
+    (``_ROWCOUNT_FN_EXPR``) only ran on the raw-text fallback path, which
+    the IR-first scalar pipeline pre-empted by "successfully" (mis)parsing
+    ``ROW_COUNT()`` as a plain unmapped function call. Unlike PostgreSQL
+    (B37b, above), T-SQL and Oracle read the last statement's row count as
+    an inline expression (``@@ROWCOUNT`` / ``SQL%ROWCOUNT``) — no hoist
+    needed, just a name substitution before the IR gets a chance to
+    mishandle it.
+    """
+
+    def test_if_condition_translates_to_tsql(self) -> None:
+        out = _t(_MYSQL_IF, "mysql", "tsql").sql
+        assert "IF @@ROWCOUNT = 0" in _flat(out), out
+        assert "ROW_COUNT()" not in out, out
+        _parse_dialect(out, "tsql")
+
+    def test_if_condition_translates_to_oracle(self) -> None:
+        # sqlglot's oracle dialect does not parse a full CREATE PROCEDURE ...
+        # BEGIN ... END PL/SQL body (unrelated to this fix — no other test
+        # in this file sqlglot-parses an oracle-TARGET routine either); the
+        # live compile check below is the real validity gate for Oracle.
+        out = _t(_MYSQL_IF, "mysql", "oracle").sql
+        assert "IF SQL%ROWCOUNT = 0 THEN" in _flat(out), out
+        assert "ROW_COUNT()" not in out, out
+
+    def test_no_untranslated_builtin_degrade_tsql(self) -> None:
+        result = _t(_MYSQL_IF, "mysql", "tsql")
+        codes = [w.code for w in result.warnings]
+        assert "UNIQUE-1151" not in codes, codes
+        assert "UNIQUE-1151" not in result.sql, result.sql
+
+    def test_no_untranslated_builtin_degrade_oracle(self) -> None:
+        result = _t(_MYSQL_IF, "mysql", "oracle")
+        codes = [w.code for w in result.warnings]
+        assert "UNIQUE-1151" not in codes, codes
+        assert "UNIQUE-1151" not in result.sql, result.sql
+
+    def test_assignment_neighbor_translates_to_tsql(self) -> None:
+        # Neighbor test (circuit breaker 2): the same construct in a plain
+        # assignment, not just an IF condition.
+        out = _t(_MYSQL_ASSIGN, "mysql", "tsql").sql
+        assert "SET @v = @@ROWCOUNT;" in _flat(out), out
+        assert "ROW_COUNT()" not in out, out
+        _parse_dialect(out, "tsql")
+
+    def test_assignment_neighbor_translates_to_oracle(self) -> None:
+        out = _t(_MYSQL_ASSIGN, "mysql", "oracle").sql
+        assert "v := SQL%ROWCOUNT;" in _flat(out), out
+        assert "ROW_COUNT()" not in out, out
+
+    def test_divergence_warning_fires_for_tsql(self) -> None:
+        r = _t(_MYSQL_IF, "mysql", "tsql")
+        assert any(
+            "ROW_COUNT() counts rows CHANGED" in w.message for w in r.warnings
+        ), r.warnings
+
+    def test_divergence_warning_fires_for_oracle(self) -> None:
+        r = _t(_MYSQL_IF, "mysql", "oracle")
+        assert any(
+            "ROW_COUNT() counts rows CHANGED" in w.message for w in r.warnings
+        ), r.warnings

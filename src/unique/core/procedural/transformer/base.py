@@ -5004,6 +5004,14 @@ class ProceduralTransformer:
         # they must map before the IR attempt (which would happily parse
         # ``c % FOUND`` as a modulo expression and return early).
         sql = self._map_cursor_attributes(sql)
+        # MySQL's ROW_COUNT() is the same kind of SHELL pseudo-global (B43):
+        # left until the raw-text fallback, the IR-first attempt below
+        # "successfully" (mis)parses it as a plain unmapped function call,
+        # so the whole routine degraded at the target's output validity
+        # gate instead of translating. T-SQL/Oracle read it as an inline
+        # expression (@@ROWCOUNT / SQL%ROWCOUNT) — no hoist needed, unlike
+        # PostgreSQL's GET DIAGNOSTICS-only form (the B37b hoist below).
+        sql = self._expr._map_mysql_rowcount_fn_pre_ir(sql)
         # An Oracle trigger body's assignment value carries ``:NEW.``/``:OLD.``
         # row references; map them to the target's row qualifier (a no-op for the
         # Oracle target). Mirrors _transform_embedded_dml so a value captured as a
