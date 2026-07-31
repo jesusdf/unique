@@ -267,8 +267,10 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
     if dialect == "mysql":
         # MySQL's ``INSERT INTO t SET a = 1, b = 2`` form: sqlglot cannot
         # parse it at all, and the embedded-routine fallback DROPPED the
-        # SET clause (``INSERT INTO t3;`` — silent loss, wave 168).
+        # SET clause (``INSERT INTO t3;`` — silent loss, wave 168). Same
+        # story for ``REPLACE t SET a = 1`` (delete-then-insert upsert).
         # Rewrite to the universal column-list VALUES form.
+        original_sql = sql
         ins = re.match(
             r"(?is)^\s*(INSERT\s+(?:IGNORE\s+)?INTO|REPLACE\s+(?:INTO\s+)?)"
             r'\s*([\w."`]+)\s+SET\s+(.+?)\s*;?\s*$',
@@ -288,15 +290,59 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
                 cols.append(m2.group(1).strip('`"'))
                 vals.append(m2.group(2))
             if ok and cols:
-                verb = (
-                    "REPLACE INTO"
-                    if ins.group(1).upper().startswith("REPLACE")
-                    else "INSERT INTO"
-                )
-                sql = (
-                    f"{verb} {ins.group(2)} ({', '.join(cols)}) "
+                rewritten = (
+                    f"INSERT INTO {ins.group(2)} ({', '.join(cols)}) "
                     f"VALUES ({', '.join(vals)})"
                 )
+                if ins.group(1).upper().startswith("REPLACE"):
+                    # sqlglot's MySQL reader has no REPLACE-statement parser
+                    # at all — it swallows any ``REPLACE ...`` into an opaque
+                    # Command node (a non-fatal fallback, so keeping the verb
+                    # as ``REPLACE`` here would still fail below). Parse the
+                    # equivalent INSERT text structurally and tag the result
+                    # as a REPLACE so each target's emitter decides: MySQL
+                    # spells it back as REPLACE INTO, every other target has
+                    # no equivalent (guardrail 7 — never let it fall through
+                    # as a silent plain INSERT).
+                    return [
+                        (
+                            dataclasses.replace(
+                                n,
+                                is_replace=True,
+                                source_text=original_sql.strip().rstrip(";"),
+                            )
+                            if isinstance(n, InsertStatement)
+                            else n
+                        )
+                        for n in parse_sql(rewritten + ";", dialect)
+                    ]
+                sql = rewritten
+        else:
+            replace_rest = re.match(
+                r"(?is)^\s*REPLACE\s+"
+                r"(?:(?:LOW_PRIORITY|DELAYED)\s+)?"
+                r"(?:INTO\s+)?(.+)$",
+                sql,
+            )
+            if replace_rest:
+                # ``REPLACE [INTO] t [(cols)] VALUES (...)`` / ``... SELECT
+                # ...`` — syntactically identical to INSERT past the table
+                # name, but hits the same unparseable-verb wall as the SET
+                # form above. Swap the verb and parse the equivalent INSERT
+                # text structurally, then tag the result as a REPLACE.
+                rewritten = f"INSERT INTO {replace_rest.group(1)}"
+                return [
+                    (
+                        dataclasses.replace(
+                            n,
+                            is_replace=True,
+                            source_text=original_sql.strip().rstrip(";"),
+                        )
+                        if isinstance(n, InsertStatement)
+                        else n
+                    )
+                    for n in parse_sql(rewritten, dialect)
+                ]
     if dialect == "postgresql":
         # PG's ``SET TRANSACTION [ISOLATION LEVEL <lvl>] [READ ONLY|READ
         # WRITE]``: sqlglot parses the bare access-mode form as ``exp.Set``

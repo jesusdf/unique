@@ -527,6 +527,15 @@ silently:
   is **not** declared in-script cannot be lowered faithfully (PG needs a target;
   the MERGE needs an `ON` condition) and degrades the WHOLE statement to a
   carrier + warning — never a bare INSERT that would raise a duplicate-key error.
+- **MySQL `REPLACE [INTO] t ...` statement** (both the `SET col = expr, ...`
+  shorthand and the `[(cols)] VALUES (...)` form): a delete-then-insert
+  upsert — it cascades on FK deletes, resets `AUTO_INCREMENT` differently,
+  and fires DELETE **and** INSERT triggers, which is not the same operation
+  as an `ON CONFLICT`/MERGE upsert. On a MySQL target it round-trips as a real
+  `REPLACE INTO` statement; every other target has no faithful equivalent and
+  the whole statement degrades to a carrier + warning naming REPLACE — never a
+  silently emitted plain INSERT (duplicate-key error) or an UPDATE-style
+  upsert (wrong semantics).
 
 ### 3.23 Oracle cursor attributes (per-cursor emulation, audit B7/N5+N6)
 

@@ -637,6 +637,13 @@ class InsertStatement(ASTNode):
     on_conflict: ASTNode | None = None
     returning: tuple[ASTNode, ...] = ()
     default_values: bool = False
+    #: True for MySQL's ``REPLACE [INTO] ...`` statement (delete-then-insert
+    #: on a key clash), modeled on the same shape as INSERT since sqlglot has
+    #: no dedicated REPLACE parser. Only the MySQL emitter spells the verb
+    #: back as ``REPLACE INTO``; every other target has no equivalent
+    #: (different delete-then-insert semantics from an upsert) and degrades
+    #: the whole statement instead of silently emitting a plain INSERT.
+    is_replace: bool = False
 
 
 @dataclass(frozen=True)

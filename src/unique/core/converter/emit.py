@@ -2524,6 +2524,22 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
 
 def _emit_insert(node: InsertStatement, dialect: str) -> str:
     """Emit an INSERT statement, lowering any upsert clause per target."""
+    if node.is_replace:
+        # MySQL's REPLACE is a delete-then-insert upsert (cascades on FK
+        # deletes, resets AUTO_INCREMENT differently, fires DELETE+INSERT
+        # triggers) — not the same operation as an ON CONFLICT/MERGE
+        # upsert, so it must never be silently lowered to a plain INSERT.
+        # The Transformer already degrades non-MySQL targets whole
+        # (``_gate_mysql_replace``) before this is reached; this branch is
+        # the same honest degrade for any caller that emits directly.
+        if dialect != "mysql":
+            return _degrade_upsert(
+                node,
+                dialect,
+                f"MySQL REPLACE (delete-then-insert upsert) has no "
+                f"{dialect} equivalent",
+            )
+        return _emit_insert_core(node, dialect, insert_kw="REPLACE INTO")
     if isinstance(node.on_conflict, OnConflictClause):
         return _emit_upsert(node, node.on_conflict, dialect)
     return _emit_insert_core(node, dialect)
