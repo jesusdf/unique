@@ -27,15 +27,20 @@ DONE §47).*
 
 ### Q1 — oracle/mysql-source procedural degrades — TRIAGED, briefs ready (P2)
 
-*Triage report: [`audit/2026-07-30-q1-triage.md`](../audit/2026-07-30-q1-triage.md)
-(fresh measurement: actionable gap = 28/32 oracle→pg, 21/31 mysql→pg; two of
-the top mechanisms are transpiler BUGS, not degrades). Brief order by
+*Triage report: [`audit/2026-07-30-q1-triage.md`](../audit/2026-07-30-q1-triage.md).
+Re-measured 2026-07-31 at HEAD `7bffad0` post-B34/B35/B36/B37: NEW-marker
+degrades are down to **7/32 oracle→pg** (from 28) and **21/31 mysql→pg**
+(mysql now dominated by warned degrades of larger standing fronts: the
+embedded-DML raw-sqlglot fallback [~10 routines, UNIQUE-1231 "Embedded DML
+not modeled by the IR converter"] and sp_executesql-derived dynamic SQL via
+`@_stmt` user variables [4 routines] — neither is a Q1 brief; both belong to
+the "SQL-embedded-as-text vs IR" / dynamic-SQL fronts). Remaining briefs by
 routines-unblocked and severity:*
 
-- **B34** — UNIQUE-1171 false positive: `_find_user_var` scans `@name` in raw
-  text without scrubbing comments (transformer.py:1897) → ~11 mysql routines.
-- **B35** — UNIQUE-1219 SET-var misclassification CORRUPTS output (closes the
-  `$$` body early, leaks statements as top-level SQL) — severity-first.
+- ~~B34~~ — DONE 2026-07-31 (`2067942`): comment spans scrubbed as trivia in
+  the MySQL `@var`/`@@sysvar` gates; the 11 false-positive routines cleared.
+- ~~B35~~ — DONE 2026-07-31 (`8f1f8a4`): `_split_mysql` balances `CASE…END`
+  so a DELIMITER-less routine body stays whole; corruption gone.
 - ~~B36~~ — DONE 2026-07-31 (3 of 4 causes): oracle→pg 1151 count 16 → 2.
   SYS_REFCURSOR type map, FROM-DUAL tail strip in SELECT INTO,
   NUMTODSINTERVAL/NUMTOYMINTERVAL → PG interval (both pipelines; 3 challenge
