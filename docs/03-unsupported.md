@@ -769,23 +769,18 @@ only partially supported:
   assignments) so these bodies parse correctly. Chained DML such as
   `INSERT ... SELECT` and `UPDATE ... SET` is kept intact. Rare edge cases
   with unusual formatting may still need review.
-- **`DECLARE @t TABLE (...)`** (table variables): on **Oracle**, hoisted to a
-  schema-level **Global Temporary Table** emitted before the routine (a CREATE
-  cannot live in a PL/SQL block, and the block references it statically), with a
-  per-routine-unique name and renamed references; an accompanying `INSERT … OUTPUT
-  … INTO @t` is a documented carrier (Oracle `RETURNING` cannot target a table, so
-  the GTT is populated manually). **PostgreSQL/MySQL** have no direct equivalent —
-  the column list is captured verbatim (use a collection type or temporary table).
-- **`SELECT ... INTO #tmp`** inside a procedure (a T-SQL temp table, not a
-  variable): lowered to the target's temp-table idiom rather than the invalid
-  variable-`INTO` form. **PostgreSQL/MySQL** emit `CREATE TEMPORARY TABLE tmp AS
-  SELECT …` preceded by a `DROP … IF EXISTS` (so a second `CALL` in the same
-  session recreates it — temp tables outlive a statement there). **Oracle**
-  hoists a session **Global Temporary Table** before the routine (same machinery
-  as `@table` variables) and the body clears + repopulates it
-  (`DELETE`/`INSERT`) so each call is isolated. Outside a procedure (in a
-  function or trigger, where the Oracle CREATE cannot be hoisted) it falls back
-  to the documented warned degrade.
+- **`DECLARE @t TABLE (...)`** (table variables) and in-procedure **`SELECT
+  ... INTO #tmp`** (a T-SQL temp table, not a variable) both convert
+  faithfully on every target — a real temp table declared inline on
+  PostgreSQL/MySQL, and a schema-level **Global Temporary Table** hoisted
+  before the routine on **Oracle** (whose PL/SQL cannot run a `CREATE`
+  inline) — see
+  [the rationale article](rationale/procedural/routine-scoped-temp-tables-to-oracle-gtt.md).
+  An accompanying `INSERT … OUTPUT … INTO @t` is a documented carrier
+  instead on Oracle (`RETURNING` cannot target a table). Outside a
+  procedure (in a function or trigger, where Oracle's `CREATE` cannot be
+  hoisted), `SELECT ... INTO #tmp` falls back to the documented warned
+  degrade on Oracle.
 - **`SELECT ... INTO @var`** combined with `OUTPUT ... INTO`: the `OUTPUT`
   clause is engine-specific and emitted as raw SQL.
 - **Variable-assignment `SELECT`** (`SELECT @x = col`): handled for the
