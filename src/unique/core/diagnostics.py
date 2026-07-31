@@ -1145,4 +1145,10 @@ DIAGNOSTICS: dict[str, Diagnostic] = {
         "parse-failure carrier, so shipping the COMMIT/ROLLBACK would orphan it "
         "(no open transaction — T-SQL error 3902)",
     ),
+    "UNIQUE-1235": _D(
+        "expression",
+        "Oracle STANDARD_HASH(x, 'SHA1') (the default algorithm) has no "
+        "core-PostgreSQL equivalent (needs the pgcrypto extension) — see "
+        "docs/03-unsupported.md",
+    ),
 }
