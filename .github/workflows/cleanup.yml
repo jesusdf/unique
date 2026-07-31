@@ -61,3 +61,23 @@ jobs:
           # Every other workflow's runs: keep the newest $KEEP_OTHER.
           echo "$runs" | awk -F '\t' -v self="$SELF" '$4 != self' \
             | cut -f1-3 | prune "$KEEP_OTHER"
+
+      - name: Dedupe identical-key caches (keep the newest of each key)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        # Ref-scoped caches with the SAME key accumulate one copy per tag/branch
+        # and are never shared back (the Docker job's QEMU binfmt image piled up
+        # 13 × 32 MB copies, one per v* release). Identical-key entries are
+        # interchangeable by definition, so keep only the most recently used one
+        # per key. CodeQL's per-commit overlay caches have unique keys and are
+        # pruned separately by codeql.yml — this step never matches them.
+        run: |
+          gh api --paginate "repos/$REPO/actions/caches?per_page=100" \
+            --jq '.actions_caches[] | "\(.key)\t\(.last_accessed_at)\t\(.id)"' \
+            | sort -t $'\t' -k1,1 -k2,2r \
+            | awk -F '\t' 'seen[$1]++ { print $3 }' \
+            | while read -r id; do
+                echo "deleting duplicate cache $id"
+                gh api -X DELETE "repos/$REPO/actions/caches/$id" || true
+              done
