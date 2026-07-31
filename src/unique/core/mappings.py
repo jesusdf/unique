@@ -646,6 +646,10 @@ PROCEDURAL_TYPE_MAPS: dict[tuple[str, str], dict[str, str]] = {
         "NUMBER": "NUMERIC",
         "VARCHAR2": "VARCHAR",
         "NVARCHAR2": "VARCHAR",
+        # Oracle's implicit ref-cursor type; PostgreSQL's ``refcursor`` is the
+        # direct equivalent (``OPEN v FOR <q>`` is valid PL/pgSQL). Mirrors the
+        # existing ("postgresql", "oracle") REFCURSOR -> SYS_REFCURSOR entry.
+        "SYS_REFCURSOR": "REFCURSOR",
         "CLOB": "TEXT",
         "NCLOB": "TEXT",
         "BLOB": "BYTEA",

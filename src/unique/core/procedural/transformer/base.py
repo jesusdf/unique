@@ -548,6 +548,16 @@ class ProceduralTransformer:
         OPEN ... FOR query becomes the procedure's result set."""
         return self._target in ("tsql", "mysql")
 
+    #: A SELECT INTO tail that is exactly ``FROM DUAL`` (a pure one-row scalar
+    #: select) and the same fragment anywhere in the statement.
+    _BARE_FROM_DUAL_RE = re.compile(r"(?i)^FROM\s+DUAL\s*;?\s*$")
+    _FROM_DUAL_RE = re.compile(r"(?i)\s+FROM\s+DUAL\b")
+
+    def _target_has_dual(self) -> bool:
+        """Whether the target has an accessible ``DUAL`` pseudo-table. Oracle
+        has it; MySQL tolerates ``FROM DUAL``; PostgreSQL and T-SQL do not."""
+        return self._target in ("oracle", "mysql")
+
     def _transform_params(
         self, params: tuple[ParameterDefinition, ...]
     ) -> tuple[ParameterDefinition, ...]:
@@ -3763,6 +3773,22 @@ class ProceduralTransformer:
         rest = self._transform_var_in_sql(rest_src)
         rest = self._expr._transform_functions_in_sql(rest)
         rest = self._fix_select_into_rest(rest)
+        # Oracle's one-row scalar ``SELECT <expr> INTO v FROM DUAL`` needs no
+        # FROM on a target without a DUAL pseudo-table (PostgreSQL, T-SQL). Strip
+        # it ONLY when the tail is exactly ``FROM DUAL`` — a tail that drives a
+        # real query (``FROM DUAL CONNECT BY …``, the Oracle string-split idiom)
+        # is a genuine no-equivalent that must keep degrading, so removing only
+        # its DUAL would ship invalid SQL past the output gate.
+        if not self._target_has_dual() and self._BARE_FROM_DUAL_RE.match(rest.strip()):
+            rest = ""
+            new_cols = tuple(
+                (
+                    dataclasses.replace(c, sql=self._FROM_DUAL_RE.sub("", c.sql))
+                    if isinstance(c, RawSQL)
+                    else c
+                )
+                for c in new_cols
+            )
         with_sql = node.with_sql
         if with_sql:
             with_sql = self._transpile_cte_prefix(self._transform_var_in_sql(with_sql))

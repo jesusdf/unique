@@ -101,7 +101,6 @@ _FULL_DEGRADE = (
     "ora-extractvalue",
     "ora-from-tz",
     "ora-hash-all",
-    "ora-interval-out",
     "ora-lnnvl",
     "ora-lob-length",
     "ora-median-mode",
@@ -111,8 +110,6 @@ _FULL_DEGRADE = (
     "ora-next-day",
     "ora-nls-case",
     "ora-nlssort",
-    "ora-numtodsinterval",
-    "ora-numtointerval",
     "ora-ora-hash",
     "ora-ratio-to-report",
     "ora-ratio2",
@@ -134,6 +131,41 @@ CASES: dict[str, Case] = {slug: _degrade_all3(slug) for slug in _FULL_DEGRADE}
 # row is not vacuous under identity).
 CASES.update(
     {
+        # Oracle NUMTODSINTERVAL/NUMTOYMINTERVAL build a standalone INTERVAL
+        # value; PostgreSQL's ``INTERVAL '<n> <unit>'`` (or ``n * INTERVAL '1
+        # <unit>'`` for a non-literal count) is the exact equivalent (B36).
+        # T-SQL/MySQL have no standalone interval value, so they keep the warned
+        # degrade.
+        "ora-numtodsinterval": Case(
+            "ora-numtodsinterval ",
+            {
+                "postgresql": Expect(("INTERVAL '90 MINUTE'",), ("NUMTODSINTERVAL",)),
+                "tsql": Expect(warn=True),
+                "mysql": Expect(warn=True),
+            },
+        ),
+        "ora-numtointerval": Case(
+            "ora-numtointerval ",
+            {
+                "postgresql": Expect(
+                    ("INTERVAL '1 DAY'", "INTERVAL '18 MONTH'"),
+                    ("NUMTODSINTERVAL", "NUMTOYMINTERVAL"),
+                ),
+                "tsql": Expect(warn=True),
+                "mysql": Expect(warn=True),
+            },
+        ),
+        "ora-interval-out": Case(
+            "ora-interval-out ",
+            {
+                "postgresql": Expect(
+                    ("INTERVAL '14 MONTH'", "INTERVAL '90000 SECOND'"),
+                    ("NUMTODSINTERVAL", "NUMTOYMINTERVAL"),
+                ),
+                "tsql": Expect(warn=True),
+                "mysql": Expect(warn=True),
+            },
+        ),
         # invalid: Oracle niladic USER pseudo-function leaked as a quoted
         # identifier; map to CURRENT_USER / CURRENT_USER().
         "reda-ora-user-function": Case(
