@@ -76,6 +76,15 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
   matches "CREATE PROCEDURE" inside a *comment*, setting `in_plsql` early.
   Latent guardrail-3 wrinkle; harmless post-B38 (the peel undoes it) but
   the splitter should not read comment text.
+- **B49** (P2, found during D1b, live-probed) — `REPLACE t SET a=1 …` (MySQL)
+  emits a `UNIQUE-1003` comment-only carrier on EVERY target — including
+  `mysql → mysql` (the identity direction should round-trip valid MySQL
+  syntax); AND its pinning test
+  (`TestWave189BitwiseNotReplaceSet::test_replace_set_converts`) passes via a
+  regex that matches the carrier's echoed-comment text — a test-quality
+  false positive of the identity-mutant class. Fix both: convert
+  `REPLACE … SET` (at least identity + the INSERT…SET-equivalent rewrite)
+  and make the assertion real.
 - **B48** (found during D1-W9, live-probed) — `_gate_column_alias_ref`
   degrades the derived-table column-alias list (`(SELECT …) AS xx(c1,c2)`)
   for MySQL claiming "no spelling" — live MySQL 8 accepts it; only Oracle's
