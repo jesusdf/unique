@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import datetime
+import json
 import os
 import re
 from dataclasses import dataclass
@@ -47,6 +48,76 @@ class Mismatch:
     output: str
 
 
+# ISO date / datetime / time recognizers for values that arrive as *strings*
+# (one driver returns a datetime object, another the same instant as text). Only
+# these strict shapes are canonicalized — a numeric string like '12' or a comma
+# list '1,2' does not match, so they are never mis-parsed as temporals.
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_DATETIME_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:?\d{2})?$"
+)
+_TIME_RE = re.compile(r"^\d{2}:\d{2}:\d{2}(\.\d+)?$")
+
+
+def _canonical_datetime(dt: datetime.datetime) -> str:
+    """One canonical text form for a datetime, timezone dropped (wall clock).
+
+    Timezone-awareness is a driver artifact (psycopg returns aware datetimes for
+    ``timestamptz`` where every other driver returns naive), not a value the SQL
+    computed, so it is normalized away. A midnight time collapses to the bare
+    date so DATE-vs-DATETIME rendering is not a false mismatch (pre-existing)."""
+    if dt.tzinfo is not None:
+        dt = dt.replace(tzinfo=None)
+    if (dt.hour, dt.minute, dt.second, dt.microsecond) == (0, 0, 0, 0):
+        return dt.date().isoformat()
+    return dt.isoformat()
+
+
+def _canonical_time(t: datetime.time) -> str:
+    return t.replace(tzinfo=None).isoformat()
+
+
+def _parse_fraction_us(frac: str | None) -> int:
+    """Sub-second text ('.1234567') -> microseconds, truncated to 6 digits."""
+    if not frac:
+        return 0
+    return int((frac.lstrip(".") + "000000")[:6])
+
+
+def _canonical_temporal_str(s: str) -> str | None:
+    """Canonicalize an ISO date/datetime/time *string*, else ``None``."""
+    if _DATE_RE.match(s):
+        return s
+    m = _DATETIME_RE.match(s)
+    if m:
+        head = s[:19].replace(" ", "T")
+        dt = datetime.datetime.fromisoformat(head).replace(
+            microsecond=_parse_fraction_us(m.group(1))
+        )
+        return _canonical_datetime(dt)
+    m = _TIME_RE.match(s)
+    if m:
+        t = datetime.time.fromisoformat(s[:8]).replace(
+            microsecond=_parse_fraction_us(m.group(1))
+        )
+        return _canonical_time(t)
+    return None
+
+
+def _canonical_json(obj: Any) -> str:
+    """Canonical (sorted-key, tight) JSON dump of a parsed structure."""
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _is_year_month_interval(v: Any) -> bool:
+    """oracledb ``IntervalYM`` (year-month interval) — duck-typed, no import."""
+    return (
+        not isinstance(v, datetime.timedelta)
+        and hasattr(v, "years")
+        and hasattr(v, "months")
+    )
+
+
 def normalize_cell(v: Any) -> Any:
     """Canonicalize a cell so equal values compare equal across engines."""
     if v is None:
@@ -59,15 +130,30 @@ def normalize_cell(v: Any) -> Any:
         return v
     if isinstance(v, (bytes, bytearray)):
         return bytes(v)
+    if isinstance(v, (dict, list)):
+        # A JSON column parsed to a Python object by the driver (psycopg does
+        # this) — canonicalize so '{"a":1}' and {'a': 1} compare equal.
+        return _canonical_json(v)
     if isinstance(v, datetime.datetime):
-        # A DATE often materializes as a midnight datetime (Oracle); collapse it
-        # to the date so DATE-vs-DATETIME rendering is not a false mismatch.
-        if (v.hour, v.minute, v.second, v.microsecond) == (0, 0, 0, 0):
-            return v.date().isoformat()
-        return v.isoformat()
+        return _canonical_datetime(v)
     if isinstance(v, datetime.date):
         return v.isoformat()
-    return str(v).strip()
+    if isinstance(v, datetime.time):
+        return _canonical_time(v)
+    if isinstance(v, datetime.timedelta):
+        # Day/second interval — tagged distinctly from a year-month interval so
+        # '1 year 2 months' can never compare equal to a fixed day count.
+        return f"interval_dt:{v.total_seconds()}"
+    if _is_year_month_interval(v):
+        return f"interval_ym:{v.years * 12 + v.months}"
+    s = str(v).strip()
+    temporal = _canonical_temporal_str(s)
+    if temporal is not None:
+        return temporal
+    if s[:1] in "{[":  # a JSON payload delivered as text
+        with contextlib.suppress(ValueError, TypeError):
+            return _canonical_json(json.loads(s))
+    return s
 
 
 def normalize_rows(rows: list[tuple], *, empty_as_null: bool = False) -> list[tuple]:
