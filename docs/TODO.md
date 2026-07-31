@@ -155,12 +155,15 @@ pairs correctly excluded, 748 clean matches, **86 unwarned problem pairs**
 normalization) / T2 (precision policy) / T3 (documented-inherent, missing
 warning) / T4 (real defects, ~25-30 pairs, named in the report).*
 
-- **A10-H** — auto-enrollment harness: nightly test derives the enrolled set
-  mechanically (`[fixed]` + comparable + self-contained − a named exclusions
-  ledger, one reason per line); warned pairs skip at transpile time;
-  comparator upgrades (datetime/string, interval, JSON canonicalization —
-  kills T1); monotonic-downward floors on the ledger size and the
-  unenrolled-comparable count.
+- ~~A10-H~~ — DONE 2026-07-31: `test_challenge_results_live.py` auto-enrolls
+  mechanically — **496 enrolled** (was 21) after a 43-case named ledger
+  (`challenge_fe_exclusions.py`: 25 defect-pending-fix / 12
+  precision-policy-pending / 4 documented-inherent / 2 session-dependent);
+  warned pairs skip at transpile time; comparator canonicalizes
+  datetime/interval/JSON with negative-cased unit tests (15 T1 pairs became
+  matches, no ledger entry needed); ratchet floor 43, monotonic down
+  (`test_challenge_fe_ratchet.py`). Sweep at head: 843 matched / 701
+  warned-skipped / 0 mismatches.
 - **A10-T2 (maintainer decision)** — precision policy: numeric-tolerance
   comparison vs. warning on precision-changing conversions (the historical
   "same value + precision diff = acceptable" rule is nowhere encoded).
