@@ -1238,17 +1238,19 @@ def emit_pg_charcode_to_mysql(
     return None
 
 
-def emit_pg_to_hex_to_tsql_oracle(
-    node: FunctionCall, fn_name: str, dialect: str
-) -> str | None:
-    """PG to_hex(x) -> T-SQL/Oracle, matching the unpadded lowercase value, or
-    None (B54).
+def emit_pg_to_hex(node: FunctionCall, fn_name: str, dialect: str) -> str | None:
+    """PG to_hex(x) -> the target's matching unpadded lowercase value, or None
+    (B54, B59).
 
-    Neither engine has a matching built-in — left as bare ``HEX(x)`` (the
-    generic sqlglot name) it was an unwarned runtime error (T-SQL resolves it
-    to a phantom ``dbo.HEX``, Oracle to an undefined function). PG's to_hex()
-    has NO zero-padding, so both rebuilds get the fixed-width hex string from
-    the engine's own primitive and strip the padding back out:
+    sqlglot normalizes PG's ``to_hex`` to the generic name ``HEX``, which is
+    an unwarned runtime error on every target that lacks a ``HEX`` built-in:
+    T-SQL resolves it to a phantom ``dbo.HEX``, Oracle to an undefined function,
+    and — the identity direction — PostgreSQL itself has no ``HEX`` either
+    (only ``to_hex``), so ``SELECT to_hex(x)`` came back out as the invalid
+    ``HEX(x)`` (B59). PG target simply respells the canonical name back to
+    ``TO_HEX``; T-SQL/Oracle rebuild the value from their own primitives. PG's
+    to_hex() has NO zero-padding, so both rebuilds get the fixed-width hex
+    string from the engine's own primitive and strip the padding back out:
 
     - T-SQL: CAST through VARBINARY(8) (matching PG's bigint overload) then
       CONVERT(..., 2) for the fixed-width hex text; the CASE+PATINDEX finds
@@ -1285,6 +1287,8 @@ def _to_hex_tsql(arg: str) -> str:
 _PG_TO_HEX_BUILDERS: dict[str, Callable[[str], str]] = {
     "oracle": _to_hex_oracle,
     "tsql": _to_hex_tsql,
+    # Identity: respell the canonical HEX back to PG's own name (B59).
+    "postgresql": lambda arg: f"TO_HEX({arg})",
 }
 
 

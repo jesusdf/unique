@@ -614,3 +614,12 @@ class TestPgToHexToTsqlOracle:
         assert out is not None
         assert "LOWER(TRIM(TO_CHAR(x, 'XXXXXXXXXXXXXXXX')))" in out
         assert "TO_HEX" not in out.upper()
+
+    def test_pg_identity_passes_to_hex_through(self) -> None:
+        # B59: pg -> pg identity emitted the invalid phantom ``HEX(x)`` (PG has
+        # no HEX built-in; the function is ``to_hex``). sqlglot normalizes the
+        # name to the generic HEX, so the identity direction must respell it.
+        out = _t("SELECT to_hex(x) FROM t", "postgresql", source="postgresql")
+        assert "TO_HEX(x)" in out
+        # No bare (phantom) HEX( survives once the valid TO_HEX is masked out.
+        assert not re.search(r"(?i)(?<![_A-Z])HEX\(", out.replace("TO_HEX", ""))
