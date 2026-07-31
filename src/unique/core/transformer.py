@@ -76,7 +76,7 @@ class TransformContext:
     warnings: list[TransformWarning] = field(default_factory=list)
     unsupported: list[str] = field(default_factory=list)
 
-    def warn(self, message: str, feature: str) -> None:
+    def warn(self, message: str, feature: str, code: str | None = None) -> None:
         """Record a transformation warning."""
         self.warnings.append(
             TransformWarning(
@@ -84,6 +84,7 @@ class TransformContext:
                 feature=feature,
                 source_dialect=self.source,
                 target_dialect=self.target,
+                code=code,
             )
         )
 
@@ -768,6 +769,8 @@ class Transformer:
             The transformed IR nodes.
         """
         result = nodes
+        if self.context.source == "tsql":
+            result = [self._gate_query_hints(node) for node in result]  # type: ignore[misc]
         if self.context.target != "postgresql":
             result = [self._gate_pg_internals(node) for node in result]
         if self.context.target == "postgresql":
@@ -2089,6 +2092,43 @@ class Transformer:
         if isinstance(value, tuple):
             return any(self._contains_column_alias_ref(item) for item in value)
         return False
+
+    def _gate_query_hints(self, value: object) -> object:
+        """Drop T-SQL ``OPTION (...)`` query hints (``MAXRECURSION n``,
+        ``MAXDOP n``, ``RECOMPILE``, ...) — B51.
+
+        No other engine has this construct, so every hint is dropped; each
+        gets its own warning. ``MAXRECURSION`` is the one hint with a real
+        semantic effect (a recursion-depth guard) so it gets a dedicated
+        divergence message; every other hint is a pure optimizer directive
+        with no result-correctness effect, so it gets a plain drop notice."""
+        node = self._map_children(value, self._gate_query_hints)
+        if not (isinstance(node, SelectStatement) and node.query_hints):
+            return node
+        for name, hint_value in node.query_hints:
+            if name.upper() == "MAXRECURSION":
+                n = hint_value or "100"
+                reason = (
+                    f"T-SQL OPTION (MAXRECURSION {n}) has no portable equivalent "
+                    "and was dropped: T-SQL raises an error once a recursive CTE "
+                    f"exceeds {n} recursions (the server default is 100 when no "
+                    "OPTION is given), while PostgreSQL, MySQL and Oracle "
+                    "recursive queries have no such limit — a source query that "
+                    "relied on the T-SQL error to bound recursion will instead "
+                    "run to completion (or loop) elsewhere"
+                )
+                self.context.warn(reason, "query_hints", code="UNIQUE-1238")
+            else:
+                spelling = f"{name} {hint_value}" if hint_value else name
+                reason = (
+                    f"T-SQL query hint OPTION ({spelling}) has no portable "
+                    "equivalent (a T-SQL-only optimizer directive) and was "
+                    "dropped; it affects only the execution plan, not the "
+                    "result set"
+                )
+                self.context.warn(reason, "query_hints", code="UNIQUE-1239")
+        self.context.mark_unsupported("T-SQL OPTION (...) query hint")
+        return replace(node, query_hints=())
 
     def _inline_having_alias(self, value: object) -> object:
         """MySQL lets HAVING reference a select alias; every other engine

@@ -2,7 +2,7 @@
 
 > **Generated — do not edit by hand.** Produced by `python scripts/generate_reference_docs.py` from the `UNIQUE-NNNN` registry (`src/unique/core/diagnostics.py`) and the rationale side-table (`src/unique/core/rationales.py`). The CI freshness gate (`python scripts/generate_reference_docs.py --check`) fails the build if this file drifts from the source data.
 
-One entry per stable diagnostic code the transpiler can emit. `code` is the grep/suppress token (`-- UNIQUE-1234: …`); every code is anchored as `warnings.md#unique-1234`. A code with a rationale entry (185 of 236) renders as a recipe: **Problem** (the triggering construct), **Solution (pointer)** (what Unique does about it — a pointer, not a worked example: the registry carries no SQL sample), **Discussion** (the engine-level reason no direct mapping exists) and **See Also** (the corpus case or test that proves it). The remaining codes render in a compact table marked `_(rationale pending)_` until a rationale is added (the coverage ratchet in `tests/unit/core/test_diagnostics.py` drives that count down).
+One entry per stable diagnostic code the transpiler can emit. `code` is the grep/suppress token (`-- UNIQUE-1234: …`); every code is anchored as `warnings.md#unique-1234`. A code with a rationale entry (187 of 238) renders as a recipe: **Problem** (the triggering construct), **Solution (pointer)** (what Unique does about it — a pointer, not a worked example: the registry carries no SQL sample), **Discussion** (the engine-level reason no direct mapping exists) and **See Also** (the corpus case or test that proves it). The remaining codes render in a compact table marked `_(rationale pending)_` until a rationale is added (the coverage ratchet in `tests/unit/core/test_diagnostics.py` drives that count down).
 
 ## Diagnostics with a rationale
 
@@ -2226,6 +2226,30 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **See Also.** [`postgresql-qdrop-FOR`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
+### <a id="unique-1238"></a>`UNIQUE-1238` — T-SQL OPTION (MAXRECURSION n) on a recursive CTE
+
+**Category:** `statement` · **Message:** T-SQL OPTION (MAXRECURSION n) has no portable equivalent — T-SQL raises an error once a recursive CTE exceeds n recursions (default 100), while PostgreSQL/MySQL/Oracle recursion has no such limit; the hint is dropped (see docs/03-unsupported.md)
+
+**Problem.** T-SQL OPTION (MAXRECURSION n) on a recursive CTE
+
+**Solution (pointer).** Warned limit — the hint is dropped; a source query that relied on the T-SQL error to bound a runaway recursion instead runs to completion (or loops) on the other three engines. A T-SQL target keeps the clause verbatim (same dialect, no divergence).
+
+**Discussion.** MAXRECURSION is T-SQL's recursion-depth guard on a recursive CTE: the server raises an error once the recursion exceeds n levels (the implicit default is 100 when the OPTION clause is absent). PostgreSQL, MySQL and Oracle recursive queries have no equivalent depth limit — the recursion simply runs (or loops) until it terminates on its own, so there is no clause to translate the guard into.
+
+**See Also.** [`TestMaxRecursionDroppedWithSemanticWarning::test_pg_target`](../../tests/integration/test_tsql_maxrecursion_option.py)
+
+### <a id="unique-1239"></a>`UNIQUE-1239` — A non-MAXRECURSION T-SQL OPTION (...) query hint (MAXDOP, RECOMPILE, FORCE ORDER, KEEPFIXED PLAN, ...)
+
+**Category:** `statement` · **Message:** T-SQL OPTION (...) query hint (e.g. MAXDOP, RECOMPILE, FORCE ORDER) has no portable equivalent — a pure optimizer directive with no effect on the result set; the hint is dropped (see docs/03-unsupported.md)
+
+**Problem.** A non-MAXRECURSION T-SQL OPTION (...) query hint (MAXDOP, RECOMPILE, FORCE ORDER, KEEPFIXED PLAN, ...)
+
+**Solution (pointer).** Warned limit — the hint is dropped; the result set is unchanged, only the execution plan is no longer steered. A T-SQL target keeps the clause verbatim (same dialect, no divergence).
+
+**Discussion.** T-SQL's OPTION (...) clause carries optimizer directives — join strategy, degree of parallelism, plan caching, and similar execution-plan hints — that steer the query PLAN, not its result. No other engine has this clause, and none of these hints has an observable effect on the rows returned, so there is nothing to preserve for correctness.
+
+**See Also.** [`TestGenericHintDroppedWithLighterWarning::test_maxdop_and_recompile_dropped`](../../tests/integration/test_tsql_maxrecursion_option.py)
+
 ## Diagnostics without a rationale yet
 
 | Code | Category | Message template | Rationale |
@@ -2282,4 +2306,4 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 | <a id="unique-1230"></a>`UNIQUE-1230` | procedural | procedural parse note; the specific reason is carried at runtime | _(rationale pending)_ |
 | <a id="unique-1232"></a>`UNIQUE-1232` | procedural | procedural transpilation failed (internal error); the routine is preserved; the error is carried at<br>runtime | _(rationale pending)_ |
 
-236 codes across 6 categories (185 with a rationale).
+238 codes across 6 categories (187 with a rationale).

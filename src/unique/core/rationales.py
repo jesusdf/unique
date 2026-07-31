@@ -3068,4 +3068,50 @@ RATIONALES: dict[str, Rationale] = {
             "as an ORA-02014 runtime error; the result set is unchanged."
         ),
     ),
+    "UNIQUE-1238": _R(
+        construct="T-SQL OPTION (MAXRECURSION n) on a recursive CTE",
+        reason=(
+            "MAXRECURSION is T-SQL's recursion-depth guard on a recursive CTE: "
+            "the server raises an error once the recursion exceeds n levels "
+            "(the implicit default is 100 when the OPTION clause is absent). "
+            "PostgreSQL, MySQL and Oracle recursive queries have no equivalent "
+            "depth limit — the recursion simply runs (or loops) until it "
+            "terminates on its own, so there is no clause to translate the "
+            "guard into."
+        ),
+        example_case=(
+            "tests/integration/test_tsql_maxrecursion_option.py::"
+            "TestMaxRecursionDroppedWithSemanticWarning::test_pg_target"
+        ),
+        divergence=(
+            "Warned limit — the hint is dropped; a source query that relied on "
+            "the T-SQL error to bound a runaway recursion instead runs to "
+            "completion (or loops) on the other three engines. A T-SQL target "
+            "keeps the clause verbatim (same dialect, no divergence)."
+        ),
+    ),
+    "UNIQUE-1239": _R(
+        construct=(
+            "A non-MAXRECURSION T-SQL OPTION (...) query hint (MAXDOP, "
+            "RECOMPILE, FORCE ORDER, KEEPFIXED PLAN, ...)"
+        ),
+        reason=(
+            "T-SQL's OPTION (...) clause carries optimizer directives — join "
+            "strategy, degree of parallelism, plan caching, and similar "
+            "execution-plan hints — that steer the query PLAN, not its result. "
+            "No other engine has this clause, and none of these hints has an "
+            "observable effect on the rows returned, so there is nothing to "
+            "preserve for correctness."
+        ),
+        example_case=(
+            "tests/integration/test_tsql_maxrecursion_option.py::"
+            "TestGenericHintDroppedWithLighterWarning::"
+            "test_maxdop_and_recompile_dropped"
+        ),
+        divergence=(
+            "Warned limit — the hint is dropped; the result set is unchanged, "
+            "only the execution plan is no longer steered. A T-SQL target "
+            "keeps the clause verbatim (same dialect, no divergence)."
+        ),
+    ),
 }
