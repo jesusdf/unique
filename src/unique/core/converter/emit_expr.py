@@ -874,6 +874,12 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         return _emit_window(node, dialect)
 
     if isinstance(node, TableRef):
+        # Lazy: _emit_table_ref (emit_relations.py) needs _emit_expression
+        # (this module) at its own tail, so a module-level import here would
+        # be a circular import at load time; deferring to call time (well
+        # after every seam module has finished loading) resolves it.
+        from unique.core.converter.emit import _emit_table_ref
+
         return _emit_table_ref(node, dialect)
 
     if isinstance(node, RawSQL):
@@ -2468,7 +2474,6 @@ from unique.core.converter.emit import (  # noqa: E402
     _emit_excluded_column,
     _emit_order_item,
     _emit_select,
-    _emit_table_ref,
     _is_predicate_node,
     _map_system_global,
     _plain_int_value,

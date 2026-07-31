@@ -6,18 +6,31 @@ multi-table DELETE) pushed it past its size ratchet. Same contract as every
 seam: this module defines its own names first, then imports the ``emit.py``
 helpers it needs at its tail (see the emit.py docstring for why the mutual
 recursion is safe), and ``emit.py`` re-exports it via ``import *``.
+
+``_emit_table_ref``/``_emit_tablesample`` (table-reference and TABLESAMPLE
+emission — also relation-shaped FROM items) moved here for the same reason
+(B36b follow-up, 2026-07-31): ``emit.py``/``emit_ddl.py``'s tails import
+``_emit_table_ref`` back lazily (inside the functions that call it, not at
+module load), since this module's own tail needs ``_emit_expression`` from
+``emit_expr.py`` — a genuine two-way dependency that a load-time import
+cannot resolve, only a call-time one.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 
 from unique.core.ast_nodes import (
     Alias,
     ASTNode,
+    CastExpression,
     ColumnRef,
     DeleteStatement,
+    FunctionCall,
+    Literal,
     PivotRelation,
+    RawSQL,
     SubqueryExpression,
     TableRef,
     UnpivotRelation,
@@ -36,6 +49,9 @@ __all__ = [
     "_UPDATE_CAP",
     "_emit_update",
     "_emit_capped_update",
+    "_is_numeric_series",
+    "_emit_table_ref",
+    "_emit_tablesample",
 ]
 
 #: Engines whose unquoted identifiers fold to UPPER case — their UNPIVOT
@@ -375,13 +391,244 @@ def _emit_update(node: UpdateStatement, dialect: str) -> str:
     return result
 
 
+def _is_numeric_series(args: tuple[ASTNode, ...]) -> bool:
+    """True when a generate_series' bounds are plain integers (not a date/
+    timestamp range, whose arithmetic and step interval need a different
+    rewrite). Only literal integer bounds are treated as the numeric form."""
+    return all(
+        isinstance(a, Literal)
+        and isinstance(a.value, int)
+        and not isinstance(a.value, bool)
+        for a in args[:2]
+    )
+
+
+def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
+    """Emit a table reference.
+
+    When ``dialect`` is one of the non-T-SQL engines, the T-SQL default schema
+    ``dbo`` is dropped: it names no real schema on Oracle/PostgreSQL and would
+    name a non-existent database on MySQL. Passing ``dialect=None`` keeps the
+    reference verbatim (used where the schema must be preserved, e.g. a T-SQL
+    OBJECT_ID guard).
+    """
+    if (
+        isinstance(node.function, FunctionCall)
+        and node.function.name.upper() == "GENERATE_SERIES"
+        and len(node.function.args) in (2, 3)
+        and dialect in ("oracle", "tsql")
+        and SOURCE_DIALECT.get() == "postgresql"
+        and _is_numeric_series(node.function.args)
+    ):
+        # PG ``FROM generate_series(start, stop[, step])`` as a relation. The
+        # single value column is named after the correlation alias (PG lets the
+        # table alias double as the column name); an explicit ``AS t(v[, n])``
+        # renames it, and ``WITH ORDINALITY`` adds a 1-based row number.
+        _gs = node.function.args
+        _gstart = _emit_expression(_gs[0], dialect)
+        _gstop = _emit_expression(_gs[1], dialect)
+        _gstep = _emit_expression(_gs[2], dialect) if len(_gs) == 3 else "1"
+        _talias = node.alias or "uq_gs"
+        _vcol = node.column_aliases[0] if node.column_aliases else _talias
+        _ord = (
+            node.column_aliases[1]
+            if node.ordinality and len(node.column_aliases) > 1
+            else "ordinality"
+        )
+        # count = floor((stop-start)/step) + 1
+        _cnt = (
+            f"({_gstop}) - ({_gstart}) + 1"
+            if _gstep == "1"
+            else f"FLOOR((({_gstop}) - ({_gstart})) / ({_gstep})) + 1"
+        )
+        _mul = "" if _gstep == "1" else f" * ({_gstep})"
+        if dialect == "oracle":
+            _ord_sel = f", LEVEL AS {_ord}" if node.ordinality else ""
+            _inner = (
+                f"SELECT ({_gstart}) + (LEVEL - 1){_mul} AS {_vcol}{_ord_sel} FROM "
+                f"DUAL CONNECT BY LEVEL <= {_cnt}"
+            )
+            return f"({_inner}) {_talias}"
+        # T-SQL: a numbers source (sys.all_objects has plenty of rows for the
+        # small ranges these series cover); ROW_NUMBER gives the 1-based index.
+        _rn = "ROW_NUMBER() OVER (ORDER BY (SELECT NULL))"
+        _ord_sel = f", {_rn} AS {_ord}" if node.ordinality else ""
+        _inner = (
+            f"SELECT TOP ({_cnt}) ({_gstart}) + ({_rn} - 1){_mul} AS {_vcol}{_ord_sel} "
+            f"FROM sys.all_objects"
+        )
+        return f"({_inner}) {_talias}"
+    if (
+        isinstance(node.function, FunctionCall)
+        and node.function.name.upper() == "GENERATE_SERIES"
+        and len(node.function.args) == 3
+        and dialect in ("oracle", "tsql")
+        and SOURCE_DIALECT.get() == "postgresql"
+        and isinstance(node.function.args[0], CastExpression)
+        and node.function.args[0].target_type.name.upper() == "DATE"
+        and isinstance(node.function.args[2], RawSQL)
+    ):
+        # PG date-range generate_series(date, date, INTERVAL 'n' DAY). Only a day
+        # step is modelled (month/year intervals fall through to the degrade):
+        # Oracle adds days to a DATE directly, T-SQL via DATEADD over a numbers
+        # source. count = floor((stop - start) / step) + 1.
+        # Accept both interval spellings sqlglot may emit: ``INTERVAL '1' DAY``
+        # and ``INTERVAL '1 day'``; only a plain day step (no month/year) matches.
+        _istep = node.function.args[2].sql
+        _dm = re.search(r"(?i)INTERVAL\s+'?(\d+)", _istep)
+        if (
+            _dm
+            and re.search(r"(?i)\bDAYS?\b", _istep)
+            and not re.search(r"(?i)\b(MONTH|YEAR|HOUR|MINUTE|SECOND|WEEK)", _istep)
+        ):
+            _step = _dm.group(1)
+            _dstart = _emit_expression(node.function.args[0], dialect)
+            _dstop = _emit_expression(node.function.args[1], dialect)
+            _dtal = node.alias or "uq_gs"
+            _dvcol = node.column_aliases[0] if node.column_aliases else _dtal
+            if dialect == "oracle":
+                _dmul = "" if _step == "1" else f" * {_step}"
+                _dcnt = (
+                    f"({_dstop}) - ({_dstart}) + 1"
+                    if _step == "1"
+                    else f"FLOOR((({_dstop}) - ({_dstart})) / {_step}) + 1"
+                )
+                _dinner = (
+                    f"SELECT ({_dstart}) + (LEVEL - 1){_dmul} AS {_dvcol} FROM DUAL "
+                    f"CONNECT BY LEVEL <= {_dcnt}"
+                )
+                return f"({_dinner}) {_dtal}"
+            _drn = "ROW_NUMBER() OVER (ORDER BY (SELECT NULL))"
+            _dcnt = f"DATEDIFF(DAY, {_dstart}, {_dstop}) / {_step} + 1"
+            _dinner = (
+                f"SELECT TOP ({_dcnt}) DATEADD(DAY, ({_drn} - 1) * {_step}, {_dstart}) "
+                f"AS {_dvcol} FROM sys.all_objects"
+            )
+            return f"({_dinner}) {_dtal}"
+    if (
+        isinstance(node.function, FunctionCall)
+        and node.function.name.upper() == "GENERATE_SERIES"
+        and len(node.function.args) == 2
+        and dialect in ("oracle", "postgresql")
+        and SOURCE_DIALECT.get() == "tsql"
+        and not node.column_aliases
+    ):
+        # T-SQL's GENERATE_SERIES(start, stop) table function yields a column
+        # named ``value``. PostgreSQL's generate_series names it after the
+        # function, and Oracle has none — spell each so ``value`` resolves.
+        _gs = node.function.args
+        _gstart = _emit_expression(_gs[0], dialect)
+        _gstop = _emit_expression(_gs[1], dialect)
+        _gal = node.alias or "uq_gs"
+        if dialect == "postgresql":
+            return f"generate_series({_gstart}, {_gstop}) AS {_gal}(value)"
+        return (
+            f"(SELECT ({_gstart}) + LEVEL - 1 AS value FROM DUAL CONNECT BY LEVEL <= "
+            f"({_gstop}) - ({_gstart}) + 1) {_gal}"
+        )
+    if node.function is not None:
+        # A function IS the relation (``FROM fn(args) alias``); targets
+        # without the construct degrade in the transformer, so this only
+        # ever renders where it is (or is claimed to be) valid.
+        result = _emit_expression(node.function, dialect or "")
+        if dialect == "oracle":
+            # Oracle spells a function relation ``TABLE(fn(args)) alias``.
+            result = f"TABLE({result})"
+        if node.ordinality:
+            result += " WITH ORDINALITY"
+        if node.column_aliases and node.alias:
+            cols = ", ".join(node.column_aliases)
+            return f"{result} AS {node.alias}({cols})"
+        if node.alias:
+            result += f" {node.alias}"
+        return result
+
+    parts = []
+    if node.database:
+        parts.append(node.database)
+    schema = node.schema
+    if dialect in ("oracle", "mysql", "postgresql") and schema == "dbo":
+        schema = None
+    # PostgreSQL's default schema plays the same role: off PG it is a
+    # RESERVED word on T-SQL (error 156 near 'public') and a nonexistent
+    # database/schema elsewhere.
+    if (
+        dialect in ("oracle", "mysql", "tsql")
+        and schema == "public"
+        and SOURCE_DIALECT.get() == "postgresql"
+    ):
+        schema = None
+    if schema:
+        parts.append(_ident(schema, node.schema_quoted, dialect))
+    name = node.name
+    # A temp table declared anywhere in the script is ``#name`` on T-SQL —
+    # for EVERY reference, not only the creating statement (audit N2).
+    if dialect == "tsql" and not name.startswith("#"):
+        temp_tables = TEMP_TABLES.get()
+        if temp_tables and name.lower() in temp_tables:
+            name = f"#{name}"
+    parts.append(_ident(name, node.quoted, dialect))
+    result = ".".join(parts)
+
+    if node.column_aliases and node.alias:
+        # PG's column-renaming alias has no direct T-SQL spelling on a base
+        # table; the derived-table rewrite is faithful. (PG keeps native;
+        # MySQL/Oracle statements degrade whole in the transformer.)
+        cols = ", ".join(node.column_aliases)
+        if dialect == "tsql":
+            return f"(SELECT * FROM {result}) AS {node.alias}({cols})"
+        return f"{result} AS {node.alias}({cols})"
+
+    # MySQL rejects an alias on the DUAL pseudo-table (error 1064); the alias is
+    # only ever load-bearing for an Oracle hint, which is dropped anyway.
+    if node.alias and not (dialect == "mysql" and node.name.upper() == "DUAL"):
+        result += f" {node.alias}"
+
+    if node.sample_method or node.sample_percent or node.sample_rows:
+        result += _emit_tablesample(node, dialect)
+
+    return result
+
+
+def _emit_tablesample(node: TableRef, dialect: str | None) -> str:
+    """Emit a TABLESAMPLE clause in the target's idiom.
+
+    PostgreSQL/T-SQL keep a native TABLESAMPLE, Oracle uses SAMPLE(pct). MySQL
+    has no row sampling, so it degrades to a documented carrier (a silent drop
+    would return every row). Row-count sampling has no PG/Oracle spelling and is
+    likewise carried.
+    """
+    pct, rows = node.sample_percent, node.sample_rows
+    if dialect == "mysql":
+        what = f"{pct} PERCENT" if pct else f"{rows} ROWS"
+        return (
+            f" /* UNIQUE-1034: TABLESAMPLE ({what}) has no MySQL equivalent — all rows "
+            "returned (docs/03-unsupported.md) */"
+        )
+    if dialect == "tsql":
+        return f" TABLESAMPLE ({pct} PERCENT)" if pct else f" TABLESAMPLE ({rows} ROWS)"
+    if dialect == "oracle":
+        if pct:
+            return f" SAMPLE ({pct})"
+        return (
+            " /* UNIQUE-1035: TABLESAMPLE by row count has no Oracle SAMPLE form "
+            "(docs/03-unsupported.md) */"
+        )
+    # postgresql
+    if pct:
+        return f" TABLESAMPLE {node.sample_method or 'SYSTEM'} ({pct})"
+    return (
+        " /* UNIQUE-1036: TABLESAMPLE by row count has no PostgreSQL equivalent "
+        "(docs/03-unsupported.md) */"
+    )
+
+
 from unique.core.converter.emit import (  # noqa: E402
     _emit_condition,
     _emit_cross_table_update,
     _emit_expression,
     _emit_order_item,
     _emit_select,
-    _emit_table_ref,
     _ident,
     _ident_if_plain,
     _plain_int_value,
