@@ -52,8 +52,14 @@ routines-unblocked and severity:*
   bare-`ROW_COUNT` silent-invalid is gone (fixture regenerated, live-run on
   pg). mysql-source hoists warn the changed-vs-matched divergence (reuses
   the base.py UNIQUE-1192 rationale). `test_rowcount_hoist_b37b.py`.
-- **B36b** — two more unmapped-builtin gaps surfaced out-of-brief: mysql
-  `UNIX_TIMESTAMP()` (func2) and oracle `RAWTOHEX`/`STANDARD_HASH` (func4).
+- ~~B36b~~ — DONE 2026-07-31: `UNIX_TIMESTAMP`→`EXTRACT(EPOCH …)` (niladic
+  FLOOR-wrapped), `RAWTOHEX`→`UPPER(ENCODE(…,'hex'))` type-aware (RAW/BLOB
+  columns direct via the `COLUMN_TYPES` harvest + new `CURRENT_SELECT_TABLE`
+  scoping; character via `CONVERT_TO`; unknown → honest 1151 degrade),
+  `STANDARD_HASH` MD5/SHA256/384/512 byte-identical live; SHA1 (the default)
+  = honest degrade, new `UNIQUE-1235` + 03-unsupported row. func2/func4
+  faithful. Ratchet kept green by extracting table-ref/TABLESAMPLE emission
+  from emit.py (3646→3414) into emit_relations.py.
 - ~~B37~~ — DONE 2026-07-31: expression-position hoist with honest re-evaluated-condition degrade; corpus 1033 count 8 → 0.
 - ~~B38~~ — DONE 2026-07-31: `_peel_leading_statements` in `_core.py` splits a
   folded `<companion DDL> + <routine>` procedural batch — leading statements
