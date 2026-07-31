@@ -41,17 +41,13 @@ target that already shares the source's propagation direction needs no
 rewrite and passes the call through unchanged.
 
 **Discussion.** A straight copy of the call reverses the result on whichever
-side disagrees with the source, exactly as with `CONCAT`/`||`. This was
-filed as a `lying-warning`: the only signal on the Oracle-source →
-PostgreSQL leg was the internal "unread sqlglot arg `ignore_nulls` on
-`Greatest` — may be dropped" tripwire, which does not name the NULL-semantics
-divergence and had no docs entry (`reda-ora-greatest-null`).
+side disagrees with the source, exactly as with `CONCAT`/`||`.
 
 > **Note** faithful — live-verified: MySQL/Oracle `GREATEST(1, NULL, 3)` =
-> `NULL`, reproduced as `NULL` by the guarded `CASE` on PostgreSQL/T-SQL (was
-> `3` before the fix); PostgreSQL's own `GREATEST(1, NULL, 3)` = `3`,
-> reproduced as `3` by `GREATEST(1, 3)` after the literal-`NULL` drop on
-> MySQL/Oracle. No warning in either direction.
+> `NULL`, reproduced as `NULL` by the guarded `CASE` on PostgreSQL/T-SQL;
+> PostgreSQL's own `GREATEST(1, NULL, 3)` = `3`, reproduced as `3` by
+> `GREATEST(1, 3)` after the literal-`NULL` drop on MySQL/Oracle. No warning
+> in either direction.
 
 **See Also.** Corpus [`my-greatest-null`](../../../tests/fixtures/challenge/challenge_mysql.sql), [`my-greatest-null2`](../../../tests/fixtures/challenge/challenge_mysql.sql), [`my-least-greatest-null`](../../../tests/fixtures/challenge/challenge_mysql.sql), [`my-least-null2`](../../../tests/fixtures/challenge/challenge_mysql.sql), [`reda-ora-greatest-null`](../../../tests/fixtures/challenge/challenge_oracle.sql), [`pg-greatest-null`](../../../tests/fixtures/challenge/challenge_postgresql.sql) ·
 [`TestGreatestLeastNullPropagation`](../../../tests/integration/test_challenge.py), [`TestGreatestLeastDropsNullFromPg`](../../../tests/integration/test_challenge.py) (pinned) · `test_mysql_to_tsql[my-greatest-null]`/`test_mysql_to_postgresql[my-greatest-null]` (`test_challenge_assertions_mysql.py`) · `test_ora_case` (`test_challenge_assertions_oracle.py`, `reda-ora-greatest-null` row) ·

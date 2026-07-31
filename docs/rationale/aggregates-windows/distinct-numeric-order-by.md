@@ -27,6 +27,6 @@ restructuring `pg-distinct-on` uses).
 
 > **Note** faithful — live-verified MySQL/PostgreSQL/Oracle =
 > `'10-2-1'`. Oracle (native `LISTAGG(DISTINCT …)`) and T-SQL (warned degrade,
-> `STRING_AGG` has no `DISTINCT`) are unaffected by this specific fix.
+> `STRING_AGG` has no `DISTINCT`) do not need this restructuring.
 
 **See Also.** [`my-groupconcat-distinct-numord`](../../../tests/fixtures/challenge/challenge_mysql.sql).

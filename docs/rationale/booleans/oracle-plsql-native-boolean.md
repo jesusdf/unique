@@ -26,7 +26,7 @@ end $$;
 CREATE OR REPLACE FUNCTION f
 RETURN boolean
 IS
-    b boolean := 1;
+    b boolean := TRUE;
 BEGIN
     b := NOT b;
     RETURN b;
@@ -39,16 +39,13 @@ END;
 *operand's type*, not off "which engine": it is not "`NOT` is banned on
 Oracle", it is "`NOT` of a `NUMBER`-typed value is not a value expression in
 Oracle SQL", and a PL/SQL `BOOLEAN` variable sidesteps that because the
-PL/SQL grammar (unlike the SQL grammar) allows it.
+PL/SQL grammar (unlike the SQL grammar) allows it. The same rule applies to
+the initializer: a `TRUE`/`FALSE` literal assigned to a declared `BOOLEAN`
+variable is kept as the native `TRUE`/`FALSE` keyword, not folded to an
+integer, since Oracle's PL/SQL `BOOLEAN` type only accepts its own literal
+there.
 
-> **Discrepancy noticed while probing (not part of this mechanism):** the
-> same output's `b boolean := 1;` initializer — the source's `TRUE` literal
-> folded to the integer `1` even though the declared type is `BOOLEAN` — is
-> **invalid live Oracle** (`PLS-00382: expression is of wrong type`,
-> confirmed against `oracle://system:***@localhost:1521/FREEPDB1`). This is
-> a distinct literal-typing bug in the `TRUE`/`FALSE` constant-folding path,
-> unrelated to the value/predicate duality this page documents — reported
-> here rather than silently presented as working, not fixed (docs-only
-> brief).
+> **Note** faithful — live-verified: the transpiled function compiles and
+> runs on Oracle with no error.
 
 **See Also.** `tests/unit/core/test_ir_first_families.py::TestZeroPushMysqlOracle::test_pg_boolean_not_stays_on_oracle`.

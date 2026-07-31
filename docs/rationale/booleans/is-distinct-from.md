@@ -73,24 +73,14 @@ question through `INTERSECT`, which every one of these engines already
 defines with null-safe row-comparison semantics (`INTERSECT` matches `NULL`
 to `NULL`): `EXISTS (SELECT a INTERSECT SELECT b)` is true exactly when `a`
 and `b` are not-distinct, including the both-`NULL` case a plain `=` would
-miss (`src/unique/core/converter/emit_expr.py`, the `NULLSAFE_EQ`/
-`NULLSAFE_NEQ` branch of `_emit_binary`: *"T-SQL/Oracle use the version-safe
-EXISTS-INTERSECT form (INTERSECT compares rows with null-safe semantics on
-every engine)"*).
+miss.
 
 Unlike the tri-state `CASE` used for an ordinary comparison earlier on this
 page, the value-position wrap here closes with an explicit `ELSE 0`, not an
 implicit `ELSE NULL` — deliberately, since `IS [NOT] DISTINCT FROM` is
 defined to *never* itself be `UNKNOWN` (that is the entire point of
 "null-safe"), so the two-armed form is exact rather than merely
-conservative. Internally the emitter builds one value-shaped form
-(`CASE WHEN <pred> THEN 1 ELSE 0 END = 1`) and two separate call sites peel
-it back down for their own position — the select-list emitter keeps the
-bare `CASE` (`src/unique/core/converter/emit.py`, `_emit_value_expression`,
-around line 1133), the condition emitter keeps the bare `EXISTS`/`NOT
-EXISTS` predicate (`emit.py`, `_emit_condition`, around line 1497) — so the
-intermediate value-shaped spelling never actually reaches SQL output; both
-forms probed above are exactly what a caller sees.
+conservative.
 
 This is a **different mechanism** from the `IS DISTINCT FROM` spelling
 already documented in [procedural.md](../procedural/README.md)'s Triggers section,

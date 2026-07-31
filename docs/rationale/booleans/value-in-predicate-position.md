@@ -39,9 +39,10 @@ END;
 bare numeric literal is only ever `TRUE` (non-zero) or `FALSE` (zero) — it
 is never `UNKNOWN` unless it is itself `NULL` — so a plain comparison
 (rather than a `CASE`) is enough to synthesize a genuine predicate/boolean
-from it. `RETURN bool` (not `RETURN BOOLEAN`) live-compiles on Oracle in
-this example — verified against the same live instance above — so the
-type-name spelling itself is not a defect worth flagging.
+from it. `RETURN bool` (the lowercase spelling carried over from the
+PostgreSQL source, rather than `RETURN BOOLEAN`) live-compiles on Oracle
+unchanged — no rewrite to the `BOOLEAN` type name is needed for the
+declaration itself.
 
 > **Note** faithful — `0`/non-`0` truthiness and `<> 0`/`= 0` comparisons
 > agree on every value including `NULL` (both stay `NULL`/`UNKNOWN`).

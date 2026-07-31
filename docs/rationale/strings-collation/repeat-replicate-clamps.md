@@ -29,7 +29,7 @@ either way (the `'' ≡ NULL` limit, not a clamp bug).
 negative count, not `''` — a different value class entirely, and on Oracle,
 compounded by Oracle's own `'' ≡ NULL` (above), so an Oracle target *cannot*
 represent PostgreSQL/MySQL's `''` result distinctly from `NULL` regardless of
-the clamp (`pg-repeat-negative`, class `func`).
+the clamp.
 
 > **Note** faithful on T-SQL (clamped to `''`, matching
 > PostgreSQL/MySQL). **Warned limit** on Oracle — not a clamp defect, the same

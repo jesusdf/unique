@@ -19,15 +19,15 @@ SELECT ((YEAR(CAST('2020-12-31' AS DATE)) * 4 + QUARTER(CAST('2020-12-31' AS DAT
       - (YEAR(CAST('2020-01-01' AS DATE)) * 4 + QUARTER(CAST('2020-01-01' AS DATE)))) AS r;
 ```
 
-The `QUARTER`/`WEEK` gap was closed by extending
-`_emit_date_diff`'s unit handling — `QUARTER` as a boundary count over
-`(year*4 + quarter)`, `WEEK` as `FLOOR(day-count / 7)` — on every target.
+`QUARTER` is reconstructed as a boundary count over `(year*4 + quarter)`,
+and `WEEK` as `FLOOR(day-count / 7)`, on every target — this reproduces
+T-SQL's calendar-boundary counting (how many quarter/week boundaries lie
+between the two dates), not an elapsed-duration count.
 
-`DATEPART(WEEKDAY, d)` now routes through the shared `_weekday_extract_expr`
-helper (the same DATEFIRST-/NLS-independent rewrite as PostgreSQL's
-`EXTRACT(DOW)`, computed from a known reference Sunday) and carries an
-explicit caveat, since `@@DATEFIRST` is a **session** setting Unique cannot
-observe at transpile time:
+`DATEPART(WEEKDAY, d)` is rewritten as a DATEFIRST-independent expression
+computed from a known reference Sunday (the same approach PostgreSQL's own
+`EXTRACT(DOW)` uses) and carries an explicit caveat, since `@@DATEFIRST` is a
+**session** setting Unique cannot observe at transpile time:
 
 ```sql
 -- reda-ts-datepart-weekday, tsql → postgresql
@@ -42,27 +42,26 @@ MySQL emits `DAYOFWEEK(d)` directly (already Sunday=1) and Oracle computes it
 via `MOD` arithmetic over a known reference Sunday (`1970-01-04`) — both
 DATEFIRST-independent.
 
-**Discussion.** *Why there is no direct mapping (QUARTER/WEEK).* This was not
-an inherent engine gap but an implementation hole: `_emit_date_diff`'s
-per-target second/minute/hour lookup (`{"HOUR": 3600, "MINUTE": 60, "SECOND":
-1}[unit]`) only covered those three units. A `QUARTER` or `WEEK` unit raised
-an uncaught Python `KeyError`, which the transpile catch-all swallowed and
-surfaced as a `/* TRANSPILATION ERROR: QUARTER */` carrier shipping the raw,
-untranslated T-SQL `DATEDIFF` — invalid on MySQL/Oracle
-(`reda-ts-datediff-quarter`, class `crash`). `DATEADD(QUARTER)`/`DATEADD(WEEK)`
-already worked; only `DATEDIFF`'s unit table was incomplete.
+**Discussion.** *Why QUARTER/WEEK need reconstruction.* None of the target
+engines expose a single function that counts elapsed quarters or weeks the
+way T-SQL's `DATEDIFF(QUARTER, …)`/`DATEDIFF(WEEK, …)` do, so the
+transpiled SQL rebuilds the count arithmetically from each engine's own
+year/quarter/day extraction functions. `DATEADD(QUARTER)` and
+`DATEADD(WEEK)` map onto native interval arithmetic on every target and need
+no such rebuild — only the diff direction requires it.
 
-*Why there is no direct mapping (WEEKDAY).* No target's `EXTRACT`/`DATEPART`
-has a `DAYOFWEEK` field under that name — mapping it there raised a live
-error on all three (PostgreSQL "unit dayofweek not recognized", MySQL 1064,
-Oracle `ORA-00907`) with no warning (`reda-ts-datepart-weekday`, class
-`invalid`).
+*Why WEEKDAY needs its own rewrite.* No target's `EXTRACT`/`DATEPART`
+exposes a field literally named `WEEKDAY`, and even the closest equivalents
+(PostgreSQL's `EXTRACT(DOW)`, MySQL's `DAYOFWEEK`) number the days
+differently, so the value has to be computed from a day-of-week arithmetic
+expression tied to a known reference Sunday, then offset to match T-SQL's
+1-based, Sunday-first numbering.
 
-> **Note** faithful (QUARTER/WEEK — no crash, no carrier,
-> same boundary-count value). **Warned** for WEEKDAY: the emitted value
-> assumes the T-SQL default `@@DATEFIRST = 7` (week starts Sunday); a session
-> that has changed `DATEFIRST` will see a different T-SQL result the transpiled
-> output cannot track, since Unique has no visibility into session state.
+> **Note** faithful for QUARTER/WEEK — same boundary-count value on every
+> target. **Warned** for WEEKDAY: the emitted value assumes the T-SQL
+> default `@@DATEFIRST = 7` (week starts Sunday); a session that has changed
+> `DATEFIRST` will see a different T-SQL result than the transpiled output,
+> since Unique has no visibility into session state.
 
 **See Also.** Corpus [`reda-ts-datediff-quarter`](../../../tests/fixtures/challenge/challenge_sqlserver.sql), [`reda-ts-datepart-weekday`](../../../tests/fixtures/challenge/challenge_sqlserver.sql),
 [`pg-extract-dow`](../../../tests/fixtures/challenge/challenge_postgresql.sql) ·

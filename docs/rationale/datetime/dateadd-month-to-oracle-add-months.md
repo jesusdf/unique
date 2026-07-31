@@ -23,11 +23,10 @@ SELECT ADD_MONTHS(DATE '2020-02-29', 1)
 FROM DUAL;
 ```
 
-The Oracle month/quarter/year path
-(`oracle_month_add_daypreserving`, `src/unique/core/mappings.py:1164`)
-subtracts the extra days `ADD_MONTHS` stepped past, computed with
-`LEAST(day, target-month-length)` so the operand's time-of-day is preserved
-(a subtractive fix-up rather than rebuilding from `TRUNC`-to-first-of-month).
+The translation subtracts the extra days `ADD_MONTHS` stepped past, computed
+with `LEAST(day, target-month-length)` so the operand's time-of-day is
+preserved (a subtractive fix-up rather than rebuilding the date from
+`TRUNC`-to-first-of-month).
 
 **Discussion.** Oracle's `ADD_MONTHS` has a different,
 stickier rule: when the operand *is* its own month's last day, the result is

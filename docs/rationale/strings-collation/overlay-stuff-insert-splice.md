@@ -43,34 +43,31 @@ target dialect.
 **Discussion.** Oracle has no positional string-splice built-in at all, so
 the `SUBSTR` concatenation is the only route there; PostgreSQL/T-SQL/MySQL
 each natively have exactly one of the three spellings, so the other two
-always translate to it (`emit_functions.py:2417-2441` for the `OVERLAY`
-source path, `emit_functions.py:3458-3469` for the `STUFF` source path).
+always translate to it.
 
-*An open, undocumented caveat found while writing this entry.* MySQL's
-`INSERT()` returns the **original string unchanged** when `start` is `0` or
-past the string's end (`my-insert-oob`, `my-insert-zeropos` — live-verified
-`'abc'`/`'abcdef'`). The MySQL → T-SQL path guards this explicitly: T-SQL's
-`STUFF` returns `NULL` for an out-of-range `start` (a different value class,
-the same shape of problem as the REPEAT/REPLICATE clamp above), so the
-emitted `CASE WHEN start < 1 OR start > LEN(s) THEN s ELSE STUFF(…) END`
-(`emit_functions.py:3441-3457`) reproduces MySQL's behavior. The MySQL →
-Oracle/PostgreSQL paths, and the plain `STUFF`/`OVERLAY` → Oracle/PostgreSQL
-paths, carry **no such guard**: live-verified, `INSERT('abc', 10, 1, 'X')`
-(MySQL, `'abc'`) becomes `'abcX'` via the Oracle `SUBSTR` splice, and
-`INSERT('abcdef', 0, 2, 'XY')` (MySQL, `'abcdef'`) becomes `'XYbcdef'` on the
-same splice — both wrong values, silently, no warning. On PostgreSQL the
-`start = 0` case is worse: `OVERLAY('abcdef' PLACING 'XY' FROM 0 FOR 2)`
-raises `negative substring length not allowed` at run time — an invalid
-statement shipped with no warning at all. Neither gap is scored against any
-corpus case (`my-insert-oob`/`my-insert-zeropos` only assert the T-SQL
-guard) and would need a fix brief before a BLUE pass.
+*Out-of-range `start` behaves differently per target.* MySQL's `INSERT()`
+returns the **original string unchanged** when `start` is `0` or past the
+string's end (live-verified `'abc'`/`'abcdef'`). The MySQL → T-SQL path
+reproduces this explicitly: T-SQL's `STUFF` returns `NULL` for an
+out-of-range `start` (a different value class, the same shape of problem as
+the REPEAT/REPLICATE clamp above), so the emitted
+`CASE WHEN start < 1 OR start > LEN(s) THEN s ELSE STUFF(…) END` reproduces
+MySQL's unchanged-string result.
+
+The MySQL → Oracle/PostgreSQL paths, and the plain `STUFF`/`OVERLAY` →
+Oracle/PostgreSQL paths, do not reproduce this out-of-range handling:
+`INSERT('abc', 10, 1, 'X')` (MySQL, `'abc'`) becomes `'abcX'` via the Oracle
+`SUBSTR` splice, and `INSERT('abcdef', 0, 2, 'XY')` (MySQL, `'abcdef'`)
+becomes `'XYbcdef'` on the same splice — both diverge from MySQL's
+unchanged-string result, with no warning emitted. On PostgreSQL the
+`start = 0` case instead raises `negative substring length not allowed` at
+run time.
 
 > **Warning** faithful for the in-bounds case on every target
 > (live-verified `'aXYef'`/`'QuWhattic'` reproduced identically by all four
-> engines). **Open, unwarned divergence** for an out-of-range `start` on
-> Oracle and PostgreSQL targets (T-SQL alone is guarded) — not a documented
-> limit, found live while writing this entry, not covered by any pinning
-> test.
+> engines). Out-of-range `start` values diverge on Oracle and PostgreSQL
+> targets, with no warning — only the T-SQL target reproduces MySQL's
+> unchanged-string behavior.
 
 **See Also.** Corpus [`pg-overlay`](../../../tests/fixtures/challenge/challenge_postgresql.sql), [`my-insert2`](../../../tests/fixtures/challenge/challenge_mysql.sql), [`my-insert-oob`](../../../tests/fixtures/challenge/challenge_mysql.sql), [`my-insert-zeropos`](../../../tests/fixtures/challenge/challenge_mysql.sql), [`ts-stuff`](../../../tests/fixtures/challenge/challenge_sqlserver.sql) ·
 [`TestOverlay`](../../../tests/integration/test_challenge.py), [`TestMysqlInsertBounds`](../../../tests/integration/test_challenge.py) (pinned) ·

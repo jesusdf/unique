@@ -50,9 +50,8 @@ END
 comparison could legitimately be `NULL`-valued for a different input), just
 applied at an assignment or `RETURN` slot instead of a SELECT-list
 projection. `NOT` itself is never emitted as a value-position operator on
-these targets (`src/unique/core/procedural/transformer/base.py`: *"tri-state
-CASE preserves NULL"*; `src/unique/core/converter/emit_expr.py`: *"NOT is
-not a value expression on T-SQL — wrap tri-state"*).
+these targets — the tri-state `CASE` stands in for it wherever a value, not
+a predicate, is expected.
 
 **See Also.** `tests/unit/core/test_ir_first_families.py::TestZeroPushMysqlOracle`,
 `::TestZeroPushZ4bBatch`.

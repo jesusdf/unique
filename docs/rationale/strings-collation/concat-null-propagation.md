@@ -49,11 +49,8 @@ operand must instead be preserved (or synthesised) so the target's
 non-propagating engines (Oracle) or operators still yield `NULL`. Two
 sub-cases compound this: a **non-literal** `NULL` (`CAST(NULL AS
 VARCHAR2(10))`, or a `NULL`-valued **column** known only at runtime) is not
-visible to a compile-time literal check, so an early fix that only stripped
-*literal* `NULL` left both holes open (`reda-ora-concat-null-cast`,
-`my-concat-null-col` — both filed as class `func`/`lying-warning`: the only
-signal was an unrelated internal "unread sqlglot arg" tripwire, not a message
-describing the semantic loss).
+visible to a compile-time literal check, so it needs the runtime `CASE`
+guard rather than a constant fold.
 
 > **Note** faithful in both directions — live-verified: T-SQL
 > `'a' + 'b'` / PostgreSQL `'a' || 'b'` / MySQL `CONCAT('a', 'b')` all give

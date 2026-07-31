@@ -16,12 +16,11 @@ SELECT TIMESTAMP '2020-01-01 00:00:00' + INTERVAL '1 year 2 months 3 days' AS d;
 SELECT DATEADD(DAY, 3, DATEADD(MONTH, 2, DATEADD(YEAR, 1, CAST('2020-01-01 00:00:00' AS DATETIME2)))) AS d;
 ```
 
-`_decompose_interval` (`emit_expr.py:1133`) parses the
-verbose form (and the ANSI `YEAR TO MONTH`/`DAY TO SECOND` span forms) into
-ordered `(count, UNIT)` components, and `_emit_interval_chain`
-(`emit_expr.py:1173`) spells `date ± <interval>` as a chain of per-target
-adds: nested `DATEADD` calls on T-SQL, successive `± INTERVAL n UNIT` terms
-on MySQL (unquoted count) and Oracle/PostgreSQL (quoted count).
+The verbose form (and the ANSI `YEAR TO MONTH`/`DAY TO SECOND` span forms)
+is parsed into ordered `(count, UNIT)` components, and `date ± <interval>`
+is spelled as a chain of per-target adds: nested `DATEADD` calls on T-SQL,
+successive `± INTERVAL n UNIT` terms on MySQL (unquoted count) and
+Oracle/PostgreSQL (quoted count).
 
 On MySQL/Oracle the same source chains `+ INTERVAL 1 YEAR + INTERVAL 2 MONTH
 + INTERVAL 3 DAY` (MySQL) / `+ INTERVAL '1' YEAR + INTERVAL '2' MONTH +
@@ -32,11 +31,8 @@ accepts PostgreSQL's free-text multi-field spelling: T-SQL has no interval
 literal at all, MySQL's `INTERVAL` syntax takes exactly one `n UNIT` pair per
 addition, and Oracle's ANSI interval literals need an explicit
 `YEAR TO MONTH`/`DAY TO SECOND` qualifier with a different internal
-delimiter. Before this was handled, the literal was emitted **verbatim** into
-date arithmetic on every non-PostgreSQL target and rejected outright
-(`pg-multifield-interval-arith` — a single-unit interval like `INTERVAL '1
-month'` already converted correctly; only the multi-field form slipped
-through invalid, with no warning).
+delimiter. Decomposing the literal into single-unit components and chaining
+them as successive adds is the only spelling every target accepts.
 
 > **Note** faithful — chained single-unit adds are
 > associative and produce the same result date (`2021-03-04`) as PostgreSQL's

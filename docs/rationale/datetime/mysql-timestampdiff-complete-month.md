@@ -28,26 +28,24 @@ SELECT (((EXTRACT(YEAR FROM DATE '2020-03-30') * 12 + EXTRACT(MONTH FROM DATE '2
               THEN 1 ELSE 0 END) AS r;
 ```
 
-A shared helper (`_complete_period_adjust`,
-`emit_functions.py:179`) drops the incomplete final period from any
-year/quarter/month boundary count: it re-adds the boundary count as an
-interval to `start` and subtracts 1 whenever that overshoots `end`.
+The translation drops the incomplete final period from any
+year/quarter/month boundary count on every target: it re-adds the boundary
+count as an interval to `start` and subtracts 1 whenever that overshoots
+`end`.
 
 **Discussion.** T-SQL `DATEDIFF(MONTH, …)`, and the
 naïve `(year*12 + month)` boundary difference used for PostgreSQL/Oracle,
 both count **calendar-boundary crossings**, not complete periods —
 `DATEDIFF(MONTH, '2020-01-15', '2020-03-10')` = `2` (January→February,
 February→March boundaries), overcounting by exactly the incomplete final
-period. The gap was found and fixed once for the T-SQL target
-(`my-timestampdiff-mon`), then found again on PostgreSQL/Oracle
-(`my-timestampdiff-mon-pgora`) — the boundary-count rewrite used there had not
-inherited the same adjustment.
+period. Reproducing MySQL's complete-period semantics on every target
+requires the same correction regardless of which boundary-counting
+expression a target uses underneath.
 
-> **Note** faithful — live-verified `1` (T-SQL) and the
-> PG/Oracle case verified against MySQL's own `1` (was silently `2` before the
-> fix). No warning; a plain `DATEDIFF`-sourced batch (T-SQL boundary counting,
-> not MySQL complete-period counting) deliberately keeps the unadjusted
-> boundary count.
+> **Note** faithful — live-verified `1` on all four engines, matching
+> MySQL's own result. No warning; a plain `DATEDIFF`-sourced batch (T-SQL
+> boundary counting, not MySQL complete-period counting) deliberately keeps
+> the unadjusted boundary count.
 
 **See Also.** Corpus [`my-timestampdiff-mon`](../../../tests/fixtures/challenge/challenge_mysql.sql), [`my-timestampdiff-mon-pgora`](../../../tests/fixtures/challenge/challenge_mysql.sql) ·
 `emit_functions.py::_complete_period_adjust` (docstring) ·

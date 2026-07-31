@@ -32,7 +32,7 @@ cross-engine string comparison gets — that warning is about case/accent
 sensitivity and trailing spaces, a separate mechanism from the class
 translation itself.
 
-> **Note** faithful — live-verified 2026-07-30 on all four engines
+> **Note** faithful — live-verified on all four engines
 > (`'Bob'` matches, value `1`); pinned by
 > [`TestTsqlLikeCharClassTranslated`](../../../tests/integration/test_challenge.py).
 
