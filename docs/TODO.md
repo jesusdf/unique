@@ -76,6 +76,22 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
   matches "CREATE PROCEDURE" inside a *comment*, setting `in_plsql` early.
   Latent guardrail-3 wrinkle; harmless post-B38 (the peel undoes it) but
   the splitter should not read comment text.
+- **B50** (P2, found during D1-recall-2, live-probed) — `INTERSECT ALL` /
+  `EXCEPT ALL` → Oracle/T-SQL fall back to plain `INTERSECT`/`MINUS`-class
+  forms with **zero warnings** — duplicate rows silently collapse. Oracle
+  21c+ supports `INTERSECT ALL`/`MINUS ALL` natively → passthrough there
+  (live-verify on 23c); T-SQL has no ALL form → rewrite (ROW_NUMBER pairing)
+  or warned degrade, never a silent dedup.
+- **B51** (P3, found during D1-recall-2, probed) — T-SQL
+  `OPTION (MAXRECURSION n)` on a recursive CTE is dropped with only the
+  generic unread-args tripwire warning (`UNIQUE-1228` "internal: unread
+  sqlglot arg 'options'"). Promote to a real handler: drop with a proper
+  documented warning (semantics genuinely diverge: T-SQL errors at the
+  limit, PG recurses unbounded).
+- **D1b2** (P3, docs) — the 18 new gap rows from the batch-5b full-recall
+  pass (2 HIGH: binary-collation compensation family, recursive-CTE
+  synthesis family) — table in `audit/2026-07-31-docs-gap-sweep.md`
+  §Batch 5b; write as articles after the navigation restructure lands.
 - **B49** (P2, found during D1b, live-probed) — `REPLACE t SET a=1 …` (MySQL)
   emits a `UNIQUE-1003` comment-only carrier on EVERY target — including
   `mysql → mysql` (the identity direction should round-trip valid MySQL
