@@ -106,6 +106,42 @@ def _local_tz_gap(
     return mapped, None, note.format(name=col.name) if note else ""
 
 
+#: Source dialects whose *bare* numeric type (no precision/scale) denotes an
+#: arbitrary-precision value — Oracle's ``NUMBER``. A non-id column of that type
+#: is kept as an unbounded ``NUMERIC`` (B47); on targets without an unbounded
+#: numeric it is bounded + warned. Named as a semantic set (not an inline
+#: source-dialect literal) so the *why* is explicit and future sources can join.
+_ARBITRARY_PRECISION_SOURCES = frozenset({"oracle"})
+
+
+def _unbounded_numeric_gap(
+    col: ColumnDefinition, dialect: str
+) -> tuple[str, tuple[int, ...] | None, str] | None:
+    """Bound an unbounded arbitrary-precision numeric on a target that lacks one.
+
+    A non-id bare Oracle ``NUMBER`` reaches the emitter as a param-less
+    ``NUMERIC``/``DECIMAL`` (B47). PostgreSQL's ``NUMERIC`` is unbounded too, so
+    it is left alone (``None``); MySQL and T-SQL have no unbounded numeric, so it
+    is bounded to the project's canonical ``DECIMAL(38, 10)`` (the same spelling
+    ``TO_NUMBER`` and the numeric casts use) with a ``UNIQUE-1236`` warning.
+    """
+    if (
+        dialect in ("tsql", "mysql")
+        and col.data_type.name.upper() in ("NUMERIC", "DECIMAL")
+        and not col.data_type.params
+        and SOURCE_DIALECT.get() in _ARBITRARY_PRECISION_SOURCES
+    ):
+        return (
+            "DECIMAL",
+            (38, 10),
+            f"-- UNIQUE-1236: {dialect} has no unbounded numeric type — column "
+            f"{col.name} (Oracle bare NUMBER) is bounded to DECIMAL(38, 10); "
+            "values beyond that precision/scale are not representable "
+            "(docs/03-unsupported.md)",
+        )
+    return None
+
+
 def _type_gap_map(
     col: ColumnDefinition, dtype: str, dialect: str
 ) -> tuple[str, tuple[int, ...] | None, str]:
@@ -402,9 +438,14 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     elif _tn == "JSONB":
                         dtype = "JSONB"
                 # Types the target genuinely lacks (TIME/INTERVAL on Oracle,
-                # INTERVAL on T-SQL/MySQL, multi-bit BIT(n), >6-digit
-                # fractional seconds on MySQL): closest type + warned note.
-                dtype, _gap_params, _gap_note = _type_gap_map(col, dtype, dialect)
+                # INTERVAL on T-SQL/MySQL, multi-bit BIT(n), >6-digit fractional
+                # seconds on MySQL, an unbounded Oracle-NUMBER value column on
+                # MySQL/T-SQL): closest type + warned note.
+                _ub_gap = _unbounded_numeric_gap(col, dialect)
+                if _ub_gap is not None:
+                    dtype, _gap_params, _gap_note = _ub_gap
+                else:
+                    dtype, _gap_params, _gap_note = _type_gap_map(col, dtype, dialect)
                 if _gap_note:
                     set_type_notes.append(_gap_note)
                 if _gap_params is not None:

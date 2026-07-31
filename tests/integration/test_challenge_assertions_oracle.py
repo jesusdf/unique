@@ -605,28 +605,47 @@ CASES.update(
             },
         ),
         "ora-gen-expr": Case(
+            # B47: a/b/hyp are non-id bare NUMBER columns — they keep Oracle's
+            # arbitrary precision (unbounded NUMERIC on PG, bounded DECIMAL(38,10)
+            # + a UNIQUE-1236 warning on MySQL/T-SQL), never a truncating BIGINT.
             "ora-gen-expr ",
             {
                 "tsql": Expect(
-                    ("hyp AS (SQRT(a * a + b * b))",), ("GENERATED ALWAYS",)
+                    ("a DECIMAL(38, 10)", "hyp AS (SQRT(a * a + b * b))"),
+                    ("GENERATED ALWAYS", "BIGINT"),
+                    warn=True,
                 ),
                 "postgresql": Expect(
-                    ("GENERATED ALWAYS AS (SQRT(a * a + b * b)) STORED",), ("NUMBER",)
+                    (
+                        "a NUMERIC",
+                        "hyp NUMERIC GENERATED ALWAYS AS (SQRT(a * a + b * b)) STORED",
+                    ),
+                    ("NUMBER", "BIGINT"),
                 ),
                 "mysql": Expect(
-                    ("hyp BIGINT GENERATED ALWAYS AS (SQRT(a * a + b * b))",),
-                    ("NUMBER",),
+                    (
+                        "a DECIMAL(38, 10)",
+                        "hyp DECIMAL(38, 10) GENERATED ALWAYS AS (SQRT(a * a + b * b))",
+                    ),
+                    ("NUMBER", "BIGINT"),
+                    warn=True,
                 ),
             },
         ),
         "ora-insert-append": Case(
-            # The /*+ APPEND */ hint is advisory and dropped (warns); the executable
-            # signal is NUMBER -> BIGINT and FROM DUAL removal.
+            # The /*+ APPEND */ hint is advisory and dropped; the executable signal
+            # is the non-id bare NUMBER column keeping its precision (B47 — bounded
+            # DECIMAL(38,10) + warning on MySQL/T-SQL, unbounded NUMERIC on PG,
+            # never a truncating BIGINT) and FROM DUAL removal on PG/T-SQL.
             "ora-insert-append ",
             {
-                "tsql": Expect(("a BIGINT",), ("NUMBER", "FROM DUAL")),
-                "postgresql": Expect(("a BIGINT",), ("NUMBER", "FROM DUAL")),
-                "mysql": Expect(("a BIGINT",), ("NUMBER",)),
+                "tsql": Expect(
+                    ("a DECIMAL(38, 10)",), ("NUMBER", "FROM DUAL", "BIGINT"), warn=True
+                ),
+                "postgresql": Expect(("a NUMERIC",), ("NUMBER", "FROM DUAL", "BIGINT")),
+                "mysql": Expect(
+                    ("a DECIMAL(38, 10)",), ("NUMBER", "BIGINT"), warn=True
+                ),
             },
         ),
         "ora-for-update-nowait": Case(

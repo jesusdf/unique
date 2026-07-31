@@ -3029,4 +3029,24 @@ RATIONALES: dict[str, Rationale] = {
             "still map faithfully (byte-for-byte, live-verified)."
         ),
     ),
+    "UNIQUE-1236": _R(
+        construct="A non-id bare Oracle NUMBER column (→ MySQL / T-SQL)",
+        reason=(
+            "Oracle's unqualified NUMBER holds an arbitrary-precision value. A "
+            "column with no id role (not a PRIMARY KEY, UNIQUE, identity, or "
+            "FOREIGN KEY) keeps that meaning as unbounded NUMERIC on PostgreSQL, "
+            "but MySQL and T-SQL have no unbounded numeric type, so it is bounded "
+            "to the project's canonical DECIMAL(38, 10) instead of being promoted "
+            "to a fractional-value-truncating BIGINT."
+        ),
+        example_case=(
+            "tests/unit/core/test_boolean_timestamp.py::"
+            "TestOracleBareNumberToInteger::"
+            "test_non_key_bare_number_to_tsql_bounded_and_warned"
+        ),
+        divergence=(
+            "Warned limit — values needing more than 38 total / 10 fractional "
+            "digits are not representable; PostgreSQL keeps the full precision."
+        ),
+    ),
 }
