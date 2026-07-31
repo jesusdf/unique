@@ -160,12 +160,6 @@ LEDGER: tuple[Excluded, ...] = (
         sql="SELECT chr(233), ascii('é')",
     ),
     Excluded(
-        id="reda-ora-decode-mixed-type",
-        tag="defect-pending-fix",
-        reason="DECODE mixed-type default lowers to a rejected int CAST",
-        sql="SELECT DECODE(1, 1, 'a', 2, 'b', 99) AS r FROM DUAL",
-    ),
-    Excluded(
         id="ts-compress",
         tag="defect-pending-fix",
         reason="COMPRESS GZIP vs ZLIB container on MySQL",

@@ -194,15 +194,20 @@ CASES.update(
                 "mysql": Expect(("CURRENT_USER()",), ("`USER`",)),
             },
         ),
-        # invalid (PG): DECODE mixed-type branches -> PG CASE type error; cast
-        # numeric branches to the first result's (text) type.
+        # invalid (PG + tsql): DECODE mixed-type branches -> a CASE type error
+        # (PG rejects text-vs-numeric; T-SQL tries to convert the text branch TO
+        # int and errors). Cast the numeric branches to the first result's text
+        # type on both.
         "reda-ora-decode-mixed-type": Case(
             "reda-ora-decode-mixed-type ",
             {
                 "postgresql": Expect(
                     ("CASE WHEN 1 = 1 THEN 'a'", "ELSE CAST(99 AS TEXT)"), ("DECODE",)
                 ),
-                "tsql": Expect(("CASE WHEN 1 = 1 THEN 'a'",), ("DECODE",)),
+                "tsql": Expect(
+                    ("CASE WHEN 1 = 1 THEN 'a'", "ELSE CAST(99 AS VARCHAR(4000))"),
+                    ("DECODE",),
+                ),
                 "mysql": Expect(("CASE WHEN 1 = 1 THEN 'a'",), ("DECODE",)),
             },
         ),

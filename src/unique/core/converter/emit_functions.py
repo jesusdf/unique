@@ -2643,11 +2643,13 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         # (DECODE(1,1,'a',...,99) -> 'invalid input syntax for type integer').
         # When the first result is a string literal, cast numeric-literal
         # result/default branches to text to mirror Oracle's coercion.
-        # The target's coercion type for a first-result-is-string DECODE (only
-        # PostgreSQL is strict enough about CASE result types to need it); a
-        # dict so other strict dialects can join without a new string-compare.
+        # The target's coercion type for a first-result-is-string DECODE.
+        # PostgreSQL rejects a text branch mixed with a numeric ELSE; T-SQL is
+        # worse — integer has higher precedence, so it tries to convert the text
+        # branch TO int and errors ("converting the varchar value 'a' to int").
+        # Both need the numeric branches cast to a character type.
         _first_result = node.args[2] if len(node.args) >= 3 else None
-        _coerce_type = {"postgresql": "TEXT"}.get(dialect)
+        _coerce_type = {"postgresql": "TEXT", "tsql": "VARCHAR(4000)"}.get(dialect)
         _coerce_text = (
             _coerce_type is not None
             and isinstance(_first_result, Literal)
@@ -3231,9 +3233,7 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         # MySQL rounds a float length (LEFT('hello',2.9)='hel'); Oracle SUBSTR
         # truncates, so round to match. A provably non-negative integer literal
         # needs no rounding.
-        if SOURCE_DIALECT.get() == "mysql" and not _is_nonneg_int_literal(
-            node.args[1]
-        ):
+        if SOURCE_DIALECT.get() == "mysql" and not _is_nonneg_int_literal(node.args[1]):
             n = f"ROUND({n})"
         return f"SUBSTR({s}, 1, {n})"
     if up == "INITCAP" and node.args and dialect in ("oracle", "postgresql"):
@@ -3688,5 +3688,4 @@ from unique.core.converter.emit_expr import (  # noqa: E402
     _is_date_only_literal,
     _is_integer_operand,
     _is_nonneg_int_literal,
-    _is_nonneg_literal,
 )

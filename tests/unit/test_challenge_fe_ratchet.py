@@ -55,7 +55,13 @@ from tests.helpers.corpus_diff import is_comparable
 # as NUMERIC ``DATE + int`` (19000102) — switched to ADDDATE (ts-cast-int-
 # datetime). 2 removed: 11 defect-pending-fix, 5 documented-inherent, 2
 # session-dependent = 18.
-LEDGER_SIZE_FLOOR = 18
+#
+# 2026-07-31 (brief T4-B cont.): DECODE mixed-type coercion extended to T-SQL —
+# a text first-result with a numeric ELSE tried to convert the text branch to
+# int (T-SQL precedence) and errored; the numeric branches now cast to
+# VARCHAR(4000) as PG already did to TEXT (reda-ora-decode-mixed-type). 1
+# removed: 10 defect-pending-fix, 5 documented-inherent, 2 session-dependent = 17.
+LEDGER_SIZE_FLOOR = 17
 
 
 def _eligible_cases() -> list[CorpusEntry]:
