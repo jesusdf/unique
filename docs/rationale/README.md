@@ -25,7 +25,7 @@ This is the narrative companion to two machine-checked sources of truth:
 | [Strings, concatenation and collation](strings-collation/README.md) | concatenation & NULL, LIKE/ESCAPE, character classes, collation/order, Oracle `''` ≡ NULL, byte vs char lengths | 13 |
 | [Aggregates and window functions](aggregates-windows/README.md) | window frames, ordered aggregates, string aggregation, DISTINCT ON, boolean aggregates | 13 |
 | [Booleans: the value/predicate duality](booleans/README.md) | tri-state `CASE` wrap for value position, `<> 0` synthesis for predicate position, boolean-column `IS TRUE`/`IS FALSE` re-spelling | 7 |
-| [DML: PIVOT/UNPIVOT, MERGE, DELETE, row values](dml/README.md) | PIVOT/UNPIVOT, MERGE/upsert lowering, multi-table DELETE, row caps, row-value comparisons | 21 |
+| [DML: PIVOT/UNPIVOT, MERGE, DELETE, row values](dml/README.md) | PIVOT/UNPIVOT, MERGE/upsert lowering, multi-table DELETE, row caps, row-value comparisons | 22 |
 | [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md) | identity/SERIAL, temp tables, FK actions, sequences, storage options | 14 |
 | [Procedural: cursors, dynamic SQL, system procedures, session directives](procedural/README.md) | cursors, error handling, dynamic SQL, system procedures, session directives | 29 |
 
@@ -659,6 +659,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [`ROWNUM <= n` (Oracle) → `LIMIT` / `TOP` / `FETCH FIRST`](dml/oracle-rownum-row-cap.md) | Oracle's `ROWNUM` is a pseudo-column numbering rows as they are produced; `WHERE ROWNUM <= n` is Oracle's idiom for capping a result to `n` rows — with no ordering guarantee unless paired with an `ORDER BY` (the `ROWNUM` filter applies before any sort). |
 | [Parenthesized set-operation arms unwrap; an arm's own `ORDER BY`/`LIMIT` is shielded](dml/parenthesized-set-op-arms.md) | `(SELECT …) UNION ALL (SELECT …)` parenthesizes each arm of a set operation — often just for readability, but sometimes because one arm carries its own `ORDER BY`/`LIMIT` that must apply to *that arm alone*, not to the combined result. |
 | [Parenthesized join-relation groups unwrap; a column-aliased table ref wraps into a derived table](dml/parenthesized-join-groups.md) | Two different `FROM`-clause shapes both need restructuring, for opposite reasons: a **parenthesized join group** — `FROM (t1 JOIN t2 ON …), t3` — groups a join tree for readability with no semantic effect of its own; a **column-aliased table reference** — PostgreSQL's `tbl AS alias(col1, col2)` — renames the table's columns positionally, a real semantic operation most targets cannot spell against a plain table reference at all. |
+| [`INTERSECT ALL` / `EXCEPT ALL` → Oracle / T-SQL](dml/intersect-except-all.md) | `INTERSECT ALL` and `EXCEPT ALL` compare rows the same way as the plain `INTERSECT`/`EXCEPT`, but **keep duplicates**: `INTERSECT ALL` returns `min(count in left, count in right)` copies of each matching row, and `EXCEPT ALL` returns `max(count in left − count in right, 0)` copies. |
 
 #### [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md)
 

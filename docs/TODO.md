@@ -82,12 +82,18 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
   matches "CREATE PROCEDURE" inside a *comment*, setting `in_plsql` early.
   Latent guardrail-3 wrinkle; harmless post-B38 (the peel undoes it) but
   the splitter should not read comment text.
-- **B50** (P2, found during D1-recall-2, live-probed) — `INTERSECT ALL` /
-  `EXCEPT ALL` → Oracle/T-SQL fall back to plain `INTERSECT`/`MINUS`-class
-  forms with **zero warnings** — duplicate rows silently collapse. Oracle
-  21c+ supports `INTERSECT ALL`/`MINUS ALL` natively → passthrough there
-  (live-verify on 23c); T-SQL has no ALL form → rewrite (ROW_NUMBER pairing)
-  or warned degrade, never a silent dedup.
+- ~~B50~~ — DONE 2026-07-31: Oracle native passthrough (`INTERSECT ALL` /
+  `MINUS ALL`, live-probed on 23c); T-SQL gets the bounded ROW_NUMBER-pairing
+  rewrite (top-down traversal so chain shapes read the original structure),
+  warned whole-degrade outside the bound — never a silent dedup. 28 tests
+  incl. live multiset value checks on 4 engines; new rationale article +
+  compatibility row. `test_setop_all.py`.
+- **B52** (P2, found during B50) — a CTE directly preceding a set-op chain
+  (`WITH … SELECT … INTERSECT ALL SELECT …`) loses its CTEs: sqlglot hangs
+  `with_` off the Intersect/Except/Union node and `_convert_union`
+  (`convert.py`) never reads it. Semi-warned (the UNIQUE-1228 unread-args
+  tripwire fires) but the CTE text is gone from the output — promote to a
+  real handler that converts the WITH.
 - **B51** (P3, found during D1-recall-2, probed) — T-SQL
   `OPTION (MAXRECURSION n)` on a recursive CTE is dropped with only the
   generic unread-args tripwire warning (`UNIQUE-1228` "internal: unread

@@ -83,3 +83,9 @@ format and sourcing rules.
 |---|---|---|
 | [Parenthesized set-operation arms unwrap; an arm's own `ORDER BY`/`LIMIT` is shielded](parenthesized-set-op-arms.md) | cross-engine | `(SELECT …) UNION ALL (SELECT …)` parenthesizes each arm of a set operation — often just for readability, but sometimes because one arm carries its own `ORDER BY`/`LIMIT` that must apply to *that arm alone*, not to the combined result. |
 | [Parenthesized join-relation groups unwrap; a column-aliased table ref wraps into a derived table](parenthesized-join-groups.md) | cross-engine | Two different `FROM`-clause shapes both need restructuring, for opposite reasons: a **parenthesized join group** — `FROM (t1 JOIN t2 ON …), t3` — groups a join tree for readability with no semantic effect of its own; a **column-aliased table reference** — PostgreSQL's `tbl AS alias(col1, col2)` — renames the table's columns positionally, a real semantic operation most targets cannot spell against a plain table reference at all. |
+
+## Set-operation `ALL` quantifier
+
+| Article | Direction | Description |
+|---|---|---|
+| [`INTERSECT ALL` / `EXCEPT ALL` → Oracle / T-SQL](intersect-except-all.md) | cross-engine | `INTERSECT ALL` and `EXCEPT ALL` compare rows the same way as the plain `INTERSECT`/`EXCEPT`, but **keep duplicates**: `INTERSECT ALL` returns `min(count in left, count in right)` copies of each matching row, and `EXCEPT ALL` returns `max(count in left − count in right, 0)` copies. |
