@@ -94,6 +94,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [T-SQL `@@FETCH_STATUS` → Oracle / PostgreSQL / MySQL](tsql-fetch-status-to-oracle-postgresql-mysql.md) | tsql → oracle/postgresql/mysql | T-SQL exposes cursor state through a single global variable, `@@FETCH_STATUS`, checked right after a `FETCH` (`0` = a row was returned, `-1` = no more rows, `-2` = the fetched row is missing). |
+| [Implicit row count in EXPRESSION position (Oracle `SQL%ROWCOUNT` / T-SQL `@@ROWCOUNT` / MySQL `ROW_COUNT()`) → PostgreSQL `GET DIAGNOSTICS` hoist](rowcount-expression-hoist-to-postgresql.md) | oracle/tsql/mysql → postgresql | Oracle's `SQL%ROWCOUNT`, T-SQL's `@@ROWCOUNT`, and MySQL's `ROW_COUNT()` are all readable **inline**, as an expression, anywhere a value is expected (`IF SQL%ROWCOUNT <> 1`, `v := SQL%ROWCOUNT + 1`, a call argument, a `RETURN`). |
 
 #### Base64 decode idiom
 
@@ -259,6 +260,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [Oracle `%FOUND`/`%NOTFOUND`/`%ISOPEN`/`%ROWCOUNT` → T-SQL / MySQL](oracle-cursor-attributes.md) | oracle → tsql/mysql | Oracle attaches state to each named cursor: `c%FOUND`/`c%NOTFOUND` (did the last `FETCH` return a row), `c%ISOPEN`, and `c%ROWCOUNT` (rows fetched so far on that cursor). |
 | [PL/pgSQL implicit `FOUND` / Oracle implicit `SQL%FOUND` → T-SQL `@@ROWCOUNT` / MySQL `ROW_COUNT()`](implicit-found-flag.md) | oracle/postgresql → tsql/mysql | PL/pgSQL keeps one implicit boolean, `FOUND`, updated by the *last* `SELECT INTO`, `UPDATE`, `DELETE`, `INSERT`, or `FETCH` in the routine — it answers "did that last statement affect/return a row?" for the routine as a whole, not for one named cursor. |
+| [Implicit row count in EXPRESSION position (Oracle `SQL%ROWCOUNT` / T-SQL `@@ROWCOUNT` / MySQL `ROW_COUNT()`) → PostgreSQL `GET DIAGNOSTICS` hoist](rowcount-expression-hoist-to-postgresql.md) | oracle/tsql/mysql → postgresql | Oracle's `SQL%ROWCOUNT`, T-SQL's `@@ROWCOUNT`, and MySQL's `ROW_COUNT()` are all readable **inline**, as an expression, anywhere a value is expected (`IF SQL%ROWCOUNT <> 1`, `v := SQL%ROWCOUNT + 1`, a call argument, a `RETURN`). |
 
 #### Expression arguments hoisted through a synthesized variable
 
@@ -584,6 +586,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [T-SQL `@@FETCH_STATUS` → Oracle / PostgreSQL / MySQL](tsql-fetch-status-to-oracle-postgresql-mysql.md) | tsql → oracle/postgresql/mysql | T-SQL exposes cursor state through a single global variable, `@@FETCH_STATUS`, checked right after a `FETCH` (`0` = a row was returned, `-1` = no more rows, `-2` = the fetched row is missing). |
+| [Implicit row count in EXPRESSION position (Oracle `SQL%ROWCOUNT` / T-SQL `@@ROWCOUNT` / MySQL `ROW_COUNT()`) → PostgreSQL `GET DIAGNOSTICS` hoist](rowcount-expression-hoist-to-postgresql.md) | oracle/tsql/mysql → postgresql | Oracle's `SQL%ROWCOUNT`, T-SQL's `@@ROWCOUNT`, and MySQL's `ROW_COUNT()` are all readable **inline**, as an expression, anywhere a value is expected (`IF SQL%ROWCOUNT <> 1`, `v := SQL%ROWCOUNT + 1`, a call argument, a `RETURN`). |
 
 #### Dynamic SQL INTO capture
 
@@ -641,8 +644,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### MySQL as source
 
-| [Error handling](#error-handling-3) | [Return-type and signature synthesis](#return-type-and-signature-synthesis-6) | [Triggers](#triggers-5) | [Loop and cursor desugaring](#loop-and-cursor-desugaring-5) |
-|---|---|---|---|
+| [Error handling](#error-handling-3) | [Return-type and signature synthesis](#return-type-and-signature-synthesis-6) | [Triggers](#triggers-5) | [Loop and cursor desugaring](#loop-and-cursor-desugaring-5) | [Cursor attribute mapping](#cursor-attribute-mapping-6) |
+|---|---|---|---|---|
 
 #### Error handling
 
@@ -668,9 +671,15 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [Leading `DECLARE` block reordered (MySQL): variables before cursors](mysql-declare-reorder.md) | mysql | MySQL requires every `DECLARE <cursor>` to come *after* every `DECLARE <variable>` in the same block (error 1337, "Variable or condition declaration after cursor or handler declaration") — a rule no other target engine imposes, so a source routine that declares its cursor before its scalar variables (a legal order on Oracle/T-SQL/PostgreSQL) needs its leading declaration block reordered for MySQL specifically. |
 
+#### Cursor attribute mapping
+
+| Article | Direction | Description |
+|---|---|---|
+| [Implicit row count in EXPRESSION position (Oracle `SQL%ROWCOUNT` / T-SQL `@@ROWCOUNT` / MySQL `ROW_COUNT()`) → PostgreSQL `GET DIAGNOSTICS` hoist](rowcount-expression-hoist-to-postgresql.md) | oracle/tsql/mysql → postgresql | Oracle's `SQL%ROWCOUNT`, T-SQL's `@@ROWCOUNT`, and MySQL's `ROW_COUNT()` are all readable **inline**, as an expression, anywhere a value is expected (`IF SQL%ROWCOUNT <> 1`, `v := SQL%ROWCOUNT + 1`, a call argument, a `RETURN`). |
+
 ### MySQL as target
 
-| [System procedures](#system-procedures-4) | [`SET IDENTITY_INSERT` coherent degrade](#set-identity_insert-coherent-degrade-3) | [SQL*Plus directives preserved as comments](#sqlplus-directives-preserved-as-comments-3) | [`%TYPE` / `%ROWTYPE` carrier without `--db-url`](#type--rowtype-carrier-without---db-url-3) | [Cursor attribute mapping](#cursor-attribute-mapping-6) | [Return-type and signature synthesis](#return-type-and-signature-synthesis-7) | [Other `[limit]` procedural entries](#other-limit-procedural-entries-3) | [Triggers](#triggers-6) | [Loop and cursor desugaring](#loop-and-cursor-desugaring-6) | [Base64 decode idiom](#base64-decode-idiom-3) | [ERROR_MESSAGE() function mapping](#error_message-function-mapping-3) | [Mid-block DECLARE hoisted to the routine's top declaration section](#mid-block-declare-hoisted-to-the-routines-top-declaration-section-3) | [SELECT ... INTO :NEW.col pseudo-row targets](#select--into-newcol-pseudo-row-targets-2) | [Package ref-cursor type resolution and usage-inferred mode](#package-ref-cursor-type-resolution-and-usage-inferred-mode-3) | [THROW/RAISERROR numeric error code](#throwraiserror-numeric-error-code-3) | [Oracle LOB and numeric-cast helper functions](#oracle-lob-and-numeric-cast-helper-functions-2) | [CONVERT(...,HASHBYTES(...),2) style-2 hex wrapper collapse](#converthashbytes2-style-2-hex-wrapper-collapse-1) | [Dynamic SQL bind arguments copied into session variables](#dynamic-sql-bind-arguments-copied-into-session-variables-1) |
+| [System procedures](#system-procedures-4) | [`SET IDENTITY_INSERT` coherent degrade](#set-identity_insert-coherent-degrade-3) | [SQL*Plus directives preserved as comments](#sqlplus-directives-preserved-as-comments-3) | [`%TYPE` / `%ROWTYPE` carrier without `--db-url`](#type--rowtype-carrier-without---db-url-3) | [Cursor attribute mapping](#cursor-attribute-mapping-7) | [Return-type and signature synthesis](#return-type-and-signature-synthesis-7) | [Other `[limit]` procedural entries](#other-limit-procedural-entries-3) | [Triggers](#triggers-6) | [Loop and cursor desugaring](#loop-and-cursor-desugaring-6) | [Base64 decode idiom](#base64-decode-idiom-3) | [ERROR_MESSAGE() function mapping](#error_message-function-mapping-3) | [Mid-block DECLARE hoisted to the routine's top declaration section](#mid-block-declare-hoisted-to-the-routines-top-declaration-section-3) | [SELECT ... INTO :NEW.col pseudo-row targets](#select--into-newcol-pseudo-row-targets-2) | [Package ref-cursor type resolution and usage-inferred mode](#package-ref-cursor-type-resolution-and-usage-inferred-mode-3) | [THROW/RAISERROR numeric error code](#throwraiserror-numeric-error-code-3) | [Oracle LOB and numeric-cast helper functions](#oracle-lob-and-numeric-cast-helper-functions-2) | [CONVERT(...,HASHBYTES(...),2) style-2 hex wrapper collapse](#converthashbytes2-style-2-hex-wrapper-collapse-1) | [Dynamic SQL bind arguments copied into session variables](#dynamic-sql-bind-arguments-copied-into-session-variables-1) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 
 #### System procedures
@@ -862,6 +871,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Oracle `%FOUND`/`%NOTFOUND`/`%ISOPEN`/`%ROWCOUNT` → T-SQL / MySQL](oracle-cursor-attributes.md) | oracle → tsql/mysql | Oracle attaches state to each named cursor: `c%FOUND`/`c%NOTFOUND` (did the last `FETCH` return a row), `c%ISOPEN`, and `c%ROWCOUNT` (rows fetched so far on that cursor). |
 | [PL/pgSQL implicit `FOUND` / Oracle implicit `SQL%FOUND` → T-SQL `@@ROWCOUNT` / MySQL `ROW_COUNT()`](implicit-found-flag.md) | oracle/postgresql → tsql/mysql | PL/pgSQL keeps one implicit boolean, `FOUND`, updated by the *last* `SELECT INTO`, `UPDATE`, `DELETE`, `INSERT`, or `FETCH` in the routine — it answers "did that last statement affect/return a row?" for the routine as a whole, not for one named cursor. |
 | [T-SQL `@@FETCH_STATUS` → Oracle / PostgreSQL / MySQL](tsql-fetch-status-to-oracle-postgresql-mysql.md) | tsql → oracle/postgresql/mysql | T-SQL exposes cursor state through a single global variable, `@@FETCH_STATUS`, checked right after a `FETCH` (`0` = a row was returned, `-1` = no more rows, `-2` = the fetched row is missing). |
+| [Implicit row count in EXPRESSION position (Oracle `SQL%ROWCOUNT` / T-SQL `@@ROWCOUNT` / MySQL `ROW_COUNT()`) → PostgreSQL `GET DIAGNOSTICS` hoist](rowcount-expression-hoist-to-postgresql.md) | oracle/tsql/mysql → postgresql | Oracle's `SQL%ROWCOUNT`, T-SQL's `@@ROWCOUNT`, and MySQL's `ROW_COUNT()` are all readable **inline**, as an expression, anywhere a value is expected (`IF SQL%ROWCOUNT <> 1`, `v := SQL%ROWCOUNT + 1`, a call argument, a `RETURN`). |
 
 ## Error handling
 

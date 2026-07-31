@@ -43,7 +43,7 @@ This is the narrative companion to two machine-checked sources of truth:
 | [Booleans: the value/predicate duality](booleans/README.md) | tri-state `CASE` wrap for value position, `<> 0` synthesis for predicate position, boolean-column `IS TRUE`/`IS FALSE` re-spelling | 10 |
 | [DML: PIVOT/UNPIVOT, MERGE, DELETE, row values](dml/README.md) | PIVOT/UNPIVOT, MERGE/upsert lowering, multi-table DELETE, row caps, row-value comparisons | 27 |
 | [DDL: identity, temp tables, foreign keys, sequences, storage options](ddl/README.md) | identity/SERIAL, temp tables, FK actions, sequences, storage options | 26 |
-| [Procedural: cursors, dynamic SQL, system procedures, session directives](procedural/README.md) | cursors, error handling, dynamic SQL, system procedures, session directives | 56 |
+| [Procedural: cursors, dynamic SQL, system procedures, session directives](procedural/README.md) | cursors, error handling, dynamic SQL, system procedures, session directives | 57 |
 
 ## By engine
 
@@ -156,6 +156,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [T-SQL `IF EXISTS (<real query>) BEGIN ... END [ELSE ...]` → Oracle cursor `FOR` loop over a `DUAL` probe](procedural/if-exists-control-flow-to-oracle-for-loop.md) | `IF EXISTS (SELECT ...) BEGIN ... END` is ordinary control flow over real table data (not a system-catalog idempotency guard) — a migration script checking "has this step already run?" before doing more work, for example. |
 | [A purely set-based T-SQL trigger (`FROM inserted JOIN deleted`) → PostgreSQL statement-level trigger with named transition tables](procedural/tsql-set-based-trigger-to-pg-statement-level.md) | T-SQL triggers are always statement-level, exposing the whole batch of affected rows through two pseudo-tables, `inserted`/`deleted`, that a set-based trigger body joins against directly (`INSERT ... SELECT ... FROM inserted i JOIN deleted d ON d.id = i.id`). |
 | [T-SQL `HASHBYTES('SHA2_256', x)` → PostgreSQL `sha256`, wrapped for a character argument](procedural/hashbytes-sha256-to-postgresql.md) | sqlglot canonicalizes T-SQL's `HASHBYTES('SHA2_256', x)` to a bare `SHA256(x)` call reaching PostgreSQL, but PostgreSQL's `sha256` takes a **bytea**, not text — `sha256(x)` over a character column is "function sha256(text) does not exist" at *runtime*, a defect a compile-only validity check does not catch (the call parses fine; it just never runs). |
+| [Implicit row count in EXPRESSION position (Oracle `SQL%ROWCOUNT` / T-SQL `@@ROWCOUNT` / MySQL `ROW_COUNT()`) → PostgreSQL `GET DIAGNOSTICS` hoist](procedural/rowcount-expression-hoist-to-postgresql.md) | Oracle's `SQL%ROWCOUNT`, T-SQL's `@@ROWCOUNT`, and MySQL's `ROW_COUNT()` are all readable **inline**, as an expression, anywhere a value is expected (`IF SQL%ROWCOUNT <> 1`, `v := SQL%ROWCOUNT + 1`, a call argument, a `RETURN`). |
 
 ### T-SQL as target
 
@@ -345,6 +346,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Oracle `DBMS_LOB`/`UTL_RAW`/`TO_NUMBER`/`TRUNC` helper calls → T-SQL/MySQL built-ins](procedural/oracle-lob-numeric-helpers-to-tsql.md) | Several of Oracle's package-qualified LOB helpers and its bare numeric/date built-ins have no shared name on other engines, and one (`DBMS_LOB.SUBSTR`) even reorders its arguments compared to the target's equivalent. |
 | [PostgreSQL `SQLSTATE` / Oracle `SQLCODE` → `CAST(ERROR_STATE()/ERROR_NUMBER() AS NVARCHAR(n))`](procedural/sqlstate-sqlcode-to-tsql-error-functions.md) | PostgreSQL's `SQLSTATE` and Oracle's `SQLCODE` are bare identifiers, readable directly inside an exception handler as the caught error's state code or numeric code. |
 | [`EXECUTE IMMEDIATE '...' USING v1, v2` (Oracle) → MySQL `EXECUTE ... USING @v1, @v2`, bound through session variables](procedural/mysql-execute-using-session-vars.md) | Oracle's `EXECUTE IMMEDIATE '<sql>' USING bind1, bind2` accepts routine locals and parameters directly as bind arguments. |
+| [Implicit row count in EXPRESSION position (Oracle `SQL%ROWCOUNT` / T-SQL `@@ROWCOUNT` / MySQL `ROW_COUNT()`) → PostgreSQL `GET DIAGNOSTICS` hoist](procedural/rowcount-expression-hoist-to-postgresql.md) | Oracle's `SQL%ROWCOUNT`, T-SQL's `@@ROWCOUNT`, and MySQL's `ROW_COUNT()` are all readable **inline**, as an expression, anywhere a value is expected (`IF SQL%ROWCOUNT <> 1`, `v := SQL%ROWCOUNT + 1`, a call argument, a `RETURN`). |
 
 ### Oracle as target
 
@@ -659,6 +661,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [T-SQL `THROW`/`RAISERROR`'s numeric error code → each target's own error-code slot](procedural/throw-raiserror-numeric-code-per-target.md) | T-SQL's `THROW 50001, 'not found', 1` and `RAISERROR('not found', 16, 1)` (with a matching custom message id registered separately) both carry a *numeric error code* alongside the message text. |
 | [A purely set-based T-SQL trigger (`FROM inserted JOIN deleted`) → PostgreSQL statement-level trigger with named transition tables](procedural/tsql-set-based-trigger-to-pg-statement-level.md) | T-SQL triggers are always statement-level, exposing the whole batch of affected rows through two pseudo-tables, `inserted`/`deleted`, that a set-based trigger body joins against directly (`INSERT ... SELECT ... FROM inserted i JOIN deleted d ON d.id = i.id`). |
 | [T-SQL `HASHBYTES('SHA2_256', x)` → PostgreSQL `sha256`, wrapped for a character argument](procedural/hashbytes-sha256-to-postgresql.md) | sqlglot canonicalizes T-SQL's `HASHBYTES('SHA2_256', x)` to a bare `SHA256(x)` call reaching PostgreSQL, but PostgreSQL's `sha256` takes a **bytea**, not text — `sha256(x)` over a character column is "function sha256(text) does not exist" at *runtime*, a defect a compile-only validity check does not catch (the call parses fine; it just never runs). |
+| [Implicit row count in EXPRESSION position (Oracle `SQL%ROWCOUNT` / T-SQL `@@ROWCOUNT` / MySQL `ROW_COUNT()`) → PostgreSQL `GET DIAGNOSTICS` hoist](procedural/rowcount-expression-hoist-to-postgresql.md) | Oracle's `SQL%ROWCOUNT`, T-SQL's `@@ROWCOUNT`, and MySQL's `ROW_COUNT()` are all readable **inline**, as an expression, anywhere a value is expected (`IF SQL%ROWCOUNT <> 1`, `v := SQL%ROWCOUNT + 1`, a call argument, a `RETURN`). |
 
 ### MySQL as source
 
@@ -731,6 +734,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [A bare result `SELECT` inside a procedure body (MySQL / PostgreSQL / T-SQL) → a ref-cursor parameter (Oracle `SYS_REFCURSOR` OUT, PostgreSQL `refcursor` INOUT), propagated to `CALL` sites](procedural/bare-result-select-to-refcursor.md) | A MySQL or T-SQL procedure can hand back a result set simply by running a `SELECT` with no `INTO` target partway through the body. |
 | [Row-level trigger re-reading its own table (MySQL/PostgreSQL) ↔ Oracle `COMPOUND TRIGGER`](procedural/trigger-reading-own-table.md) | A row-level trigger that aggregates a parent row from its children (`UPDATE invoice SET total = (SELECT SUM(...) FROM invoice_line WHERE invoice_id = NEW.invoice_id) WHERE id = NEW.invoice_id`) re-reads the table it's attached to. |
 | [Leading `DECLARE` block reordered (MySQL): variables before cursors](procedural/mysql-declare-reorder.md) | MySQL requires every `DECLARE <cursor>` to come *after* every `DECLARE <variable>` in the same block (error 1337, "Variable or condition declaration after cursor or handler declaration") — a rule no other target engine imposes, so a source routine that declares its cursor before its scalar variables (a legal order on Oracle/T-SQL/PostgreSQL) needs its leading declaration block reordered for MySQL specifically. |
+| [Implicit row count in EXPRESSION position (Oracle `SQL%ROWCOUNT` / T-SQL `@@ROWCOUNT` / MySQL `ROW_COUNT()`) → PostgreSQL `GET DIAGNOSTICS` hoist](procedural/rowcount-expression-hoist-to-postgresql.md) | Oracle's `SQL%ROWCOUNT`, T-SQL's `@@ROWCOUNT`, and MySQL's `ROW_COUNT()` are all readable **inline**, as an expression, anywhere a value is expected (`IF SQL%ROWCOUNT <> 1`, `v := SQL%ROWCOUNT + 1`, a call argument, a `RETURN`). |
 
 ### MySQL as target
 

@@ -496,16 +496,13 @@ silently:
 - **`SQL%ROWCOUNT` in EXPRESSION position → PostgreSQL** (B37): PostgreSQL reads
   the last statement's row count only through the `GET DIAGNOSTICS x = ROW_COUNT`
   *statement*, so an inline reference (`IF SQL%ROWCOUNT <> 1`, `v := SQL%ROWCOUNT
-  + 1`, a call argument, a `RETURN`) can no longer be substituted in place — it
-  used to degrade to a `UNIQUE-1033` carrier. It is now lowered by hoisting a
-  `GET DIAGNOSTICS uq_rowcount = ROW_COUNT;` (a `bigint` local declared once per
-  routine) immediately before the referencing statement and substituting the
-  local. Oracle's `SQL%ROWCOUNT` names the last executed DML, which in
-  straight-line code is the preceding statement, so a capture placed just before
-  the use reads the same value (live-verified on PostgreSQL). A **re-evaluated
-  loop/exit condition** (`WHILE SQL%ROWCOUNT > 0`) cannot be captured once and
-  keeps the honest `UNIQUE-1033` carrier + warning. T-SQL (`@@ROWCOUNT`) and
-  MySQL (`ROW_COUNT()`) already read the count inline and are unaffected.
+  + 1`, a call argument, a `RETURN`) is lowered by hoisting a capture ahead of the
+  referencing statement instead — see
+  [the rationale article](rationale/procedural/rowcount-expression-hoist-to-postgresql.md).
+  Only a **re-evaluated loop/exit condition** (`WHILE SQL%ROWCOUNT > 0`), which
+  cannot be captured once, remains a genuine limit: it keeps the honest
+  `UNIQUE-1033` carrier + warning. T-SQL (`@@ROWCOUNT`) and MySQL (`ROW_COUNT()`)
+  already read the count inline and are unaffected.
 - **PostgreSQL `SET TRANSACTION [ISOLATION LEVEL <lvl>] READ ONLY|READ
   WRITE`** (audit N7/B8): MySQL comma-joins the isolation level and access
   mode into one statement; Oracle prefers the access mode (its `READ ONLY`
