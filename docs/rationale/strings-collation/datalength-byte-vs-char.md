@@ -32,10 +32,9 @@ Oracle's `LENGTHB` are the byte-length equivalents and match `DATALENGTH`
 exactly for an ordinary (single-byte-per-char-class) `VARCHAR`/`VARBINARY`
 argument (`ts-binary-length`). But T-SQL's `NVARCHAR`/`N'…'` national strings
 are stored as **UTF-16** — 2 bytes per code unit — so `DATALENGTH(N'abc')` =
-`6`, whereas `OCTET_LENGTH('abc')` on a UTF-8-decoded target is `3`. The `N`
-prefix was originally dropped during translation, silently halving the byte
-count with no warning (`reda-ts-datalength-nchar`, class `func`; live:
-tsql=`6`, pg=`3`).
+`6`, whereas `OCTET_LENGTH('abc')` on a UTF-8-decoded target is `3`. A
+translation that dropped the `N` prefix's UTF-16 accounting would silently
+halve the byte count.
 
 > **Note** faithful for a national **literal** (exact UTF-16
 > byte count folded at compile time). A national **column** whose value is only

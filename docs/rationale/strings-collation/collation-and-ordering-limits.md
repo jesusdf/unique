@@ -35,9 +35,9 @@ padding rules) ignores trailing spaces in comparison, so `'a '='a'` is true
 there; PostgreSQL/Oracle/MySQL's typical defaults are case- and
 space-sensitive, so the same comparison is false. No statement-level rewrite
 can bridge this without knowing the actual target column collation, which
-Unique does not have visibility into — an **approved limit**, not a bug
+Unique does not have visibility into — a documented limit, not a bug
 (`docs/03-unsupported.md` §2, "String collation in `=`/`ORDER BY`/`DISTINCT`/
-`LIKE`", user-approved 2026-07-18):
+`LIKE`"):
 
 ```sql
 -- ts-trailing-eq, tsql → mysql / oracle / postgresql

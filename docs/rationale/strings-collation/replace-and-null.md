@@ -4,8 +4,7 @@
 
 # `REPLACE` and `NULL`: Oracle's 2-arg form vs MySQL's propagation
 
-**Problem.** Two independent `REPLACE`/`NULL` divergences, found in the same
-sweep as the `GREATEST`/`LEAST` case above. Oracle's **2-argument**
+**Problem.** Two independent `REPLACE`/`NULL` divergences. Oracle's **2-argument**
 `REPLACE(s, search)` (no replacement string) removes every occurrence of
 `search` and, since Oracle collapses an empty result to `NULL` (see
 `Oracle '' ≡ NULL` below), returns `NULL` when `search` accounts for the
@@ -47,24 +46,22 @@ it is the same `'' ≡ NULL` collapse documented below, reached through a
 function call instead of a literal. The literal-`NULL` fold for MySQL's
 `REPLACE` mirrors the `CONCAT` literal-`NULL` fold above, but — unlike
 `CONCAT`, which also guards a *non-literal* possibly-`NULL` operand with a
-runtime `CASE` — `REPLACE` only checks for a literal `NULL` argument
-(`emit_functions.py:1750-1760`). Probing a non-literal case live surfaces the
-same hole the `CONCAT` fix closed, still open here: `REPLACE('abc',
-CAST(NULL AS CHAR), 'x')` from MySQL is emitted unchanged on Oracle as
-`REPLACE('abc', CAST(NULL AS VARCHAR2(4000)), 'x')`, which live-evaluates to
-`'abc'` (Oracle ignores the `NULL` search) where the MySQL source is `NULL`.
-PostgreSQL/T-SQL stay correct here only because their own native `REPLACE`
-already propagates `NULL` regardless of what Unique emits — Oracle is the
-one target where this specific gap is live.
+runtime `CASE` — `REPLACE` only checks for a literal `NULL` argument, not a *non-literal*
+possibly-`NULL` operand: `REPLACE('abc', CAST(NULL AS CHAR), 'x')` from
+MySQL is emitted unchanged on Oracle as `REPLACE('abc', CAST(NULL AS
+VARCHAR2(4000)), 'x')`, which live-evaluates to `'abc'` (Oracle ignores the
+`NULL` search) where the MySQL source is `NULL`. PostgreSQL/T-SQL stay
+correct here only because their own native `REPLACE` already propagates
+`NULL` regardless of what Unique emits — Oracle is the one target where this
+specific divergence is live.
 
 > **Note** faithful for the 2-arg Oracle rewrite (`NULLIF` reproduces
 > Oracle's own `NULL`/`'abc45'`, live-verified) and for the MySQL
 > literal-`NULL` fold (`NULL IS NULL` → `1`/true on all three targets,
-> live-verified). **Open, unwarned divergence** — not part of any pinning
-> test, found live while writing this entry: a *non-literal* `NULL` argument
-> to a MySQL-source `REPLACE` reaching an **Oracle** target is not folded and
-> silently returns the wrong (unchanged-subject) value; PostgreSQL/T-SQL are
-> unaffected by accident, not by design.
+> live-verified). **Open, unwarned divergence:** a *non-literal* `NULL`
+> argument to a MySQL-source `REPLACE` reaching an **Oracle** target is not
+> folded and silently returns the wrong (unchanged-subject) value;
+> PostgreSQL/T-SQL are unaffected by accident, not by design.
 
 **See Also.** Corpus [`ora-translate3`](../../../tests/fixtures/challenge/challenge_oracle.sql), [`my-replace-null2`](../../../tests/fixtures/challenge/challenge_mysql.sql) ·
 [`TestOracleTwoArgReplaceTranslate`](../../../tests/integration/test_challenge.py), [`TestMysqlReplaceNullPropagates`](../../../tests/integration/test_challenge.py) (pinned) ·

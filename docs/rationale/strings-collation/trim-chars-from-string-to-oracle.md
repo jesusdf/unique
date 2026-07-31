@@ -13,7 +13,7 @@ call spelled `TRIM(chars, string)`.
 **Solution.**
 
 ```sql
--- mysql-corpus wave 188, mysql → oracle
+-- TRIM(chars FROM string), mysql → oracle
 SELECT TRIM('x' FROM col) FROM t1;
 -- =>
 SELECT LTRIM(RTRIM(col, 'x'), 'x')
@@ -34,13 +34,10 @@ function requires a single character trim set"). `LTRIM`/`RTRIM`, by
 contrast, treat their second argument as a genuine multi-character set on
 every engine, matching MySQL/PostgreSQL/T-SQL's `TRIM(chars FROM …)` reading
 exactly — nesting the two sidesteps the Oracle-only single-character
-restriction rather than working around a missing feature. The rewrite is
-keyed only on the **target** being Oracle, not on the source dialect: the
-docs-gap sweep that flagged this cluster attributed it to an "Oracle 3-arg
-`TRIM('x' FROM col)`" source case, but the pinning test and the canonical IR
-(`TRIM(remset, string[, position])`) are MySQL-sourced, and the emitter
-guard tests only `dialect == "oracle"` — noted here as a correction for
-traceability.
+restriction rather than working around a missing feature. The rewrite
+applies whenever the **target** is Oracle, regardless of the source
+dialect — MySQL, PostgreSQL and T-SQL source forms all route through the
+same nested `LTRIM`/`RTRIM` rewrite when targeting Oracle.
 
 > **Note** faithful — live-verified `'hello'` from `TRIM('x' FROM
 > 'xxhelloxx')` on MySQL, reproduced as `'hello'` by `LTRIM(RTRIM('xxhelloxx',
