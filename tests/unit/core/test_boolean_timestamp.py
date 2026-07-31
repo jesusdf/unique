@@ -52,6 +52,101 @@ class TestBooleanLiterals:
         _valid(out, "postgresql")
 
 
+class TestOracleNativeBooleanVars:
+    """A pg-source PL/SQL BOOLEAN variable keeps TRUE/FALSE on Oracle: the
+    generic TRUE/FALSE -> 1/0 fold (TestBooleanLiterals above, correct for a
+    SQL or NUMBER-typed context) is invalid PL/SQL there — Oracle's native
+    BOOLEAN rejects a 1/0 literal (PLS-00382, brief B45). No ``_valid()``
+    call here: sqlglot cannot parse a full Oracle PL/SQL routine body at
+    all (a pre-existing, unrelated limitation — even an untouched correct
+    routine fails it); live validation covers this instead (see
+    tests/integration/test_corpus_live.py / the live-DB check for this brief)."""
+
+    def setup_method(self) -> None:
+        self.t = Transpiler()
+
+    def test_declare_initializer_keeps_true(self) -> None:
+        src = (
+            "create function f() returns boolean language plpgsql as $$\n"
+            "declare b boolean := true;\n"
+            "begin\n  return b;\nend $$;"
+        )
+        out = self.t.transpile(src, "postgresql", "oracle").sql
+        assert "b boolean := TRUE;" in out, out
+        assert ":= 1" not in out, out
+
+    def test_assignment_keeps_false(self) -> None:
+        src = (
+            "create function f() returns boolean language plpgsql as $$\n"
+            "declare b boolean := true;\n"
+            "begin\n  b := false;\n  return b;\nend $$;"
+        )
+        out = self.t.transpile(src, "postgresql", "oracle").sql
+        assert "b := FALSE;" in out, out
+        assert "b := 0;" not in out, out
+
+    def test_if_comparison_keeps_true(self) -> None:
+        src = (
+            "create function f() returns boolean language plpgsql as $$\n"
+            "declare b boolean := true;\n"
+            "begin\n"
+            "  if b = true then\n    b := false;\n  end if;\n"
+            "  return b;\nend $$;"
+        )
+        out = self.t.transpile(src, "postgresql", "oracle").sql
+        assert "IF b = TRUE THEN" in out, out
+        assert "IF b = 1 THEN" not in out, out
+
+    def test_parameter_default_keeps_true(self) -> None:
+        src = (
+            "create function f(p boolean default true) returns boolean "
+            "language plpgsql as $$\nbegin\n  return p;\nend $$;"
+        )
+        out = self.t.transpile(src, "postgresql", "oracle").sql
+        assert "DEFAULT TRUE" in out, out
+        assert "DEFAULT 1" not in out, out
+
+    def test_return_true_keeps_literal(self) -> None:
+        src = (
+            "create function f() returns boolean language plpgsql as $$\n"
+            "begin\n  return true;\nend $$;"
+        )
+        out = self.t.transpile(src, "postgresql", "oracle").sql
+        assert "RETURN TRUE;" in out, out
+        assert "RETURN 1;" not in out, out
+
+    def test_mysql_source_still_folds_to_number(self) -> None:
+        """mysql-source's BOOLEAN maps to NUMBER(1) for Oracle (never the
+        native PL/SQL type), so the 1/0 fold is still correct there — pins
+        wave 211 against the new type-aware branch."""
+        src = (
+            "DELIMITER //\n"
+            "create procedure p1() begin\n"
+            "  declare b boolean default true;\n"
+            "  set b = false;\n"
+            "  if b = true then\n    select 1;\n  end if;\n"
+            "end//\n"
+            "DELIMITER ;\n"
+        )
+        out = self.t.transpile(src, "mysql", "oracle").sql
+        assert "b NUMBER(1) := 1;" in out, out
+        assert "b := 0;" in out, out
+        assert "IF b = 1 THEN" in out, out
+        assert "TRUE" not in out.upper(), out
+
+    def test_pg_boolean_round_trip_stays_boolean(self) -> None:
+        src = (
+            "create function f() returns boolean language plpgsql as $$\n"
+            "declare b boolean := true;\n"
+            "begin\n  b := false;\n  return b;\nend $$;"
+        )
+        to_oracle = self.t.transpile(src, "postgresql", "oracle").sql
+        back = self.t.transpile(to_oracle, "oracle", "postgresql").sql
+        assert "boolean := true" in back.lower(), back
+        assert "b := false" in back.lower(), back
+        _valid(back, "postgresql")
+
+
 class TestCurrentTimestampDefault:
     def setup_method(self) -> None:
         self.t = Transpiler()

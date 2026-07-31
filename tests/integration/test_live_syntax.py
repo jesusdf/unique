@@ -204,3 +204,32 @@ def test_oracle_validator_catches_lazy_invalid_procedure() -> None:
         assert validator.validate(good).ok, "a valid proc must still pass"
     finally:
         validator.close()
+
+
+def test_oracle_native_boolean_var_is_valid_live() -> None:
+    """B45: a pg-source PL/SQL BOOLEAN variable transpiled to Oracle must
+    keep TRUE/FALSE in its initializer, a parameter default, an assignment
+    and a comparison — folding to 1/0 there is PLS-00382 (Oracle's native
+    BOOLEAN rejects a NUMBER value), and the previous fold compiled this
+    live INVALID. Live-verified via USER_ERRORS (Oracle compiles PL/SQL
+    lazily, so a mere CREATE succeeding is not proof of validity)."""
+    validator = _validator_or_skip("oracle")
+    try:
+        src = (
+            "create function unq_b45_f(p boolean default true) "
+            "returns boolean language plpgsql as $$\n"
+            "declare b boolean := true;\n"
+            "begin\n"
+            "  b := false;\n"
+            "  if b = true then\n    b := p;\n  end if;\n"
+            "  return b;\nend $$;"
+        )
+        out = transpile(src, "postgresql", "oracle").sql
+        assert "TRUE" in out, out
+        assert ":= 1" not in out and "= 1" not in out, out
+        verdict = validator.validate(out)
+        assert (
+            verdict.ok
+        ), f"invalid Oracle output:\n{out}\nEngine error: {verdict.error}"
+    finally:
+        validator.close()

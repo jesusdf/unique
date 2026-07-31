@@ -1995,6 +1995,40 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
         BinaryOperator.BIT_RSHIFT: ">>",
     }
 
+    # A comparison against a variable whose TARGET type is a native PL/SQL
+    # BOOLEAN keeps the TRUE/FALSE spelling: unlike the generic fold below
+    # (right for a NUMBER-typed context), Oracle's own BOOLEAN rejects a
+    # 1/0 comparison (PLS-00382 — wave B45). BOOLEAN_VARIABLES is published
+    # by the procedural transformer only for names whose type actually
+    # stayed a native BOOLEAN — today only Oracle's (pg-source; mysql-
+    # source's BOOLEAN always maps to NUMBER(1), so it never appears here) —
+    # so no dialect check is needed here: the set is empty everywhere else.
+    if node.operator in (
+        BinaryOperator.EQ,
+        BinaryOperator.NEQ,
+        BinaryOperator.IS,
+    ):
+        bool_vars = BOOLEAN_VARIABLES.get() or frozenset()
+
+        def _bool_var_side(n: ASTNode) -> bool:
+            return (
+                isinstance(n, ColumnRef) and not n.table and n.name.lower() in bool_vars
+            )
+
+        sym = "<>" if node.operator == BinaryOperator.NEQ else "="
+        if (
+            isinstance(node.right, Literal)
+            and node.right.dtype == "boolean"
+            and _bool_var_side(node.left)
+        ):
+            return f"{left} {sym} {'TRUE' if node.right.value else 'FALSE'}"
+        if (
+            isinstance(node.left, Literal)
+            and node.left.dtype == "boolean"
+            and _bool_var_side(node.right)
+        ):
+            return f"{'TRUE' if node.left.value else 'FALSE'} {sym} {right}"
+
     # A boolean-COLUMN IS-predicate (``flag IS TRUE`` / ``flag IS FALSE``) is
     # invalid on engines with no boolean type: the IS operator rejects an
     # integer operand (``flag IS 1`` -> T-SQL 156 / ORA-00908). Rewrite to the

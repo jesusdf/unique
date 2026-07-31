@@ -22,6 +22,7 @@ import logging
 import os
 import re
 from collections.abc import Callable, Iterator
+from typing import cast
 
 import sqlglot
 
@@ -223,6 +224,13 @@ class ProceduralTransformer:
         # division (a / b) truncates on PG/T-SQL but not MySQL/Oracle; the
         # compensation needs to know the operands are integers.
         self._integer_vars: set[str] = set()
+        # Names (transformed form) of variables/parameters whose TARGET type
+        # is Oracle's own native PL/SQL BOOLEAN (only reachable from a
+        # pg-source ``boolean`` — mysql-source's BOOLEAN always maps to
+        # NUMBER(1) for an Oracle target). Oracle's BOOLEAN rejects a 1/0
+        # literal (PLS-00382); the generic TRUE/FALSE -> 1/0 fold (correct
+        # for NUMBER-typed contexts) must not apply to these (wave B45).
+        self._bool_vars: set[str] = set()
         # True while transforming a trigger body, so embedded DML maps the
         # T-SQL inserted/deleted pseudo-tables to NEW/OLD (or documents a
         # set-based use that has no row-level equivalent).
@@ -331,6 +339,66 @@ class ProceduralTransformer:
         # No params: DECIMAL/NUMERIC default to scale 0, but Oracle's bare
         # NUMBER holds fractional values, so it is not safely an integer.
         return base != "NUMBER"
+
+    def _is_native_bool_type(self, dt: DataType) -> bool:
+        """Whether an already TARGET-mapped type is this target's own
+        native BOOLEAN (a real boolean value, never folded to 0/1). False
+        by default (T-SQL/MySQL have no such PL/SQL type); Oracle overrides
+        this (see ``OracleTransformer``) when the type stayed BOOLEAN —
+        which only happens for a pg-source ``boolean`` (mysql-source's
+        BOOLEAN always maps to NUMBER(1), see ``PROCEDURAL_TYPE_MAPS``)."""
+        return False
+
+    #: A value that is ONLY a bare TRUE/FALSE literal.
+    _BARE_BOOL_LITERAL_RE = re.compile(r"(?i)^\s*(TRUE|FALSE)\s*$")
+
+    def _keep_bool_literal(self, value: ASTNode | None) -> RawSQL | None:
+        """A bare TRUE/FALSE ``value``, re-spelled uppercase and returned
+        verbatim instead of being run through the generic transform
+        pipeline. The shared expression engine folds TRUE/FALSE -> 1/0,
+        which is correct for a NUMBER-typed context but invalid (PLS-00382)
+        against a native PL/SQL BOOLEAN — callers use this to bypass the
+        fold for that one context (wave B45). None when ``value`` is not a
+        bare boolean literal, so the caller falls back to the normal
+        transform."""
+        if not isinstance(value, RawSQL):
+            return None
+        m = self._BARE_BOOL_LITERAL_RE.match(value.sql)
+        if not m:
+            return None
+        return dataclasses.replace(value, sql=m.group(1).upper())
+
+    def _keep_bool_if(
+        self, condition: bool, value: ASTNode | None, current: ASTNode | None
+    ) -> ASTNode | None:
+        """``current`` (the already-transformed value) unless ``condition``
+        holds and ``value`` (the ORIGINAL, untransformed value) is a bare
+        TRUE/FALSE literal — then the literal is kept verbatim instead
+        (wave B45). One-line call so the DECLARE/assignment/RETURN call
+        sites don't each carry their own branch."""
+        if not condition:
+            return current
+        kept = self._keep_bool_literal(value)
+        return kept if kept is not None else current
+
+    def _track_bool_var(
+        self,
+        name: str,
+        dt: DataType,
+        original_default: ASTNode | None,
+        transformed_default: ASTNode | None,
+    ) -> ASTNode | None:
+        """Register ``name`` in ``self._bool_vars`` when ``dt`` is this
+        target's native BOOLEAN, and return ``transformed_default`` with a
+        bare TRUE/FALSE literal (checked against ``original_default``, the
+        pre-transform value) kept verbatim (wave B45). Returns
+        ``transformed_default`` unchanged when ``dt`` is not a native
+        BOOLEAN. Shared by parameter and DECLARE handling so each call
+        site stays a single statement."""
+        is_bool = self._is_native_bool_type(dt)
+        if is_bool:
+            self._bool_vars.add(name)
+        return self._keep_bool_if(is_bool, original_default, transformed_default)
 
     @property
     def warnings(self) -> list[str]:
@@ -590,6 +658,9 @@ class ProceduralTransformer:
                 self._date_vars.add(new_name)
             if self._is_integer_type(p.data_type):
                 self._integer_vars.add(new_name)
+            new_default = self._track_bool_var(
+                new_name, new_type, p.default, new_default
+            )
             new_direction = p.direction
             if self._target == "oracle" and self._REFCURSOR_TYPE_RE.search(
                 p.data_type.name.strip()
@@ -1857,6 +1928,14 @@ class ProceduralTransformer:
         self._return_type_is_blob = self._target == "oracle" and (
             getattr(node.return_type, "name", "") or ""
         ).upper() in ("BYTEA", "BLOB")
+        # A function whose TARGET return type stayed this target's own
+        # native BOOLEAN (Oracle only, and only for a pg-source ``boolean``
+        # — mysql-source's BOOLEAN always maps to NUMBER(1)) keeps
+        # TRUE/FALSE in a bare RETURN; folding to 1/0 there is PLS-00382
+        # (wave B45).
+        self._return_type_is_native_bool = node.return_type is not None and (
+            self._is_native_bool_type(self._transform_data_type(node.return_type))
+        )
         # T-SQL functions cannot access temporary tables (error 2772);
         # a routine creating one — or REFERENCING a session temp table the
         # script declared (the emit renames it #name script-wide) —
@@ -2295,6 +2374,9 @@ class ProceduralTransformer:
             new_type_shadow = self._transform_data_type(node.data_type)
             if self._is_string_type(node.data_type):
                 self._string_vars.add(renamed)
+            new_default_shadow = self._track_bool_var(
+                renamed, new_type_shadow, node.default, new_default_shadow
+            )
             return DeclareStatement(
                 name=renamed,
                 data_type=new_type_shadow,
@@ -2339,6 +2421,9 @@ class ProceduralTransformer:
             self._date_vars.add(new_name)
         if self._is_integer_type(node.data_type):
             self._integer_vars.add(new_name)
+        new_default = self._track_bool_var(
+            new_name, new_type, node.default, new_default
+        )
         return DeclareStatement(name=new_name, data_type=new_type, default=new_default)
 
     def _is_self_init(self, default: ASTNode | None, name: str) -> bool:
@@ -2480,6 +2565,10 @@ class ProceduralTransformer:
             if dyn_value is not None
             else self._wrap_mysql_not_value(self._transform_node(node.value))
         )
+        new_value = cast(
+            ASTNode,
+            self._keep_bool_if(new_name in self._bool_vars, node.value, new_value),
+        )
         # SET keeps a SET statement on engines that have one (T-SQL, MySQL);
         # Oracle/PostgreSQL lower it to a ``:=`` assignment.
         if self._uses_set_statement():
@@ -2551,6 +2640,10 @@ class ProceduralTransformer:
             dyn_value
             if dyn_value is not None
             else self._wrap_mysql_not_value(self._transform_node(node.value))
+        )
+        new_value = cast(
+            ASTNode,
+            self._keep_bool_if(new_name in self._bool_vars, node.value, new_value),
         )
         # A T-SQL target re-expresses an assignment as SET; the others keep an
         # assignment node (MySQL's is rendered as SET by its emitter).
@@ -3607,6 +3700,9 @@ class ProceduralTransformer:
             new_value = self._void_return_value()
         if getattr(self, "_return_type_is_bit", False):
             new_value = self._wrap_predicate_return(new_value)
+        new_value = self._keep_bool_if(
+            getattr(self, "_return_type_is_native_bool", False), node.value, new_value
+        )
         if getattr(self, "_return_type_is_blob", False):
             quoted: str | None = None
             if isinstance(new_value, Literal) and isinstance(new_value.value, str):
@@ -4141,6 +4237,9 @@ class ProceduralTransformer:
         int_token = _conv.INTEGER_VARIABLES.set(
             frozenset(v.lstrip("@").lower() for v in self._integer_vars)
         )
+        bool_token = _conv.BOOLEAN_VARIABLES.set(
+            frozenset(v.lstrip("@").lower() for v in self._bool_vars)
+        )
         # The source dialect drives shared-map lookups (pair renames,
         # source-owned globals). The transpiler publishes it per run; set it
         # here too so direct IR calls (tests, tools) see the same context.
@@ -4163,6 +4262,7 @@ class ProceduralTransformer:
             _conv.SOURCE_DIALECT.reset(src_token)
             _conv.DATE_VARIABLES.reset(date_token)
             _conv.INTEGER_VARIABLES.reset(int_token)
+            _conv.BOOLEAN_VARIABLES.reset(bool_token)
 
     def _ir_transpile_dml_inner(self, sql: str) -> str | None:
         from unique.core import converter as _conv
