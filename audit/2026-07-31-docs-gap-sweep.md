@@ -361,7 +361,19 @@ folded into a cluster:
   top-cluster table had mis-scoped (2 misclassified as silent when they
   already warn, 3 already covered by `docs/03-unsupported.md` §7's
   per-target impossibility-gate bullets, which this file's batch-6 pass
-  never cross-checked against).
+  never cross-checked against). ~~Batch 5's `test_challenge.py`
+  (263 classes, only ~99 read in full via sample+keyword grep, 164 never
+  read) is the sibling debt of comparable size.~~ **Closed 2026-07-31 by
+  Batch 5b** (below): every class not already cited by name in batch 5's own
+  51 raw gap rows (215/263) was read in full, in source order, no sampling.
+  18 new gap rows found — plus one stale-doc correction (the T-SQL `LIKE`
+  bracket-character-class section claims "not yet fixed" for a mechanism a
+  same-day RED-round-2 fix already covers) and two possible defects flagged
+  for a BLUE brief (a silently-dropped `MAXRECURSION` hint; an unwarned
+  `INTERSECT`/`EXCEPT ALL`→plain fallback on Oracle/T-SQL) — see that
+  section for the reconciled counts and the list of candidates that turned
+  out to already be covered by docs that grew same-day (`03-unsupported.md`
+  §3.15/§7 in particular).
 - **"Covered" calls were generous by instruction**, per the brief's
   explicit ask. Several rows credited as covered lean on family/umbrella
   statements (e.g. "NULL-propagation section," "§3.21 literal-fold
@@ -471,3 +483,109 @@ silently-lost output on inspection — every genuinely new gap above is a
 *faithful* conversion, just an undocumented one, consistent with this
 sweep's scope. No `[open]`-style defect was found in `test_pg_source_wave1.py`
 during this full read.
+
+### Batch 5b — full-recall pass (2026-07-31)
+
+**Method.** Batch 5's original 99/263 figure is not exactly re-derivable
+(the report names its keyword-flagged-plus-every-10th-sample set only in
+aggregate, not as a list of class names) — per the brief's fallback, this
+pass instead re-derived a conservative "already covered" set from batch 5's
+own **51 raw gap rows** (48 distinct `TestXxx` class names explicitly cited
+as findings, cross-checked against the top-18-cluster table's own
+`test_challenge.py` citations too — no additions there, full overlap) and
+read **every one of the other 215/263 classes in full, in source order,
+line 1 to 6,251, in seven sequential chunks with no sampling**. This is a
+stricter bar than "~164 remaining" would suggest (some of batch 5's ~99
+originally-read classes get re-read here), which the brief explicitly
+sanctioned as the honest fallback when the original set can't be
+reconstructed. Each of the 215 was classified (a) rename/spelling, (b)
+warned degrade, (c) harness/infra/regression-guard, or (d) faithful
+structural rewrite with no warning; every (d) candidate was checked against
+the **current** state of `docs/rationale/*.md` (now 106 `###` headings, up
+from 54 at the sweep's start — `booleans.md`'s `IS [NOT] DISTINCT FROM`
+section and `procedural.md`'s Triggers/Loop/`RETURNS void`/refcursor-OUT
+sections landed same-day) and `docs/03-unsupported.md` (including §7,
+"Per-target impossibility gates," read in full per Batch 6b's lesson), and
+against this document's top-18-cluster table and batch 5's own 51 rows, to
+avoid re-reporting a known gap as new.
+
+**Counts.**
+
+| | Count |
+|---|---|
+| Classes read (of 263) | **215 read this pass + 48 already covered by batch 5's cited rows = 263 (100%)** |
+| (d)-classified candidates (transformation, no warning) examined | ~100 (53 required a doc cross-check; ~50 more were immediately recognizable as reinforcing an existing cluster/heading without one) |
+| Already covered by current docs (generous match, incl. `03-unsupported.md` §7 and §3.15/§3.16/§3.18) | ~65 |
+| Reinforcing an already-known gap (top-18 clusters / batch 5's 51 rows), new pinning tests only, not counted again | ~20 |
+| **New gap rows (distinct mechanisms, not previously surfaced anywhere in this audit)** | **18** |
+
+Several candidates that looked new mid-pass turned out to be covered once
+checked against the *current* (same-day-grown) docs — most notably the
+entire `TRY_CAST`/`TRY_CONVERT` runtime-guard family (`TestTryCast`,
+`TestTryCastMysqlNull`, `TestTryCastColumnNonliteral`) and the
+`RETURNS void`/OUT-param-only-function-becomes-a-procedure family
+(`TestVoidFunctionExecuteUsing`, `TestVoidFunctionToProcedure`), both
+written up in detail the same day this pass ran (`03-unsupported.md` §3.15
+and §7 respectively) — a reminder that "check against current docs, not a
+snapshot" matters most on a day when the docs are actively growing.
+
+**New gaps.**
+
+| Behavior | Representative pinning tests | Suggested rationale page | Priority |
+|---|---|---|---|
+| A whole **collation/case-sensitivity compensation family**: comparing, ordering, or searching a string literal across a source engine's default collation and a target's differently-cased-default collation gets an explicit binary collation forced on the literal operand (`BINARY`/`COLLATE utf8mb4_bin`/`COLLATE Latin1_General_BIN2`) to preserve case-sensitive semantics — or, the reverse direction, both operands wrapped in `LOWER()` when a case-insensitive source compares against a case-sensitive target. Applies to `POSITION`, `ORDER BY`, `DISTINCT`, `GROUP BY`, `GREATEST`/`LEAST`, `INSTR`, and `REPLACE`. No warning anywhere — distinct from (and complementary to) `strings-collation.md`'s "Collation and ordering divergences" section, which documents only the *column*-collation case as an approved, unbridgeable limit; here the operand is a literal, so the transpiler *does* bridge it. | `TestPositionCaseSensitive`, `TestOrderByCaseSensitive`, `TestGreatestCaseSensitive`, `TestInstrCaseSensitive`, `TestMysqlCaseInsensitiveSearch`, `TestTsqlOrderStringsCollation`, `TestReplaceCaseSensitive` | `docs/rationale/strings-collation.md` (new section, sibling to "Collation and ordering divergences") | **HIGH** |
+| **String-function positional-argument edge cases** not yet folded into the existing SUBSTRING-zero-start / REPEAT-clamp sections: PostgreSQL `LEFT(s, -n)` ("all but the last `\|n\|`") rebased to `LEFT(s, GREATEST(CHAR_LENGTH(s) + n, 0))` for MySQL (which returns `''` for a negative length); T-SQL `LEN()` excludes trailing spaces (unlike `LENGTH`/`CHAR_LENGTH`) so an `RTRIM()` wrap compensates going off T-SQL, and the reverse direction (`LEN(x \|\| '.') - 1`) compensates coming *from* a trailing-space-counting engine; MySQL rounds a fractional `SUBSTRING`/`LEFT`/`REPEAT` position or length argument (others truncate) — pre-rounded on a MySQL source. | `TestPgLeftNegative`, `TestTsqlLenTrailingSpaces`, `TestSubstringFloatArgs`, `TestNegativeLengthStringFns` | `docs/rationale/strings-collation.md` (extend the SUBSTRING-zero-start / REPEAT-clamp sections into one "string-function edge-case argument" family) | **MED** |
+| **Numeric-operand `\|\|`/`+` concatenation casting.** Oracle/MySQL implicitly stringify a numeric operand of `\|\|`/`CONCAT`/(MySQL) `+`; T-SQL's `+` would instead do arithmetic on two numbers, so a numeric-operand concatenation emits T-SQL `CONCAT()` instead. PostgreSQL's `\|\|` has no `integer \|\| integer` overload at all, so when **both** operands of a `\|\|` are known-numeric they are cast to `TEXT` — but a string or unknown-typed operand is left bare (PG's own `text \|\| anynonarray` already resolves; guessing a column's type would risk a wrong cast). | `TestConcatNumberIntoTsql`, `TestConcatNumberIntoPostgres` | `docs/rationale/strings-collation.md` | **MED** |
+| `GENERATED ALWAYS AS (expr)` **computed columns** are emitted per-engine (T-SQL bare `b AS (expr)` — no declared type; PostgreSQL `GENERATED ALWAYS AS (expr) STORED`; Oracle/MySQL the `VIRTUAL` form) — was previously corrupted into an `IDENTITY(1,1)` auto-increment (sqlglot's `Identity` node conflated the two). MySQL's own `AS (expr) STORED` shorthand reaches T-SQL as `AS … PERSISTED`; a chained reference to another computed column inlines the referent's expression; a typed JSON-accessor computed column (`->>`) gets a per-target typed-cast accessor form. | `TestGeneratedColumn`, `TestTypedComputedColumnShorthand` | `docs/rationale/ddl.md` | **MED** |
+| An engine-specific **inline DDL attribute is decomposed into a standalone accompanying statement** rather than dropped: MySQL's inline column/table `COMMENT '…'` materializes as a separate `COMMENT ON COLUMN`/`COMMENT ON TABLE` statement on PostgreSQL/Oracle (which have no inline form); a T-SQL inline `INDEX ix (col)` table-element (which sqlglot misparses as a column literally named `INDEX`) is reconstructed and emitted as a separate `CREATE INDEX` statement on PostgreSQL/Oracle, staying inline only on T-SQL/MySQL. | `TestMysqlComments`, `TestInlineIndexReconstructed` | `docs/rationale/ddl.md` | **MED** |
+| A MySQL `UNSIGNED` integer column widens to a signed type large enough to hold its range (as already documented) **and additionally synthesizes a `CHECK (col >= 0)`** on the target so the non-negativity constraint — which the wider signed type can no longer express structurally — still holds. | `TestUnsignedCheck` | `docs/rationale/ddl.md` | **MED** |
+| PostgreSQL `TRUNCATE … RESTART IDENTITY` — the default behavior on MySQL/Oracle/T-SQL — is **silently stripped** with no carrier or warning (unlike the sibling `CASCADE` clause, which *is* carriered on MySQL/T-SQL when it would otherwise be dropped). Possibly an inconsistency worth a maintainer look, not just a docs gap — see defects below. | `TestTruncateRestartIdentity` | `docs/rationale/ddl.md` | **LOW** |
+| **Boolean-to-text/char rendering** when the target has no boolean-to-string cast: PostgreSQL's boolean-to-text cast (`'true'`/`'false'`) and a boolean-valued comparison rendered as text are reproduced on MySQL via `CASE WHEN <bool> THEN 'true' ELSE 'false' END`; the reverse — MySQL's boolean-as-integer cast to `CHAR` (`'1'`/`'0'`), including inside `CONCAT`, which would otherwise render PostgreSQL's `TRUE`/`FALSE` literally as `'tf'` — gets the same `CASE`-wrap pattern converting to `1`/`0` first. | `TestPgBooleanToText`, `TestMysqlBooleanCast` | `docs/rationale/booleans.md` | **MED** |
+| A T-SQL procedural loop (`BREAK`/`CONTINUE`, compound `+=` assignment) translated **into** MySQL gets a synthesized, per-loop-instance **unique label** (`loop_lbl_N`) so `BREAK`/`CONTINUE` can spell MySQL's `LEAVE`/`ITERATE` (which are label-targeted, unlike T-SQL's unlabeled loop-relative keywords) — nested loops never collide. This is the reverse direction of the Batch 6b "Loop desugaring" recommendation (which covered MySQL as the *source*); no "Loop desugaring" section exists yet in `procedural.md` to hold either direction. | `TestTsqlLoopControl` | `docs/rationale/procedural.md` (new "Loop desugaring" section — still not written, per both this pass and 6b) | **MED** |
+| A T-SQL **cursor-loop that concatenates a dynamic-SQL string** row-by-row is recognized as a set-based string aggregation and rewritten to a single Oracle `LISTAGG(...) WITHIN GROUP (ORDER BY ROWNUM)` expression plus one `EXECUTE IMMEDIATE`, replacing the whole loop scaffold — not merely a per-statement translation but a loop-to-aggregate structural restructure. | `TestPgFnAttrsAndAggregationAssignment::test_aggregation_assignment_listagg` | `docs/rationale/procedural.md` | **MED** |
+| **Oracle inverts `CAST` typing rules by context**: a PL/SQL *expression* position (e.g. a `DBMS_OUTPUT.PUT_LINE` argument) must emit a **lengthless** `VARCHAR2` cast (a constrained type there is `PLS-00103`), while a *SQL statement* position (e.g. inside a `SELECT`) must keep the length (`ORA-00906` without it) — the same source `CAST` emits differently depending on which Oracle grammar context it lands in. | `TestPlsqlExpressionCastContext` | `docs/rationale/procedural.md` | **MED** |
+| A T-SQL **scalar function** whose body ends in an all-branches-return `IF`/`ELSE` gains a synthesized, unreachable **trailing `RETURN NULL`** — T-SQL requires a scalar function's last statement to *be* a `RETURN` (error 455) even when every branch already returns. | `TestTsqlScalarFunctionTrailingReturn` | `docs/rationale/procedural.md` | **MED** |
+| A T-SQL CTE that **references its own name is detected as recursive** and gains the `WITH RECURSIVE` keyword PostgreSQL/MySQL require (T-SQL and Oracle infer recursion without one); going to **Oracle**, a recursive CTE without an explicit column-alias list gets one **derived from the anchor `SELECT`'s output names** (`ORA-32039` otherwise). Possible companion defect: the T-SQL-only `OPTION (MAXRECURSION n)` hint is dropped with **no carrier or warning** anywhere in the pinning test — see defects below. | `TestRecursiveCteKeyword`, `TestRecursiveCteOracleColumnList` | `docs/rationale/dml.md` | **HIGH** |
+| MySQL's **compound `EXTRACT` units** (`YEAR_MONTH`, `DAY_HOUR`, `DAY_MINUTE`, …, which have no equivalent unit anywhere else) are rebuilt from their component fields with positional decimal weights (e.g. `YEAR_MONTH` → `EXTRACT(YEAR ...) * 100 + EXTRACT(MONTH ...)`). Distinct from the already-documented "Multi-field PostgreSQL INTERVAL decomposition" (a different source construct: an interval *value*, not an `EXTRACT` unit). | `TestCompoundExtract` | `docs/rationale/datetime.md` | **MED** |
+| Oracle `MONTHS_BETWEEN` is **fractional** (whole months plus `(day1-day2)/31`, collapsing to a whole number only when both dates are month-ends or share a day-of-month); translated to T-SQL as the **exact** `CASE`-based fractional formula, not an integer `DATEDIFF`-boundary count (which would silently change the value's precision class, not just its formatting). | `TestMonthsBetweenFractional` | `docs/rationale/datetime.md` | **MED** |
+| **Explicit parentheses inserted for cross-engine bitwise/arithmetic operator-precedence mismatches**: MySQL and Oracle bind bitwise operators (`&`, `\|`, `<<`) *looser* than `+`/`*`; PostgreSQL and T-SQL bind them *tighter*. A mixed source expression (e.g. MySQL's `10 & 6 + 1`, meaning `10 & (6 + 1)`) is parenthesized explicitly on the way to a tighter-binding target so the source's grouping can't silently re-associate. | `TestBitwiseArithmeticPrecedence` | `docs/rationale/strings-collation.md` or a new operators page (no existing page covers operator precedence generally) | **MED** |
+| PostgreSQL `regexp_replace`'s 4th argument is a **flags string** (`g`/`i`); Oracle/MySQL take a numeric position/occurrence and are global by default. The `g` flag is dropped rather than leaked as a bogus positional argument, and going to MySQL the pattern's backslashes are doubled and backreferences respelled `$N` (from PG's `\N`). | `TestRegexpReplaceFlags` | `docs/rationale/strings-collation.md` | **LOW** |
+| `INTERSECT ALL`/`EXCEPT ALL` (duplicate-preserving set operations) are preserved on the two engines that support an `ALL` form (MySQL 8.0.31+, PostgreSQL); Oracle and T-SQL have no `ALL` spelling and silently fall back to the duplicate-collapsing plain form — a genuine row-multiset change with **no carrier or warning** in the pinning test for that fallback leg. Possible companion defect — see below. | `TestSetOperationAll` | `docs/rationale/dml.md` | **LOW** |
+
+**Stale-doc correction found while cross-checking (not a new gap — an existing entry is now wrong).**
+`docs/rationale/strings-collation.md`'s "T-SQL LIKE character classes
+(`'[A-C]%'`) — open, observed divergence" section states, twice, that the
+bracket-character-class mistranslation is **"not yet fixed"** ("*What would
+fix it (not yet done).*"). It is fixed: `test_challenge.py`'s
+`TestTsqlLikeCharClassTranslated` (RED round-2, `red2-ts-like-charclass`,
+live-verified 2026-07-30 — the same day this section was apparently
+written) shows the transpiler now rewrites the bracket class to a portable
+predicate per target (PostgreSQL `SIMILAR TO`, MySQL/Oracle
+`REGEXP`/`REGEXP_LIKE`, both anchored). This is the same shape of doc-vs-code
+drift the original sweep's cluster 12 (Oracle `ADD_MONTHS`) caught — the doc
+needs a correction, not an addition, the next time `strings-collation.md` is
+touched.
+
+**Defects noticed, not gaps (flagged here for a BLUE follow-up brief, not
+added to any gap table or `docs/TODO.md`).**
+- `TestRecursiveCteOracleColumnList`'s pinning test drops the T-SQL-only
+  `OPTION (MAXRECURSION n)` hint with no warning assertion anywhere —
+  possible silent semantic loss (the target's recursion-depth ceiling
+  reverts to its default, e.g. PostgreSQL's unbounded vs. T-SQL's 100).
+- `TestSetOperationAll` only pins the MySQL/PostgreSQL `ALL`-preserving
+  leg; the Oracle/T-SQL fallback-to-distinct leg (a genuine duplicate-row
+  loss) has no warning in the pinning test either.
+- `docs/rationale/strings-collation.md`'s own "Positional string-splice"
+  section (already-documented, not a gap from this pass) names a **live**
+  defect it found while being written: MySQL `INSERT()`'s out-of-bounds
+  identity-return semantics are guarded only on the MySQL→T-SQL leg;
+  MySQL→Oracle/PostgreSQL and the native `STUFF`/`OVERLAY`→Oracle/PostgreSQL
+  paths carry no such guard (a wrong value, silently, on Oracle; PostgreSQL's
+  `OVERLAY(... FROM 0 ...)` raises an invalid-statement runtime error with no
+  warning at all). Restating it here since it is a genuine open defect
+  sitting in committed docs, unscored against any corpus case.
+
+**What this pass did NOT check**, same scope boundary as the rest of this
+sweep: live-DB correctness of the ~65 "already covered" dispositions, and
+`tests/fixtures/challenge/*.sql` fixture content beyond what a cited test
+already quoted.
