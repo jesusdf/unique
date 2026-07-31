@@ -24,18 +24,18 @@ from __future__ import annotations
 from tests.helpers.procedures_fe_exclusions import LEDGER, VALID_TAGS
 from tests.helpers.procedures_fe_spec import ENROLLED, discover_routines
 
-# Measured 2026-08-01 (brief A10-P2, +proc_1/3/5 result-set capture). Enrolled set
-# = 16 routines: func3 (scalar); proc_13/14 (out — proc_13 degrades on 1152 ->
-#   skipped live, proc_14 compares its INOUT @query); proc_11/10/15 (tbl_7 DML),
-#   proc_16/18 (tbl_8), proc_19/21 (tbl_6), proc_22/24 (tbl_3 GUID), proc_27
-#   (4-table cascade); proc_1/3/5 (result sets — refcursor OUT on Oracle, refcursor
-#   INOUT on PG since B56, direct result set on MySQL).
-# Ledger = 17 routines (33 - 16): 7 nondeterministic-clock (func1/func2 +
-# proc_2/4/6/25/26), 4 dynamic-sql, 2 degrade-output-clause, 1 generated-key, 1
-# encoding-inherent, 1 tvf-no-pg-equiv, 1 trigger-complex. proc_1/3/5
-# (resultset-pg-invalid) left the ledger when B56 made the PG form runnable and
-# A10-P2 added result-set capture, so no entry carries that tag today.
-ENROLLED_FLOOR = 16
+# Measured 2026-08-01 (briefs A10-P2 + A10-P3 combined at integration).
+# Enrolled = 18 routines: func3 (scalar); proc_13/14 (out); proc_11/10/15,
+# proc_16/18, proc_19/21, proc_22/24, proc_27 (table_state); proc_1/3/5
+# (result sets — refcursor OUT on Oracle, refcursor INOUT on PG since B56,
+# direct on MySQL); proc_4 + proc_26 (func1-freeze table_state; proc_26 on
+# oracle/postgresql only — MySQL hits an unwarned 1093 self-ref-subquery
+# defect, see the spec comment).
+# Ledger = 15 (33 - 18): 4 nondeterministic-clock (func1/func2 kept for
+# inherent reasons + proc_6 encoding, proc_25 embedded-dml-fallback), 4
+# dynamic-sql, 3 degrade-output-clause (incl. proc_2 retagged), 1
+# generated-key, 1 encoding-inherent, 1 tvf-no-pg-equiv, 1 trigger-complex.
+ENROLLED_FLOOR = 18
 
 
 def test_enrolled_count_at_or_above_floor() -> None:

@@ -77,6 +77,10 @@ class Guid:
 _GUID_A = Guid("11111111-1111-1111-1111-111111111111")
 _GUID_B = Guid("22222222-2222-2222-2222-222222222222")
 
+# A seed value shaped like 'YYYY-MM-DD HH:MI:SS' is a DATETIME literal, not a
+# plain string (used by proc_26's tbl_1.col_50 seed, brief A10-P3).
+_DATETIME_LITERAL_RE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
+
 
 @dataclass(frozen=True)
 class SeedTable:
@@ -104,6 +108,21 @@ class RoutineCase:
     ``probes`` are portable ``SELECT ... ORDER BY`` statements valid on every
     engine, projecting away the surrogate key / GUID whose cross-engine
     representation differs.
+
+    ``freeze_func1`` (brief A10-P3) pins the fixture's ``func1()`` clock stub to
+    a fixed constant on BOTH the source and target engine before the routine
+    runs (see ``freeze_func1_sql``) — turns a ``func1()``-dependent routine into
+    a deterministic one without touching the routine body being validated.
+    ``resultset_tail`` marks a ``table_state`` routine whose body ALSO ends in a
+    bare ``SELECT`` (a secondary, uncompared result set); the call must supply
+    the per-engine plumbing that shape needs (Oracle's synthesized
+    ``RESULT_CURSOR`` OUT bind, PostgreSQL's ``INOUT refcursor`` arg, draining
+    the pending result on tsql/mysql) and then discard it — only the seeded
+    TABLE state is asserted, same as any other ``table_state`` case.
+    ``targets`` restricts which of the module's ``TARGETS`` this case runs
+    against (``None`` = all); use it when a routine is comparable on some
+    targets but hits an independent, unrelated defect on another (documented
+    in a comment at the case, not silently — see ``proc_26`` below).
     """
 
     name: str
@@ -114,6 +133,9 @@ class RoutineCase:
     probes: tuple[str, ...] = ()
     out_params: tuple[str, ...] = ()
     result_sets: int = 1  # kind="resultset": number of result sets the body emits
+    freeze_func1: bool = False
+    resultset_tail: bool = False
+    targets: tuple[str, ...] | None = None
 
     @property
     def object_kind(self) -> str:
@@ -123,6 +145,41 @@ class RoutineCase:
     def source_sql(self) -> str:
         """The routine's own definition, extracted from the T-SQL fixture."""
         return extract_routine(self.name, self.object_kind)
+
+
+# --------------------------------------------------------------------------- #
+# func1-freeze lever (brief A10-P3, design §3/§5.3). func1() is a fixture clock
+# stub, not the subject under test; pinning it to a fixed constant on every
+# engine turns its dependents into deterministic, comparable routines without
+# touching the routine body being validated. Same value on every engine so the
+# columns it feeds (e.g. proc_4.tbl_6.col_18) compare equal across targets.
+# --------------------------------------------------------------------------- #
+FROZEN_FUNC1_VALUE = "2020-06-15 12:00:00"
+
+
+def freeze_func1_sql(engine: str) -> str:
+    """A ``CREATE`` for ``func1()`` that returns the fixed constant above."""
+    if engine == "tsql":
+        return (
+            "CREATE OR ALTER FUNCTION dbo.func1() RETURNS DATETIME AS "
+            f"BEGIN RETURN '{FROZEN_FUNC1_VALUE}' END"
+        )
+    if engine == "oracle":
+        return (
+            "CREATE OR REPLACE FUNCTION func1 RETURN DATE AS BEGIN RETURN "
+            f"TO_DATE('{FROZEN_FUNC1_VALUE}', 'YYYY-MM-DD HH24:MI:SS'); END;"
+        )
+    if engine == "postgresql":
+        return (
+            "CREATE OR REPLACE FUNCTION func1() RETURNS TIMESTAMP LANGUAGE "
+            f"plpgsql AS $$ BEGIN RETURN TIMESTAMP '{FROZEN_FUNC1_VALUE}'; END; $$;"
+        )
+    if engine == "mysql":
+        return (
+            "CREATE FUNCTION func1() RETURNS DATETIME DETERMINISTIC "
+            f"BEGIN RETURN '{FROZEN_FUNC1_VALUE}'; END"
+        )
+    raise ValueError(f"unknown engine {engine!r}")
 
 
 # --------------------------------------------------------------------------- #
@@ -210,6 +267,11 @@ def seed_literal(value: Any, engine: str) -> str:
     if isinstance(value, int):
         return str(value)
     if isinstance(value, str):
+        if engine == "oracle" and _DATETIME_LITERAL_RE.match(value):
+            # Oracle's implicit string->DATE cast depends on the session NLS
+            # format (ORA-01843 on a plain 'YYYY-MM-DD HH:MI:SS' literal
+            # otherwise) — TO_DATE with an explicit mask sidesteps that.
+            return f"TO_DATE('{value}', 'YYYY-MM-DD HH24:MI:SS')"
         return "'" + value.replace("'", "''") + "'"
     raise TypeError(f"unsupported seed value {value!r}")
 
@@ -500,6 +562,54 @@ ROUTINE_CASES: tuple[RoutineCase, ...] = (
             SeedTable("tbl_9", ({"col_30": 1, "col_43": "x"},)),
         ),
         args={"col_31": 1},
+    ),
+    # -- func1-freeze lever (brief A10-P3) ------------------------------------ #
+    # Both write @func1 (the frozen clock) into a table_state column AND end in
+    # a bare-SELECT report tail (resultset_tail=True) that this harness does not
+    # compare — only the seeded table state is asserted, like any table_state
+    # case. Live-verified 2026-08-01 on all engines this case enrolls for
+    # (tsql source + every listed target): the frozen columns compare equal.
+    RoutineCase(
+        name="proc_4",
+        kind="table_state",
+        freeze_func1=True,
+        resultset_tail=True,
+        seed=(
+            SeedTable("tbl_6", ({"col_31": 1, "col_32": 0},)),
+            SeedTable("tbl_7"),  # empty -> both UPDATEs' NOT EXISTS is true
+            SeedTable("tbl_8"),  # empty; only referenced by the discarded RS
+            SeedTable("tbl_9"),  # empty; only referenced by the discarded RS
+        ),
+        args={"col_31": 1},
+        probes=("SELECT col_31, col_32, col_18, col_33 FROM tbl_6 ORDER BY col_31",),
+    ),
+    # proc_26 is clean (only UNIQUE-1193 + the benign UNIQUE-1231 "OPTION
+    # (RECOMPILE) dropped, execution-plan-only" message) on oracle/postgresql —
+    # live-verified 2026-08-01: seeded tbl_1.col_50 is far enough in the past
+    # that, once func1 is frozen, both tbl_6 UPDATEs are deterministic (the
+    # first flips col_32 1->0 via the tbl_1/tbl_2/tbl_6 join; the second is a
+    # no-op because col_33 is NULL, so COALESCE(col_33,@func1)+5min is never <
+    # @func1). MYSQL IS EXCLUDED from `targets`: live-verified 2026-08-01 the
+    # transpiled MySQL UPDATE ("... WHERE col_31 IN (SELECT ... FROM tbl_6
+    # ...)") throws MySQL error 1093 ("You can't specify target table 'tbl_6'
+    # for update in FROM clause") at CALL — a genuine, UNWARNED runtime defect
+    # (MySQL disallows a subquery referencing the very table being updated
+    # without wrapping it in a derived table). Report-only per brief A10-P3;
+    # not fixed here.
+    RoutineCase(
+        name="proc_26",
+        kind="table_state",
+        freeze_func1=True,
+        resultset_tail=True,
+        targets=("oracle", "postgresql"),
+        seed=(
+            SeedTable("tbl_1", ({"col_1": 1, "col_50": "2020-01-01 00:00:00"},)),
+            SeedTable("tbl_2", ({"col_1": 1, "col_6": _GUID_A},)),
+            SeedTable("tbl_6", ({"col_31": 1, "col_6": _GUID_A, "col_32": 1},)),
+            SeedTable("tbl_9"),  # empty -> COALESCE default 1440
+        ),
+        args={},
+        probes=("SELECT col_31, col_32 FROM tbl_6 ORDER BY col_31",),
     ),
 )
 
