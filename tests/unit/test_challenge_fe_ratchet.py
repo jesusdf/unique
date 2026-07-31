@@ -80,7 +80,20 @@ from tests.helpers.corpus_diff import is_comparable
 # point via ORD(CONVERT(x USING utf32)) on the MySQL target (pg-chr-ascii-
 # unicode; the ASCII-range and CHR legs already matched). 1 removed: 7
 # defect-pending-fix, 5 documented-inherent, 2 session-dependent = 14.
-LEDGER_SIZE_FLOOR = 14
+#
+# 2026-07-31 (brief T4-B cont.): ledger housekeeping over the tail. Removed
+# ora-frac-seconds — the A10-T2 numeric-tolerance comparator already equates
+# EXTRACT(SECOND)=30.123456 with integer DATEPART=30 (coarser-operand rounding),
+# so it now MATCHES on all targets (comparator-cleared, no transpile change).
+# Retagged 4 as documented-inherent with live evidence: ts-frac-seconds
+# (DATETIME2(7) driver-truncation vs TIMESTAMP(6) rounding of the 7th digit),
+# ora-lpad-tochar (Oracle TO_CHAR '#'/'B' number-format overflow has no PG form),
+# ora-interval-out + ora-numtointerval (transpiler faithful — PG INTERVAL
+# 'n MONTH' equals Oracle's year-month interval, but oracledb IntervalYM vs
+# psycopg's timedelta flattening are not comparable across drivers). New count:
+# 2 defect-pending-fix (my-agg-boolean, pg-baseconv), 9 documented-inherent, 2
+# session-dependent = 13.
+LEDGER_SIZE_FLOOR = 13
 
 
 def _eligible_cases() -> list[CorpusEntry]:

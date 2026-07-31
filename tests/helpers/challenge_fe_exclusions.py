@@ -118,27 +118,43 @@ LEDGER: tuple[Excluded, ...] = (
         sql="SELECT SUM(x>1), COUNT(x>1), AVG(x>1), MAX(x>1) FROM (SELECT 1 x UNION ALL SELECT 2 UNION ALL SELECT 3) t",
     ),
     Excluded(
-        id="ora-frac-seconds",
-        tag="defect-pending-fix",
-        reason="EXTRACT(SECOND) fractional vs integer DATEPART on targets",
-        sql="SELECT TO_TIMESTAMP('2020-01-01 10:20:30.123456','YYYY-MM-DD HH24:MI:SS.FF6'), EXTRACT(SECOND FROM TIMESTAMP '2020-01-01 10:20:30.123456') FROM DUAL",
-    ),
-    Excluded(
         id="ora-interval-out",
-        tag="defect-pending-fix",
-        reason="year-month interval flattened to a day count on PG",
+        tag="documented-inherent",
+        reason=(
+            "the transpiler output is FAITHFUL — NUMTOYMINTERVAL(14,'MONTH') -> PG "
+            "INTERVAL '14 MONTH' is a true 14-month year-month interval, equal to "
+            "Oracle's — but the FE harness cannot compare it: oracledb returns an "
+            "IntervalYM (comparator 'interval_ym:14') while psycopg flattens the PG "
+            "interval to a timedelta day count ('interval_dt:...'), and the "
+            "comparator deliberately never equates a year-month interval to a fixed "
+            "day count (14 months has no fixed day count). Driver-representation "
+            "limit, not a transpile defect (the DS leg NUMTODSINTERVAL matches)"
+        ),
         sql="SELECT NUMTOYMINTERVAL(14,'MONTH'), NUMTODSINTERVAL(90000,'SECOND') FROM DUAL",
     ),
     Excluded(
         id="ora-lpad-tochar",
-        tag="defect-pending-fix",
-        reason="TO_CHAR '#' overflow mask fidelity",
+        tag="documented-inherent",
+        reason=(
+            "Oracle's number-format model has a 'B' element (blank integer part "
+            "when zero) and a '#' OVERFLOW marker returned when a value does not fit "
+            "the mask — TO_CHAR(5,'FMB')='#' (live-checked). PG's to_char has "
+            "neither: to_char(5,'FMB')='' (live-checked), so LPAD gives '00000000' "
+            "vs Oracle's '0000000#'. No PG equivalent for the '#'/'B' semantics — "
+            "inherent format-model divergence"
+        ),
         sql="SELECT LPAD(TO_CHAR(5,'FMB'), 8, '0') FROM DUAL",
     ),
     Excluded(
         id="ora-numtointerval",
-        tag="defect-pending-fix",
-        reason="year-month interval flattened to a day count on PG",
+        tag="documented-inherent",
+        reason=(
+            "same as ora-interval-out: NUMTOYMINTERVAL(18,'MONTH') -> PG INTERVAL "
+            "'18 MONTH' is faithful, but the year-month leg is not comparable across "
+            "the oracledb IntervalYM vs psycopg timedelta-flattened representations "
+            "(the comparator never equates a YM interval to a fixed day count). The "
+            "DS leg NUMTODSINTERVAL(1.5,'DAY') matches"
+        ),
         sql="SELECT NUMTODSINTERVAL(1.5,'DAY'), NUMTOYMINTERVAL(18,'MONTH') FROM DUAL",
     ),
     Excluded(
@@ -149,8 +165,16 @@ LEDGER: tuple[Excluded, ...] = (
     ),
     Excluded(
         id="ts-frac-seconds",
-        tag="defect-pending-fix",
-        reason="fractional-second rounding .123456 vs .123457",
+        tag="documented-inherent",
+        reason=(
+            "inherent sub-second precision-model divergence: T-SQL DATETIME2 default "
+            "scale is 7 digits (100ns) and the value is stored then the Python driver "
+            "TRUNCATES the 7th digit to microseconds (.1234567 -> .123456); PG "
+            "TIMESTAMP / MySQL DATETIME(6) are microsecond (6 digits) and ROUND the "
+            "input literal (.1234567 -> .123457). The 7th digit is unrepresentable "
+            "off T-SQL and truncate-vs-round is an engine choice, not reproducible "
+            "for runtime column values — inherent (the DATETIME .123 leg matches)"
+        ),
         sql="SELECT CAST('2020-01-01 10:20:30.1234567' AS DATETIME2), CAST('2020-01-01 10:20:30.123' AS DATETIME)",
     ),
 )
