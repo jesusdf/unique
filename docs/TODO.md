@@ -55,14 +55,15 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
 
 ### Maintainer decisions pending
 
-- **B47** (P2, live-probed) — Oracle bare `NUMBER` → `BIGINT` promotion is
-  **unconditional** (`convert.py _convert_create_table` ~2428): a non-key
-  fractional column (`discount_pct NUMBER`) silently becomes `BIGINT` —
-  truncation risk, no warning. Faithful map would be PG `NUMERIC` or a
-  role-aware promotion; either changes a long-pinned mapping
-  (`TestOracleBareNumberToInteger`) and the shipped fixtures. Documented
-  with a Warning callout in `docs/rationale/ddl.md` meanwhile.
-- **A10-T2** above.
+- ~~B47~~ — DECIDED (maintainer, 2026-07-31: role-aware + warning) and DONE:
+  bare `NUMBER` → `BIGINT` only on STRUCTURAL id signals (inline/table-level
+  PK/UNIQUE/identity/FK incl. the cross-statement `PK_UNIQUE_COLUMNS`
+  harvest; FKs promote for join compatibility); otherwise PG unbounded
+  `NUMERIC` (faithful, no warning) and MySQL/T-SQL `DECIMAL(38,10)` + new
+  `UNIQUE-1236` warning. Live: `0.1250000001` preserved (was truncated to 0
+  under BIGINT). Docs: ddl.md callout rewritten, 03-unsupported §3.19,
+  reference regenerated. `TestOracleBareNumberToInteger` strengthened.
+(Both maintainer decisions resolved 2026-07-31.)
 
 ### Small findings (P3 unless noted)
 
