@@ -932,7 +932,11 @@ CREATE TABLE t (a INT, b INT INVISIBLE)
 DELETE FROM t WHERE v < 0 ORDER BY id LIMIT 5
 
 -- CASE[fixed][class=func]: red3-my-update-orderby-limit-drop — was failing on postgresql, tsql, oracle. UPDATE sibling of red2-my-delete-orderby-limit-drop. MySQL "UPDATE t SET v=v+1 WHERE v<0 ORDER BY id LIMIT n" updates only n rows (the n lowest ids), but the ORDER BY + LIMIT were DROPPED so the transpiled UPDATE affected ALL matching rows — a silent data-integrity divergence. FIXED: _convert_update now reads the order/limit args (guardrail 7, shared _read_order_and_limit) into UpdateStatement.limit/order_by; the emitter renders the cap per target via _UPDATE_CAP (MySQL native ORDER BY+LIMIT, T-SQL updatable SELECT TOP CTE, PG ctid subquery, Oracle rowid subquery with ROWNUM after ordering). Live-verified (blue8 stack, 10 rows v=-id): MySQL ORIGINAL updates 5; PG/T-SQL/Oracle TRANSPILED each update exactly 5 (was 10). No more unread-arg tripwire. Covered by TestUpdateOrderByLimitCap.
+CREATE TABLE t (id INT PRIMARY KEY, v INT);
+INSERT INTO t VALUES (1,-1),(2,-2),(3,-3),(4,-4),(5,-5),(6,-6),(7,-7),(8,-8),(9,-9),(10,-10);
 UPDATE t SET v = v + 1 WHERE v < 0 ORDER BY id LIMIT 5
 
 -- CASE[fixed][class=func]: red3-my-update-limit-no-orderby — was failing on postgresql, tsql, oracle. Immediate neighbor of red3-my-update-orderby-limit-drop: UPDATE ... LIMIT n WITHOUT an ORDER BY. MySQL updates only n rows; the transpiled UPDATE dropped the LIMIT and updated ALL matching rows. FIXED by the same _UPDATE_CAP mechanism (unordered branch): MySQL native LIMIT, T-SQL SELECT TOP CTE (no ORDER BY), PG ctid subquery, Oracle ROWNUM <= n predicate. Live-verified (blue8 stack, 10 rows v=-id): MySQL ORIGINAL updates 5; PG/T-SQL/Oracle TRANSPILED each update exactly 5 (was 10). Covered by TestUpdateOrderByLimitCap.
+CREATE TABLE t (id INT PRIMARY KEY, v INT);
+INSERT INTO t VALUES (1,-1),(2,-2),(3,-3),(4,-4),(5,-5),(6,-6),(7,-7),(8,-8),(9,-9),(10,-10);
 UPDATE t SET v = v + 1 WHERE v < 0 LIMIT 5

@@ -877,6 +877,8 @@ SELECT DATE '2020-03-01' - 7 AS d
 SELECT EXTRACT(ISOYEAR FROM DATE '2020-03-15') AS d
 
 -- CASE[fixed][class=func]: red2-pg-window-exclude-current — fails on tsql, mysql, oracle. A window frame EXCLUDE CURRENT ROW / EXCLUDE GROUP / EXCLUDE TIES is SILENTLY DROPPED from the OVER() clause on every target with NO warning, changing the aggregate. Live on t(a) = (1,1,2,3): PG SUM(a) OVER(ORDER BY a ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW) = 6,6,5,4 (total-minus-self); transpiled Oracle drops EXCLUDE -> 7,7,7,7. No target supports EXCLUDE, so the correct outcome is a documented degrade + warning, not a silent frame change. BLUE: warn/degrade when EXCLUDE cannot be reproduced (or rewrite it, e.g. subtract the current row's contribution).
+CREATE TABLE t (a INT);
+INSERT INTO t VALUES (1), (1), (2), (3);
 SELECT a, SUM(a) OVER (ORDER BY a ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW) AS s FROM t ORDER BY a
 
 -- CASE[fixed][class=invalid]: red2-pg-fk-ondelete-setdefault-oracle — fails on oracle. A foreign key with ON DELETE SET DEFAULT is passed through verbatim to Oracle, which only supports ON DELETE CASCADE / SET NULL / NO ACTION: live ORA-03001 "unimplemented feature". No warning. Source valid on PG; MySQL tolerates the clause. BLUE: Oracle has no SET DEFAULT referential action — degrade with a warning (drop the action or emit a trigger) rather than shipping the unsupported clause.
