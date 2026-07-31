@@ -17,10 +17,20 @@ import re
 
 import pytest
 
-from tests.helpers.validity import assert_translated, executable_lines
+from tests.helpers.validity import assert_translated, executable_body, executable_lines
+from unique.core.procedural.transformer import ProceduralTransformer
 from unique.core.transpiler import Transpiler
 
 _TARGETS = ("oracle", "postgresql", "mysql")
+
+
+def _ir(source: str, target: str, fragment: str) -> str | None:
+    """Run one scalar/DML fragment through the procedural IR-first pipeline
+    directly (bypassing the routine-shell parser) — the same helper pattern
+    as ``tests/unit/core/test_ir_first_families.py``, used here to probe the
+    procedural pipeline's function mapping independently of the standalone
+    DML pipeline (dual-pipeline symmetry rule)."""
+    return ProceduralTransformer(source, target)._ir_transpile_dml(fragment)
 
 
 def _t(sql: str, target: str, source: str = "tsql") -> str:
@@ -179,3 +189,186 @@ class TestConditionalFunction:
                 assert not re.search(r"(?<!I)\bIF\(", body), out
             else:
                 assert needle not in body, out
+
+
+class TestMysqlUnixTimestampToPostgresql:
+    """B36b: MySQL UNIX_TIMESTAMP()/UNIX_TIMESTAMP(expr) was an untranslated
+    built-in leak (UNIQUE-1151) into PostgreSQL. EXTRACT(EPOCH FROM ...)
+    matches value-for-value (live-verified against MySQL 8 / PostgreSQL 16 in
+    UTC): UNIX_TIMESTAMP('2020-01-01 00:00:00') = 1577836800 =
+    EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01 00:00:00'), and a fractional
+    argument round-trips exactly (…00.500 on both sides).
+    """
+
+    def test_with_arg_translates_to_extract_epoch(self) -> None:
+        out = _t("SELECT UNIX_TIMESTAMP(a) FROM t", "postgresql", source="mysql")
+        assert_translated(
+            out,
+            "postgresql",
+            present=("EXTRACT(EPOCH FROM a)",),
+            absent=("UNIX_TIMESTAMP",),
+        )
+
+    def test_literal_datetime_arg_value_form(self) -> None:
+        out = _t(
+            "SELECT UNIX_TIMESTAMP('2020-01-01 00:00:00')",
+            "postgresql",
+            source="mysql",
+        )
+        assert_translated(
+            out,
+            "postgresql",
+            present=("EXTRACT(EPOCH FROM '2020-01-01 00:00:00')",),
+            absent=("UNIX_TIMESTAMP",),
+        )
+
+    def test_no_arg_floors_to_whole_seconds(self) -> None:
+        # MySQL's niladic form has whole-second resolution (it reads NOW(),
+        # which MySQL has no fractional seconds for); PostgreSQL's
+        # CURRENT_TIMESTAMP carries microseconds, so a bare EXTRACT would
+        # silently gain sub-second precision MySQL never has. FLOOR matches
+        # MySQL's own granularity.
+        out = _t("SELECT UNIX_TIMESTAMP()", "postgresql", source="mysql")
+        assert_translated(
+            out,
+            "postgresql",
+            present=("FLOOR(EXTRACT(EPOCH FROM CURRENT_TIMESTAMP))",),
+            absent=("UNIX_TIMESTAMP",),
+        )
+
+    def test_procedural_assignment_translates(self) -> None:
+        # Same mechanism, procedural pipeline (dual-pipeline symmetry rule):
+        # a SET assignment's RHS scalar expression routes through the same
+        # IR ``_emit_function`` as standalone DML.
+        out = _ir("mysql", "postgresql", "v_x = UNIX_TIMESTAMP(v_y)")
+        assert out is not None, out
+        assert "EXTRACT(EPOCH FROM v_y)" in out, out
+        assert "UNIX_TIMESTAMP" not in out.upper(), out
+
+    def test_reverse_epoch_extract_maps_to_mysql_timestampdiff(self) -> None:
+        # The reverse direction (PG epoch-extract -> MySQL) already existed
+        # before this brief: TIMESTAMPDIFF(SECOND, epoch, x) rather than
+        # UNIX_TIMESTAMP(x), deliberately — UNIX_TIMESTAMP applies MySQL's
+        # SESSION time zone to its argument, which would shift the value
+        # relative to PG's tz-naive EXTRACT(EPOCH FROM ...); TIMESTAMPDIFF is
+        # a literal difference with no such conversion. Locked in here as a
+        # regression guard for the "map the reverse direction" requirement.
+        out = _t("SELECT EXTRACT(EPOCH FROM a) FROM t", "mysql", source="postgresql")
+        assert_translated(
+            out,
+            "mysql",
+            present=("TIMESTAMPDIFF(SECOND, '1970-01-01 00:00:00', a)",),
+            absent=("UNIX_TIMESTAMP", "EXTRACT"),
+        )
+
+
+class TestOracleHashFunctionsToPostgresql:
+    """B36b: Oracle RAWTOHEX(x) and STANDARD_HASH(x[, 'ALG']) were untranslated
+    built-in leaks (UNIQUE-1151) into PostgreSQL. Live-verified against Oracle
+    23 / PostgreSQL 16 for 'abc': MD5/SHA256/SHA384/SHA512 match byte-for-byte
+    through PostgreSQL's core md5()/sha256()/sha384()/sha512() (PG 11+, no
+    pgcrypto needed), both as raw digest bytes (bare STANDARD_HASH) and as the
+    uppercase hex string (RAWTOHEX(STANDARD_HASH(...))). SHA1 — Oracle's own
+    default algorithm — has no core-PostgreSQL equivalent and degrades
+    honestly (UNIQUE-1235) rather than emit a different digest.
+    """
+
+    def test_bare_rawtohex_translates(self) -> None:
+        out = _t("SELECT RAWTOHEX('AB') FROM DUAL", "postgresql", source="oracle")
+        assert_translated(
+            out,
+            "postgresql",
+            present=("UPPER(ENCODE(CONVERT_TO('AB', 'UTF8'), 'hex'))",),
+            absent=("RAWTOHEX",),
+        )
+
+    def test_rawtohex_standard_hash_sha256_translates(self) -> None:
+        out = _t(
+            "SELECT RAWTOHEX(STANDARD_HASH(x, 'SHA256')) FROM t",
+            "postgresql",
+            source="oracle",
+        )
+        assert_translated(
+            out,
+            "postgresql",
+            present=("UPPER(ENCODE(SHA256(CONVERT_TO(x, 'UTF8')), 'hex'))",),
+            absent=("RAWTOHEX", "STANDARD_HASH"),
+        )
+
+    def test_rawtohex_standard_hash_md5_translates(self) -> None:
+        # MD5 needs a different wrapper: PG's md5() already returns hex TEXT
+        # (not bytea like sha256/384/512), so UPPER(...) alone renders the
+        # RAWTOHEX-equivalent string — no ENCODE(...,'hex') needed.
+        out = _t(
+            "SELECT RAWTOHEX(STANDARD_HASH(x, 'MD5')) FROM t",
+            "postgresql",
+            source="oracle",
+        )
+        assert_translated(
+            out,
+            "postgresql",
+            present=("UPPER(MD5(CONVERT_TO(x, 'UTF8')))",),
+            absent=("RAWTOHEX", "STANDARD_HASH"),
+        )
+
+    @pytest.mark.parametrize("alg", ["SHA256", "SHA384", "SHA512"])
+    def test_bare_standard_hash_translates(self, alg: str) -> None:
+        out = _t(
+            f"SELECT STANDARD_HASH(x, '{alg}') FROM t", "postgresql", source="oracle"
+        )
+        assert_translated(
+            out,
+            "postgresql",
+            present=(f"{alg}(CONVERT_TO(x, 'UTF8'))",),
+            absent=("STANDARD_HASH",),
+        )
+
+    def test_bare_standard_hash_md5_translates(self) -> None:
+        # Bare STANDARD_HASH returns Oracle RAW bytes; PG's md5() returns hex
+        # TEXT, so DECODE(...,'hex') turns it back into the matching bytea
+        # value (the byte-for-byte match, live-verified).
+        out = _t("SELECT STANDARD_HASH(x, 'MD5') FROM t", "postgresql", source="oracle")
+        assert_translated(
+            out,
+            "postgresql",
+            present=("DECODE(MD5(CONVERT_TO(x, 'UTF8')), 'hex')",),
+            absent=("STANDARD_HASH",),
+        )
+
+    def test_standard_hash_sha1_degrades_honestly(self) -> None:
+        # SHA1 is Oracle's own default algorithm (no ALG argument) and has no
+        # core-PostgreSQL equivalent (needs the pgcrypto extension) — must
+        # degrade with a warning, never fake a different digest.
+        result = Transpiler().transpile(
+            "SELECT STANDARD_HASH(x) FROM t", "oracle", "postgresql"
+        )
+        assert any(w.code == "UNIQUE-1235" for w in result.warnings), result.warnings
+        # The carrier note itself names the construct (that's the point of a
+        # truthful warning) — check the executable SQL, comments stripped.
+        assert "STANDARD_HASH" not in executable_body(result.sql).upper()
+
+    def test_rawtohex_standard_hash_sha1_degrades_honestly(self) -> None:
+        result = Transpiler().transpile(
+            "SELECT RAWTOHEX(STANDARD_HASH(x, 'SHA1')) FROM t", "oracle", "postgresql"
+        )
+        assert any(w.code == "UNIQUE-1235" for w in result.warnings), result.warnings
+        body = executable_body(result.sql).upper()
+        assert "RAWTOHEX" not in body and "STANDARD_HASH" not in body
+
+    def test_procedural_function_body_translates(self) -> None:
+        # Same mechanism, procedural pipeline (dual-pipeline symmetry rule) —
+        # the exact shape func4 uses in the procedures fixture (a SELECT ...
+        # INTO whose expression is RAWTOHEX(STANDARD_HASH(...))).
+        sql = (
+            "CREATE OR REPLACE FUNCTION f4 (payload IN NVARCHAR2) "
+            "RETURN NVARCHAR2 AS\n"
+            "    v_ret NVARCHAR2(2000);\n"
+            "BEGIN\n"
+            "    SELECT RAWTOHEX(STANDARD_HASH(payload, 'SHA256')) INTO v_ret "
+            "FROM DUAL;\n"
+            "    RETURN v_ret;\n"
+            "END;\n/\n"
+        )
+        out = Transpiler().transpile(sql, "oracle", "postgresql").sql
+        assert "UPPER(ENCODE(SHA256(CONVERT_TO(payload, 'UTF8')), 'hex'))" in out, out
+        assert "RAWTOHEX" not in out.upper() and "STANDARD_HASH" not in out.upper()
