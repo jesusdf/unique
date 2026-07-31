@@ -134,6 +134,23 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
         "tsql": {"present": ["VARBINARY(MAX)"], "absent": ["BLOB"]},
         "postgresql": {"present": ["data BYTEA"], "absent": ["BLOB"]},
     },
+    # invalid: MySQL CAST(bool AS CHAR) yields '1'/'0'; T-SQL/Oracle reject a
+    # boolean CAST operand (156 / ORA-02000 "missing AS"). Wrap the predicate in
+    # a 1/0 CASE so the CAST operand is a legal scalar and the value matches '1'.
+    "my-bool-char": {
+        "tsql": {
+            "present": ["CAST(CASE WHEN 1 = 1 THEN 1 ELSE 0 END AS VARCHAR(8000))"],
+            "absent": ["CAST(1 = 1 AS"],
+        },
+        "oracle": {
+            "present": ["CAST(CASE WHEN 1 = 1 THEN 1 ELSE 0 END AS VARCHAR2(4000))"],
+            "absent": ["CAST(1 = 1 AS"],
+        },
+        "postgresql": {
+            "present": ["CAST(CASE WHEN 1 = 1 THEN 1 ELSE 0 END AS TEXT)"],
+            "absent": ["CAST(1 = 1 AS"],
+        },
+    },
     "my-cast-int": {
         "tsql": {
             "present": ["CAST(ROUND(2.7, 0) AS BIGINT)"],

@@ -402,6 +402,23 @@ CASES.update(
                 ),
             },
         ),
+        # invalid: a boolean predicate cast to TEXT — T-SQL/Oracle have no
+        # boolean value type and reject the predicate as a CAST operand (156 /
+        # ORA-02000 "missing AS"). PG renders a boolean text as 'true'/'false',
+        # so emit that CASE form (live-verified value 'true').
+        "pg-bool-repr": Case(
+            "pg-bool-repr ",
+            {
+                "tsql": Expect(
+                    present=("CASE WHEN 1 > 0 THEN 'true' ELSE 'false' END",),
+                    absent=("CAST(1 > 0 AS",),
+                ),
+                "oracle": Expect(
+                    present=("CASE WHEN 1 > 0 THEN 'true' ELSE 'false' END",),
+                    absent=("CAST(1 > 0 AS",),
+                ),
+            },
+        ),
         # composition: bool_or + FILTER — the FILTER CASE's boolean THEN-value
         # must be wrapped 1/0 on T-SQL/Oracle (the bool_agg 1/0 form composes
         # with the FILTER rewrite). Result = 1 (True).

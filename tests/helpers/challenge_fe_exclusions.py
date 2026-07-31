@@ -118,12 +118,6 @@ LEDGER: tuple[Excluded, ...] = (
         sql="SELECT SUM(x>1), COUNT(x>1), AVG(x>1), MAX(x>1) FROM (SELECT 1 x UNION ALL SELECT 2 UNION ALL SELECT 3) t",
     ),
     Excluded(
-        id="my-bool-char",
-        tag="defect-pending-fix",
-        reason="CAST(bool AS CHAR) emits invalid target CAST (missing AS)",
-        sql="SELECT CAST((1=1) AS CHAR) AS r",
-    ),
-    Excluded(
         id="my-cast-binary2",
         tag="defect-pending-fix",
         reason="fixed-width BINARY padding not reproduced on T-SQL",
@@ -178,12 +172,6 @@ LEDGER: tuple[Excluded, ...] = (
         sql="SELECT DATE(TIMESTAMP '2020-01-01 14:30') AS r",
     ),
     Excluded(
-        id="ora-cast-int-edge",
-        tag="defect-pending-fix",
-        reason="CAST('3.9' AS INT): Oracle rounds, targets reject",
-        sql="SELECT CAST('3.9' AS INT), TRUNC(3.9), ROUND(3.9), CAST(3.9 AS NUMBER(1)) FROM DUAL",
-    ),
-    Excluded(
         id="ora-frac-seconds",
         tag="defect-pending-fix",
         reason="EXTRACT(SECOND) fractional vs integer DATEPART on targets",
@@ -212,12 +200,6 @@ LEDGER: tuple[Excluded, ...] = (
         tag="defect-pending-fix",
         reason="base-conversion argument mapping wrong on MySQL",
         sql="SELECT 255::bit(8)::text,to_hex(255),255::text",
-    ),
-    Excluded(
-        id="pg-bool-repr",
-        tag="defect-pending-fix",
-        reason="boolean cast emits invalid target CAST (missing AS)",
-        sql="SELECT (1>0), (1>0)::int, (1>0)::text, NOT (1>0), true AND NULL",
     ),
     Excluded(
         id="pg-chr-ascii-unicode",
