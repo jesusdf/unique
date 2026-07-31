@@ -32,7 +32,24 @@ from tests.helpers.procedures_fe_spec import ENROLLED, discover_routines
 # 4 dynamic-sql, 2 degrade-output-clause, 1 generated-key, 1 encoding-inherent,
 # 1 tvf-no-pg-equiv, 1 trigger-complex. proc_14 (OUTPUT INOUT dropped) left the
 # ledger when the B58 OUTPUT -> IN OUT/INOUT mapping landed and it enrolled.
-ENROLLED_FLOOR = 13
+#
+# Updated 2026-08-01 (brief A10-P3, the func1-freeze lever). Enrolled set = 15:
+# +proc_4 (all 3 targets) and +proc_26 (oracle/postgresql only — MySQL hits an
+# independent, live-verified defect, UNIQUE-1093-class self-referencing UPDATE
+# subquery, reported not fixed here; see procedures_fe_spec.py). Both need
+# `freeze_func1` (func1() pinned to a fixed constant on every engine so the
+# columns it feeds compare equal) + `resultset_tail` (their bodies also end in
+# a bare-SELECT report that this harness calls-and-discards, not compares).
+# The other clock-dependent routines were re-verified and each has an
+# INDEPENDENT blocker the freeze does not touch, so they stay ledgered with
+# updated tags/reasons: proc_2 -> degrade-output-clause (UNIQUE-1191, same
+# class as proc_8/9); proc_6, func2 -> encoding-inherent (both ultimately
+# persist/return func4's hash); proc_25 -> embedded-dml-fallback (new tag,
+# UNIQUE-1231 "review the statement" on every target + UNIQUE-1202 on MySQL).
+# func5 (TVF) and col_173 (trigger) were re-verified live and their blockers
+# stand unchanged; func1 itself stays ledgered (the freeze is for its
+# dependents, not for testing func1's own nondeterministic body).
+ENROLLED_FLOOR = 15
 
 
 def test_enrolled_count_at_or_above_floor() -> None:

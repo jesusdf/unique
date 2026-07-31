@@ -24,6 +24,15 @@ per module and reused, and every seed table + the routine are dropped before AND
 after each case (DDL auto-commits on MySQL/Oracle). Skipped entirely unless the
 ``UNIQUE_TEST_*_URL`` env vars are set, so the offline suite stays green; it runs
 in the nightly ``challenge-live`` workflow against the four live containers.
+
+Brief A10-P3 additions: ``RoutineCase.freeze_func1`` pins the fixture's
+``func1()`` clock stub to a fixed constant on both engines before the case runs
+(``procedures_fe_spec.freeze_func1_sql``), making its dependents deterministic;
+``resultset_tail`` calls a ``table_state`` routine whose body ALSO ends in a
+bare ``SELECT`` (the secondary result set is discarded, not compared — see
+``_call_table_state_with_rs_tail``); ``targets`` restricts a case to a subset
+of ``TARGETS`` when it is comparable on some but hits an unrelated, documented
+defect on another (see ``proc_26`` in ``procedures_fe_spec.py``).
 """
 
 from __future__ import annotations
@@ -41,6 +50,7 @@ from tests.helpers.procedures_fe_spec import (
     RoutineCase,
     call_argument,
     extract_table_ddl,
+    freeze_func1_sql,
     identity_column,
     param_order,
     positional_args,
@@ -52,7 +62,25 @@ from unique.core.transpiler import transpile
 # T-SQL is the source of every fixture routine; these are the compare targets.
 TARGETS: tuple[str, ...] = ("oracle", "postgresql", "mysql")
 
-_PARAMS = [(case, target) for case in ROUTINE_CASES for target in TARGETS]
+# A per-code allowlist would over-admit UNIQUE-1231 (a generic fallback code
+# covering many unrelated messages, e.g. the embedded-DML raw-sqlglot
+# fallback — NOT benign); this maps a code to the exact benign MESSAGE
+# prefixes seen so far (brief A10-P3: the "OPTION (RECOMPILE) dropped"
+# message says outright it only affects the execution plan).
+_BENIGN_MESSAGE_PREFIXES: dict[str, tuple[str, ...]] = {
+    "UNIQUE-1231": ("T-SQL query hint OPTION (RECOMPILE) has no portable equivalent",),
+}
+
+
+def _is_benign(code: str, message: str) -> bool:
+    if code in BENIGN_WARNINGS:
+        return True
+    return any(message.startswith(p) for p in _BENIGN_MESSAGE_PREFIXES.get(code, ()))
+
+
+_PARAMS = [
+    (case, target) for case in ROUTINE_CASES for target in (case.targets or TARGETS)
+]
 
 
 @pytest.fixture(scope="module")
@@ -119,12 +147,30 @@ def _drop_table(conn: Any, engine: str, table: str) -> None:
         _exec_quiet(conn, f"DROP TABLE IF EXISTS {table}")
 
 
+def _drop_func1(conn: Any, engine: str) -> None:
+    if engine == "tsql":
+        _exec_quiet(conn, "DROP FUNCTION IF EXISTS dbo.func1")
+    elif engine == "postgresql":
+        _exec_quiet(conn, "DROP FUNCTION IF EXISTS func1() CASCADE")
+    elif engine == "mysql":
+        _exec_quiet(conn, "DROP FUNCTION IF EXISTS func1")
+    else:  # oracle: no IF EXISTS
+        _exec_quiet(conn, "DROP FUNCTION func1")
+
+
+def _freeze_func1(conn: Any, engine: str) -> None:
+    """Pin ``func1()`` to a fixed constant on *engine* (brief A10-P3)."""
+    _run_script(conn, engine, freeze_func1_sql(engine))
+
+
 def _teardown(conn: Any, engine: str, case: RoutineCase) -> None:
     with contextlib.suppress(Exception):  # clear an aborted PG transaction first
         conn.rollback()
     _drop_routine(conn, engine, case.object_kind, case.name)
     for seed in case.seed:
         _drop_table(conn, engine, seed.name)
+    if case.freeze_func1:
+        _drop_func1(conn, engine)
 
 
 def _seed(conn: Any, engine: str, case: RoutineCase) -> None:
@@ -173,6 +219,46 @@ def _call_table_state(conn: Any, engine: str, case: RoutineCase) -> None:
             cur.callproc(f"dbo.{case.name}", tuple(args))
         else:  # oracle / mysql
             cur.callproc(case.name, tuple(args))
+    finally:
+        cur.close()
+    conn.commit()
+
+
+def _call_table_state_with_rs_tail(conn: Any, engine: str, case: RoutineCase) -> None:
+    """Like ``_call_table_state``, for a routine whose body ALSO ends in a bare
+    ``SELECT`` (``case.resultset_tail``, brief A10-P3) — that secondary result
+    set is not compared here (A10-P2 owns result-set comparison), only called
+    and discarded, per engine:
+
+    - **oracle**: the transpiler synthesizes a trailing ``RESULT_CURSOR OUT
+      SYS_REFCURSOR`` param; bind a plain ``Cursor`` object to it (never
+      ``cur.var(oracledb.CURSOR)`` — that hangs against this stack, per the
+      A10-P design probe) and never fetch from it.
+    - **postgresql**: the procedure gets a trailing ``INOUT result_cursor
+      refcursor`` param; pass a throwaway portal name and never ``FETCH`` it.
+    - **tsql / mysql**: the SELECT comes back as an ordinary pending result
+      set on the same cursor — ``fetchall()`` (mysql: plus draining any
+      further ``nextset()``) discards it before the connection is reused.
+    """
+    args = positional_args(case, engine)
+    cur = conn.cursor()
+    try:
+        if engine == "postgresql":
+            placeholders = ", ".join(["%s"] * len(args) + ["%s"])
+            cur.execute(f"CALL {case.name}({placeholders})", (*args, "fe_rs_probe"))
+        elif engine == "oracle":
+            out_cur = conn.cursor()
+            cur.callproc(case.name, [*args, out_cur])
+        elif engine == "mysql":
+            cur.callproc(case.name, tuple(args))
+            with contextlib.suppress(Exception):
+                cur.fetchall()
+            while cur.nextset():
+                pass
+        else:  # tsql
+            cur.callproc(f"dbo.{case.name}", tuple(args))
+            with contextlib.suppress(Exception):
+                cur.fetchall()
     finally:
         cur.close()
     conn.commit()
@@ -249,6 +335,8 @@ def _run_case(
     """Seed, create, exercise and observe *case* on *engine*; return probe results."""
     _teardown(conn, engine, case)
     try:
+        if case.freeze_func1:
+            _freeze_func1(conn, engine)
         _seed(conn, engine, case)
         _run_script(conn, engine, routine_sql)
         if case.kind == "scalar":
@@ -265,7 +353,10 @@ def _run_case(
             rows = _call_out(conn, engine, case)
             return [normalize_rows(rows, empty_as_null=fold)]
         # table_state
-        _call_table_state(conn, engine, case)
+        if case.resultset_tail:
+            _call_table_state_with_rs_tail(conn, engine, case)
+        else:
+            _call_table_state(conn, engine, case)
         results: list[list[tuple]] = []
         for probe in case.probes:
             cur = conn.cursor()
@@ -292,7 +383,9 @@ def test_routine_effect_matches(engines: Any, case: RoutineCase, target: str) ->
         pytest.skip(f"needs live URLs for tsql and {target}")
 
     result = transpile(case.source_sql, "tsql", target)
-    non_benign = sorted({w.code for w in result.warnings} - BENIGN_WARNINGS)
+    non_benign = sorted(
+        {w.code for w in result.warnings if not _is_benign(w.code, w.message)}
+    )
     if non_benign:
         # A documented degrade (e.g. 1152 SQL_VARIANT, 1163 RAISERROR args, 1191
         # OUTPUT dropped) is not result-comparable — same contract as the corpus.
