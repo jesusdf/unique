@@ -74,7 +74,7 @@ from unique.core.procedural.emitter import ProceduralEmitter
 from unique.core.procedural.parser import PARSE_FALLBACK_WARNING, ProceduralParser
 from unique.core.procedural.transformer import ProceduralTransformer
 from unique.core.registry import DialectRegistry
-from unique.core.sql_split import split_leading_trivia
+from unique.core.sql_split import split_leading_trivia, split_statements
 from unique.core.transformer import Transformer, TransformWarning
 
 from ._text_rules import (  # noqa: F401
@@ -112,6 +112,22 @@ from ._text_rules import (  # noqa: F401
 )
 
 logger = logging.getLogger(__name__)
+
+#: A routine-definition head (``CREATE [OR REPLACE|OR ALTER] PROCEDURE|FUNCTION|
+#: TRIGGER`` or T-SQL ``ALTER PROCEDURE|FUNCTION``). Matched against the
+#: trivia-stripped code of a single statement to tell the routine apart from a
+#: companion DDL statement that the batch splitter folded ahead of it.
+_ROUTINE_HEAD_RE = re.compile(
+    r"(?i)^\s*(?:CREATE(?:\s+OR\s+(?:REPLACE|ALTER))?|ALTER)\s+"
+    r"(?:PROC(?:EDURE)?|FUNCTION|TRIGGER)\b"
+)
+
+
+def _is_routine_head(statement: str) -> bool:
+    """Whether *statement* (trivia stripped) begins a routine definition."""
+    _, code = split_leading_trivia(statement)
+    return bool(_ROUTINE_HEAD_RE.match(code))
+
 
 #: The leading keyword of a bare transaction opener (``begin`` / ``begin
 #: transaction`` / ``start transaction``). Only consulted for a batch that
@@ -903,6 +919,101 @@ class Transpiler:
                 pieces.append("\n/")
         return "".join(pieces)
 
+    def _peel_leading_statements(
+        self,
+        sql: str,
+        source: str,
+        target: str,
+        metadata_resolver: object | None,
+    ) -> TranspileResult | None:
+        """Split a folded ``<leading statements> … <routine>`` procedural batch.
+
+        Returns a composed result when the batch has one or more complete
+        non-routine statements ahead of its routine (the splitter folds a
+        routine's companion DDL into its batch); the leading statements go
+        through the standalone DML/DDL pipeline and the routine through the
+        procedural engine. Returns ``None`` for an ordinary procedural batch
+        (a single routine or an anonymous block), which then parses whole so
+        the whole-unit degrade contract is unchanged for batches that truly
+        cannot parse.
+        """
+        statements = split_statements(sql, source)
+        if len(statements) < 2:
+            return None
+        routine_idx = next(
+            (i for i, st in enumerate(statements) if _is_routine_head(st)), None
+        )
+        # No routine, or the routine is already first: nothing to peel.
+        if not routine_idx:
+            return None
+
+        # Locate the routine's start in the ORIGINAL text so both the leading
+        # part and the routine keep their verbatim formatting and comments
+        # (split_statements trims each piece). The pieces are in order, so scan
+        # forward past the leading ones before locating the routine.
+        search_from = 0
+        for st in statements[:routine_idx]:
+            found = sql.find(st, search_from)
+            if found >= 0:
+                search_from = found + len(st)
+        routine_start = sql.find(statements[routine_idx], search_from)
+        if routine_start <= 0:
+            return None
+        leading_sql = sql[:routine_start].rstrip()
+        routine_sql = sql[routine_start:]
+
+        source_dialect = self.registry.get(source)
+        target_dialect = self.registry.get(target)
+        lead_result = self._transpile_dml(
+            leading_sql, source, target, source_dialect, target_dialect
+        )
+        # The batch-loop validity gate runs once over the composed batch, but a
+        # routine's procedural body defeats it (sqlglot can't parse the whole
+        # thing), so the leading DDL would never be gated. Gate it here — the
+        # same check a standalone leading statement gets — so an unmappable DDL
+        # degrades to an honest carrier instead of shipping invalid.
+        gate = gate_reason(lead_result.sql, target, source)
+        if gate is not None:
+            message = (
+                f"output failed the {target} validity check ({gate}); "
+                f"original {source} statement preserved"
+            )
+            lead_result = TranspileResult(
+                sql=degrade_to_carrier(leading_sql, gate, source, target),
+                warnings=[
+                    *lead_result.warnings,
+                    _warn(message, "validity_gate", source, target),
+                ],
+                unsupported=[*lead_result.unsupported, message],
+            )
+        routine_result = self._transpile_procedural(
+            routine_sql, source, target, metadata_resolver
+        )
+
+        # Compose: the leading DDL is a self-contained statement (terminated for
+        # ``;``-delimited targets; ``GO``-separated for T-SQL). The routine keeps
+        # the un-terminated shape a normal single-routine batch returns so the
+        # batch loop's _ensure_terminated / _join_parts finalize it as usual —
+        # except a MySQL routine must carry its own DELIMITER wrapper here (the
+        # batch loop's _wrap_mysql_routine only fires when the WHOLE batch begins
+        # with the routine, which it no longer does once the DDL leads).
+        ddl_sql = lead_result.sql
+        routine_sql_out = routine_result.sql
+        if target == "tsql":
+            separator = "\nGO\n"
+        else:
+            ddl_sql = self._ensure_terminated(ddl_sql, target, BatchType.DDL)
+            separator = "\n\n"
+        if target == "mysql":
+            routine_sql_out = self._wrap_mysql_routine(
+                self._ensure_terminated(routine_sql_out, target, BatchType.PROCEDURAL)
+            )
+        return TranspileResult(
+            sql=f"{ddl_sql}{separator}{routine_sql_out}",
+            warnings=[*lead_result.warnings, *routine_result.warnings],
+            unsupported=[*lead_result.unsupported, *routine_result.unsupported],
+        )
+
     def _transpile_procedural(
         self,
         sql: str,
@@ -911,6 +1022,19 @@ class Transpiler:
         metadata_resolver: object | None = None,
     ) -> TranspileResult:
         """Transpile a procedural batch through the procedural engine."""
+        # A procedural batch may carry one or more complete non-routine
+        # statements ahead of the routine: the BatchSplitter's PL/SQL-block
+        # heuristic folds a routine's companion DDL (e.g. the global temporary
+        # table backing a former T-SQL table variable) into the same batch. The
+        # procedural parser only understands a routine at the head, so such a
+        # leading statement would fail the WHOLE batch (DDL and routine both)
+        # into a UNIQUE-1170 carrier. Peel the leading statements off and route
+        # them through the standalone DML/DDL pipeline (the same IR path a
+        # standalone CREATE TABLE takes), then transpile the routine alone.
+        peeled = self._peel_leading_statements(sql, source, target, metadata_resolver)
+        if peeled is not None:
+            return peeled
+
         warnings: list[TransformWarning] = []
         unsupported: list[str] = []
 
