@@ -22,6 +22,7 @@ This is the narrative companion to two machine-checked sources of truth:
 | [datetime.md](datetime.md) | date/time arithmetic, truncation, unit maps, month-end semantics, epoch rebasing |
 | [strings-collation.md](strings-collation.md) | concatenation & NULL, LIKE/ESCAPE, character classes, collation/order, Oracle `''` ≡ NULL, byte vs char lengths |
 | [aggregates-windows.md](aggregates-windows.md) | window frames, ordered aggregates, string aggregation, DISTINCT ON, boolean aggregates |
+| [booleans.md](booleans.md) | the boolean/predicate value duality: tri-state `CASE` wrap for value position, `<> 0` synthesis for predicate position, boolean-column `IS TRUE`/`IS FALSE` re-spelling |
 | [dml.md](dml.md) | PIVOT/UNPIVOT, MERGE/upsert lowering, multi-table DELETE, row caps, row-value comparisons |
 | [ddl.md](ddl.md) | identity/SERIAL, temp tables, FK actions, sequences, storage options |
 | [procedural.md](procedural.md) | cursors, error handling, dynamic SQL, system procedures, session directives |
