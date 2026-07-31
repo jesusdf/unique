@@ -161,6 +161,12 @@ warning) / T4 (real defects, ~25-30 pairs, named in the report).*
   report §T4: broken CAST emission on tsql/oracle, unnamed derived columns,
   string+INTERVAL arithmetic, INSERT()/LEFT()/REPEAT() float/OOB semantics,
   TO_CHAR mask fidelity, …). Ready-made findings, cases already in corpus.
+  PLUS two live-verified additions from D1-W8 (documented as Warning
+  callouts in `strings-collation.md`): STUFF/OVERLAY→oracle/pg lack the
+  out-of-range-start guard the mysql→tsql path has (pg raises at runtime,
+  unwarned — same family as `my-insert-oob`); mysql `REPLACE` with a
+  NON-literal NULL arg → oracle returns `'abc'` where MySQL yields NULL
+  (the literal-only NULL check needs the CASE-guard fallback CONCAT got).
 - **A10-P** — procedures corpus live-COMPARE (4-dialect same-routine
   fixtures: call with fixed inputs, compare effects). Needs its own design;
   highest-value remaining gap.
