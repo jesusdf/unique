@@ -22,8 +22,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### T-SQL as source
 
-| [Repeat, substring and splice](#repeat-substring-and-splice) | [Operator precedence](#operator-precedence) | [Hex/binary literal folding](#hexbinary-literal-folding) |
-|---|---|---|
+| [Repeat, substring and splice](#repeat-substring-and-splice) | [Operator precedence](#operator-precedence) | [Hex/binary literal folding](#hexbinary-literal-folding) | [String function argument/edge cases](#string-function-argumentedge-cases) |
+|---|---|---|---|
 
 #### Repeat, substring and splice
 
@@ -37,12 +37,19 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [Unary bitwise `~x`/NOT → Oracle `-(x) - 1`, MySQL `CAST(~x AS SIGNED)`](unary-bitwise-not-emulation.md) | postgresql/tsql → oracle/mysql | PostgreSQL and T-SQL's unary bitwise NOT (`~x`) has no direct spelling on Oracle at all (PL/SQL has no bitwise NOT operator or built-in), and MySQL's `~x` operates on an *unsigned* 64-bit integer, so a plain `~5` there returns a huge unsigned complement rather than the signed `-6` the source engine intended. |
+| [Infix bitwise operators (`&`, `\|`, `^`, `<<`, `>>`) → Oracle `BITAND`/`POWER` identities](bitwise-operators-to-oracle-identities.md) | tsql/postgresql/mysql → oracle | Oracle has no infix bitwise operators at all: `\|` is string concatenation there, and `^`/`&` are outright errors. |
 
 #### Hex/binary literal folding
 
 | Article | Direction | Description |
 |---|---|---|
 | [A T-SQL hex/binary literal used in arithmetic → folded to its integer value](hex-binary-literal-arithmetic-fold.md) | tsql → postgresql/oracle/mysql | T-SQL's `0x0A` is a binary-string literal that also behaves as an integer in numeric contexts (`0x0A + 5` = `15`). |
+
+#### String function argument/edge cases
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `NCHAR(n)` Unicode code point → PostgreSQL `CHR`, MySQL `CHAR(... USING utf32)`, Oracle `NCHR`/`UNISTR`](nchar-code-point-per-target.md) | tsql → oracle/postgresql/mysql | T-SQL's `NCHAR(n)` returns the character for Unicode code point `n` — an integer argument (a `0x…` literal is still a *number* there, not a byte string) — with no matching built-in on any other engine under that name. |
 
 ### T-SQL as target
 
@@ -122,8 +129,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### Oracle as target
 
-| [NULL and empty-string semantics](#null-and-empty-string-semantics-2) | [Repeat, substring and splice](#repeat-substring-and-splice-2) | [LIKE and pattern matching](#like-and-pattern-matching) | [Operator precedence](#operator-precedence-1) | [Hex/binary literal folding](#hexbinary-literal-folding-1) | [Case-insensitive pattern matching](#case-insensitive-pattern-matching-1) | [Lookup functions with no target spelling](#lookup-functions-with-no-target-spelling-2) |
-|---|---|---|---|---|---|---|
+| [NULL and empty-string semantics](#null-and-empty-string-semantics-2) | [Repeat, substring and splice](#repeat-substring-and-splice-2) | [LIKE and pattern matching](#like-and-pattern-matching) | [Operator precedence](#operator-precedence-1) | [Hex/binary literal folding](#hexbinary-literal-folding-1) | [Case-insensitive pattern matching](#case-insensitive-pattern-matching-1) | [Lookup functions with no target spelling](#lookup-functions-with-no-target-spelling-2) | [String function argument/edge cases](#string-function-argumentedge-cases-1) |
+|---|---|---|---|---|---|---|---|
 
 #### NULL and empty-string semantics
 
@@ -148,6 +155,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [Unary bitwise `~x`/NOT → Oracle `-(x) - 1`, MySQL `CAST(~x AS SIGNED)`](unary-bitwise-not-emulation.md) | postgresql/tsql → oracle/mysql | PostgreSQL and T-SQL's unary bitwise NOT (`~x`) has no direct spelling on Oracle at all (PL/SQL has no bitwise NOT operator or built-in), and MySQL's `~x` operates on an *unsigned* 64-bit integer, so a plain `~5` there returns a huge unsigned complement rather than the signed `-6` the source engine intended. |
+| [Infix bitwise operators (`&`, `\|`, `^`, `<<`, `>>`) → Oracle `BITAND`/`POWER` identities](bitwise-operators-to-oracle-identities.md) | tsql/postgresql/mysql → oracle | Oracle has no infix bitwise operators at all: `\|` is string concatenation there, and `^`/`&` are outright errors. |
 
 #### Hex/binary literal folding
 
@@ -166,6 +174,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [Functions with no target spelling: MySQL `ELT`/`FIELD`, Oracle `NVL2` → a synthesized `CASE`](no-target-spelling-case-chain.md) | mysql/oracle → all | MySQL's `ELT(n, v1, v2, ...)` (pick the `n`th value) and `FIELD(v, v1, v2, ...)` (find `v`'s 1-based position among the rest, `0` if absent) have no equivalent built-in on any other engine. |
+
+#### String function argument/edge cases
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `NCHAR(n)` Unicode code point → PostgreSQL `CHR`, MySQL `CHAR(... USING utf32)`, Oracle `NCHR`/`UNISTR`](nchar-code-point-per-target.md) | tsql → oracle/postgresql/mysql | T-SQL's `NCHAR(n)` returns the character for Unicode code point `n` — an integer argument (a `0x…` literal is still a *number* there, not a byte string) — with no matching built-in on any other engine under that name. |
 
 ### PostgreSQL as source
 
@@ -189,6 +203,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [Unary bitwise `~x`/NOT → Oracle `-(x) - 1`, MySQL `CAST(~x AS SIGNED)`](unary-bitwise-not-emulation.md) | postgresql/tsql → oracle/mysql | PostgreSQL and T-SQL's unary bitwise NOT (`~x`) has no direct spelling on Oracle at all (PL/SQL has no bitwise NOT operator or built-in), and MySQL's `~x` operates on an *unsigned* 64-bit integer, so a plain `~5` there returns a huge unsigned complement rather than the signed `-6` the source engine intended. |
+| [Infix bitwise operators (`&`, `\|`, `^`, `<<`, `>>`) → Oracle `BITAND`/`POWER` identities](bitwise-operators-to-oracle-identities.md) | tsql/postgresql/mysql → oracle | Oracle has no infix bitwise operators at all: `\|` is string concatenation there, and `^`/`&` are outright errors. |
 
 #### Case-insensitive pattern matching
 
@@ -198,8 +213,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### PostgreSQL as target
 
-| [NULL and empty-string semantics](#null-and-empty-string-semantics-3) | [Repeat, substring and splice](#repeat-substring-and-splice-4) | [Hex/binary literal folding](#hexbinary-literal-folding-2) | [Trimming](#trimming-2) | [DECODE mixed-type branches](#decode-mixed-type-branches-2) | [Lookup functions with no target spelling](#lookup-functions-with-no-target-spelling-3) |
-|---|---|---|---|---|---|
+| [NULL and empty-string semantics](#null-and-empty-string-semantics-3) | [Repeat, substring and splice](#repeat-substring-and-splice-4) | [Hex/binary literal folding](#hexbinary-literal-folding-2) | [Trimming](#trimming-2) | [DECODE mixed-type branches](#decode-mixed-type-branches-2) | [Lookup functions with no target spelling](#lookup-functions-with-no-target-spelling-3) | [String function argument/edge cases](#string-function-argumentedge-cases-2) |
+|---|---|---|---|---|---|---|
 
 #### NULL and empty-string semantics
 
@@ -238,10 +253,16 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [Functions with no target spelling: MySQL `ELT`/`FIELD`, Oracle `NVL2` → a synthesized `CASE`](no-target-spelling-case-chain.md) | mysql/oracle → all | MySQL's `ELT(n, v1, v2, ...)` (pick the `n`th value) and `FIELD(v, v1, v2, ...)` (find `v`'s 1-based position among the rest, `0` if absent) have no equivalent built-in on any other engine. |
 
+#### String function argument/edge cases
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `NCHAR(n)` Unicode code point → PostgreSQL `CHR`, MySQL `CHAR(... USING utf32)`, Oracle `NCHR`/`UNISTR`](nchar-code-point-per-target.md) | tsql → oracle/postgresql/mysql | T-SQL's `NCHAR(n)` returns the character for Unicode code point `n` — an integer argument (a `0x…` literal is still a *number* there, not a byte string) — with no matching built-in on any other engine under that name. |
+
 ### MySQL as source
 
-| [Repeat, substring and splice](#repeat-substring-and-splice-5) | [Empty-needle search guard](#empty-needle-search-guard-1) | [Lookup functions with no target spelling](#lookup-functions-with-no-target-spelling-4) |
-|---|---|---|
+| [Repeat, substring and splice](#repeat-substring-and-splice-5) | [Empty-needle search guard](#empty-needle-search-guard-1) | [Lookup functions with no target spelling](#lookup-functions-with-no-target-spelling-4) | [Operator precedence](#operator-precedence-3) |
+|---|---|---|---|
 
 #### Repeat, substring and splice
 
@@ -261,10 +282,16 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [Functions with no target spelling: MySQL `ELT`/`FIELD`, Oracle `NVL2` → a synthesized `CASE`](no-target-spelling-case-chain.md) | mysql/oracle → all | MySQL's `ELT(n, v1, v2, ...)` (pick the `n`th value) and `FIELD(v, v1, v2, ...)` (find `v`'s 1-based position among the rest, `0` if absent) have no equivalent built-in on any other engine. |
 
+#### Operator precedence
+
+| Article | Direction | Description |
+|---|---|---|
+| [Infix bitwise operators (`&`, `\|`, `^`, `<<`, `>>`) → Oracle `BITAND`/`POWER` identities](bitwise-operators-to-oracle-identities.md) | tsql/postgresql/mysql → oracle | Oracle has no infix bitwise operators at all: `\|` is string concatenation there, and `^`/`&` are outright errors. |
+
 ### MySQL as target
 
-| [NULL and empty-string semantics](#null-and-empty-string-semantics-4) | [Repeat, substring and splice](#repeat-substring-and-splice-6) | [LIKE and pattern matching](#like-and-pattern-matching-2) | [Operator precedence](#operator-precedence-3) | [Hex/binary literal folding](#hexbinary-literal-folding-3) | [Trimming](#trimming-3) | [DECODE mixed-type branches](#decode-mixed-type-branches-3) | [Case-insensitive pattern matching](#case-insensitive-pattern-matching-3) | [Lookup functions with no target spelling](#lookup-functions-with-no-target-spelling-5) |
-|---|---|---|---|---|---|---|---|---|
+| [NULL and empty-string semantics](#null-and-empty-string-semantics-4) | [Repeat, substring and splice](#repeat-substring-and-splice-6) | [LIKE and pattern matching](#like-and-pattern-matching-2) | [Operator precedence](#operator-precedence-4) | [Hex/binary literal folding](#hexbinary-literal-folding-3) | [Trimming](#trimming-3) | [DECODE mixed-type branches](#decode-mixed-type-branches-3) | [Case-insensitive pattern matching](#case-insensitive-pattern-matching-3) | [Lookup functions with no target spelling](#lookup-functions-with-no-target-spelling-5) | [String function argument/edge cases](#string-function-argumentedge-cases-3) |
+|---|---|---|---|---|---|---|---|---|---|
 
 #### NULL and empty-string semantics
 
@@ -320,9 +347,15 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [Functions with no target spelling: MySQL `ELT`/`FIELD`, Oracle `NVL2` → a synthesized `CASE`](no-target-spelling-case-chain.md) | mysql/oracle → all | MySQL's `ELT(n, v1, v2, ...)` (pick the `n`th value) and `FIELD(v, v1, v2, ...)` (find `v`'s 1-based position among the rest, `0` if absent) have no equivalent built-in on any other engine. |
 
+#### String function argument/edge cases
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `NCHAR(n)` Unicode code point → PostgreSQL `CHR`, MySQL `CHAR(... USING utf32)`, Oracle `NCHR`/`UNISTR`](nchar-code-point-per-target.md) | tsql → oracle/postgresql/mysql | T-SQL's `NCHAR(n)` returns the character for Unicode code point `n` — an integer argument (a `0x…` literal is still a *number* there, not a byte string) — with no matching built-in on any other engine under that name. |
+
 ### Cross-engine / multi-directional
 
-| [Concatenation](#concatenation) | [NULL and empty-string semantics](#null-and-empty-string-semantics-5) | [LIKE and pattern matching](#like-and-pattern-matching-3) | [Repeat, substring and splice](#repeat-substring-and-splice-7) | [Trimming](#trimming-4) | [Length and encoding](#length-and-encoding) | [Unmapped built-ins](#unmapped-built-ins) | [Collation and ordering](#collation-and-ordering) | [Operator precedence](#operator-precedence-4) |
+| [Concatenation](#concatenation) | [NULL and empty-string semantics](#null-and-empty-string-semantics-5) | [LIKE and pattern matching](#like-and-pattern-matching-3) | [Repeat, substring and splice](#repeat-substring-and-splice-7) | [Trimming](#trimming-4) | [Length and encoding](#length-and-encoding) | [Unmapped built-ins](#unmapped-built-ins) | [Collation and ordering](#collation-and-ordering) | [Operator precedence](#operator-precedence-5) |
 |---|---|---|---|---|---|---|---|---|
 
 #### Concatenation
@@ -452,6 +485,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [Bitwise/arithmetic operator-precedence parentheses (MySQL/Oracle ↔ PostgreSQL/T-SQL)](bitwise-arithmetic-precedence-parens.md) | cross-engine | `&`, `\|` and `<<`/`>>` bind **looser** than `+`/`*` on MySQL and Oracle, but **tighter** than `+`/`*` on PostgreSQL and T-SQL. |
 | [Unary bitwise `~x`/NOT → Oracle `-(x) - 1`, MySQL `CAST(~x AS SIGNED)`](unary-bitwise-not-emulation.md) | postgresql/tsql → oracle/mysql | PostgreSQL and T-SQL's unary bitwise NOT (`~x`) has no direct spelling on Oracle at all (PL/SQL has no bitwise NOT operator or built-in), and MySQL's `~x` operates on an *unsigned* 64-bit integer, so a plain `~5` there returns a huge unsigned complement rather than the signed `-6` the source engine intended. |
+| [Infix bitwise operators (`&`, `\|`, `^`, `<<`, `>>`) → Oracle `BITAND`/`POWER` identities](bitwise-operators-to-oracle-identities.md) | tsql/postgresql/mysql → oracle | Oracle has no infix bitwise operators at all: `\|` is string concatenation there, and `^`/`&` are outright errors. |
 
 ## Hex/binary literal folding
 
@@ -482,3 +516,9 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [Functions with no target spelling: MySQL `ELT`/`FIELD`, Oracle `NVL2` → a synthesized `CASE`](no-target-spelling-case-chain.md) | mysql/oracle → all | MySQL's `ELT(n, v1, v2, ...)` (pick the `n`th value) and `FIELD(v, v1, v2, ...)` (find `v`'s 1-based position among the rest, `0` if absent) have no equivalent built-in on any other engine. |
+
+## String function argument/edge cases
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `NCHAR(n)` Unicode code point → PostgreSQL `CHR`, MySQL `CHAR(... USING utf32)`, Oracle `NCHR`/`UNISTR`](nchar-code-point-per-target.md) | tsql → oracle/postgresql/mysql | T-SQL's `NCHAR(n)` returns the character for Unicode code point `n` — an integer argument (a `0x…` literal is still a *number* there, not a byte string) — with no matching built-in on any other engine under that name. |

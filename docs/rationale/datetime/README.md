@@ -306,6 +306,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [DATEDIFF/DATEPART unit maps: the QUARTER crash and WEEKDAY per-target forms](datediff-datepart-unit-maps.md) | cross-engine | T-SQL `DATEDIFF(QUARTER, d1, d2)` and `DATEDIFF(WEEK, d1, d2)` are valid, translatable unit spellings; `DATEPART(WEEKDAY, d)` returns the day-of-week under the session's `@@DATEFIRST` setting (default: Sunday = 1). |
+| [`EXTRACT(field FROM x)` ↔ T-SQL `DATEPART(field, x)` for the standard fields](extract-datepart-standard-fields.md) | cross-engine | Oracle, PostgreSQL and MySQL spell a date-field extraction as `EXTRACT(field FROM x)` (a special two-token syntax, not an ordinary function call); T-SQL has no `EXTRACT` at all and instead uses `DATEPART(field, x)` — an ordinary comma-separated function call. |
 
 ## All articles by type
 
@@ -324,6 +325,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [PostgreSQL date_trunc → Oracle TRUNC format codes and T-SQL ISO week](date-trunc-to-oracle-trunc.md) | postgresql → tsql/oracle | PostgreSQL `date_trunc('week', ts)` truncates to the start of the ISO week — **Monday** — and `date_trunc('quarter', ts)` to the first day of the quarter. |
 | [DATEDIFF/DATEPART unit maps: the QUARTER crash and WEEKDAY per-target forms](datediff-datepart-unit-maps.md) | cross-engine | T-SQL `DATEDIFF(QUARTER, d1, d2)` and `DATEDIFF(WEEK, d1, d2)` are valid, translatable unit spellings; `DATEPART(WEEKDAY, d)` returns the day-of-week under the session's `@@DATEFIRST` setting (default: Sunday = 1). |
+| [`EXTRACT(field FROM x)` ↔ T-SQL `DATEPART(field, x)` for the standard fields](extract-datepart-standard-fields.md) | cross-engine | Oracle, PostgreSQL and MySQL spell a date-field extraction as `EXTRACT(field FROM x)` (a special two-token syntax, not an ordinary function call); T-SQL has no `EXTRACT` at all and instead uses `DATEPART(field, x)` — an ordinary comma-separated function call. |
 
 ## Interval and temporal arithmetic
 

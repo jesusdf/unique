@@ -23,8 +23,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### T-SQL as source
 
-| [System procedures](#system-procedures) | [`SET IDENTITY_INSERT` coherent degrade](#set-identity_insert-coherent-degrade) | [Expression arguments hoisted through a synthesized variable](#expression-arguments-hoisted-through-a-synthesized-variable) | [Return-type and signature synthesis](#return-type-and-signature-synthesis) | [Other `[limit]` procedural entries](#other-limit-procedural-entries) | [Triggers](#triggers) | [Loop and cursor desugaring](#loop-and-cursor-desugaring) | [Dynamic-SQL loop-to-aggregate rewrite](#dynamic-sql-loop-to-aggregate-rewrite) | [Oracle CAST length: PL/SQL body vs. top-level SQL](#oracle-cast-length-plsql-body-vs-top-level-sql) | [Subquery-in-expression assignment restructuring](#subquery-in-expression-assignment-restructuring) | [Cursor attribute mapping](#cursor-attribute-mapping) | [Base64 decode idiom](#base64-decode-idiom) | [ERROR_MESSAGE() function mapping](#error_message-function-mapping) | [Mid-block DECLARE hoisted to the routine's top declaration section](#mid-block-declare-hoisted-to-the-routines-top-declaration-section) | [Top-level batch wrapped for PL/pgSQL-only constructs](#top-level-batch-wrapped-for-plpgsql-only-constructs) | [THROW/RAISERROR numeric error code](#throwraiserror-numeric-error-code) | [Constrained CAST hoisted through SELECT ... INTO ... FROM DUAL](#constrained-cast-hoisted-through-select--into--from-dual) | [Oracle formal parameter/return types stripped of precision and scale](#oracle-formal-parameterreturn-types-stripped-of-precision-and-scale) | [CONVERT(...,HASHBYTES(...),2) style-2 hex wrapper collapse](#converthashbytes2-style-2-hex-wrapper-collapse) |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| [System procedures](#system-procedures) | [`SET IDENTITY_INSERT` coherent degrade](#set-identity_insert-coherent-degrade) | [Expression arguments hoisted through a synthesized variable](#expression-arguments-hoisted-through-a-synthesized-variable) | [Return-type and signature synthesis](#return-type-and-signature-synthesis) | [Other `[limit]` procedural entries](#other-limit-procedural-entries) | [Triggers](#triggers) | [Loop and cursor desugaring](#loop-and-cursor-desugaring) | [Dynamic-SQL loop-to-aggregate rewrite](#dynamic-sql-loop-to-aggregate-rewrite) | [Oracle CAST length: PL/SQL body vs. top-level SQL](#oracle-cast-length-plsql-body-vs-top-level-sql) | [Subquery-in-expression assignment restructuring](#subquery-in-expression-assignment-restructuring) | [Cursor attribute mapping](#cursor-attribute-mapping) | [Base64 decode idiom](#base64-decode-idiom) | [ERROR_MESSAGE() function mapping](#error_message-function-mapping) | [Mid-block DECLARE hoisted to the routine's top declaration section](#mid-block-declare-hoisted-to-the-routines-top-declaration-section) | [Top-level batch wrapped for PL/pgSQL-only constructs](#top-level-batch-wrapped-for-plpgsql-only-constructs) | [THROW/RAISERROR numeric error code](#throwraiserror-numeric-error-code) | [Constrained CAST hoisted through SELECT ... INTO ... FROM DUAL](#constrained-cast-hoisted-through-select--into--from-dual) | [Oracle formal parameter/return types stripped of precision and scale](#oracle-formal-parameterreturn-types-stripped-of-precision-and-scale) | [CONVERT(...,HASHBYTES(...),2) style-2 hex wrapper collapse](#converthashbytes2-style-2-hex-wrapper-collapse) | [Loop/cursor desugaring](#loopcursor-desugaring) | [Convert/HASHBYTES wrapper collapse](#converthashbytes-wrapper-collapse) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 
 #### System procedures
 
@@ -62,6 +62,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [T-SQL `INSTEAD OF` trigger → PostgreSQL (native on views, emulated on tables)](tsql-instead-of-trigger.md) | tsql → postgresql | T-SQL allows `INSTEAD OF` on both views *and* base tables — the trigger body runs **instead of** the attempted INSERT/UPDATE/DELETE, which is never applied on its own. |
+| [A purely set-based T-SQL trigger (`FROM inserted JOIN deleted`) → PostgreSQL statement-level trigger with named transition tables](tsql-set-based-trigger-to-pg-statement-level.md) | tsql → postgresql | T-SQL triggers are always statement-level, exposing the whole batch of affected rows through two pseudo-tables, `inserted`/`deleted`, that a set-based trigger body joins against directly (`INSERT ... SELECT ... FROM inserted i JOIN deleted d ON d.id = i.id`). |
 
 #### Loop and cursor desugaring
 
@@ -141,6 +142,18 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [T-SQL `CONVERT(NVARCHAR(MAX), HASHBYTES(...), 2)` → MySQL's native hash function directly](convert-hashbytes-wrapper-collapse.md) | tsql → mysql | T-SQL has no built-in "digest as a hex string" function — `HASHBYTES(...)` returns raw bytes, so the idiomatic way to get a readable hex digest is to wrap it in `CONVERT(NVARCHAR(MAX), HASHBYTES(...), 2)`, where style `2` is `CONVERT`'s binary-to-hex-string style code. |
+
+#### Loop/cursor desugaring
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `IF EXISTS (<real query>) BEGIN ... END [ELSE ...]` → Oracle cursor `FOR` loop over a `DUAL` probe](if-exists-control-flow-to-oracle-for-loop.md) | tsql → oracle | `IF EXISTS (SELECT ...) BEGIN ... END` is ordinary control flow over real table data (not a system-catalog idempotency guard) — a migration script checking "has this step already run?" before doing more work, for example. |
+
+#### Convert/HASHBYTES wrapper collapse
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `HASHBYTES('SHA2_256', x)` → PostgreSQL `sha256`, wrapped for a character argument](hashbytes-sha256-to-postgresql.md) | tsql → postgresql | sqlglot canonicalizes T-SQL's `HASHBYTES('SHA2_256', x)` to a bare `SHA256(x)` call reaching PostgreSQL, but PostgreSQL's `sha256` takes a **bytea**, not text — `sha256(x)` over a character column is "function sha256(text) does not exist" at *runtime*, a defect a compile-only validity check does not catch (the call parses fine; it just never runs). |
 
 ### T-SQL as target
 
@@ -324,8 +337,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### Oracle as target
 
-| [System procedures](#system-procedures-2) | [`SET IDENTITY_INSERT` coherent degrade](#set-identity_insert-coherent-degrade-1) | [Error handling](#error-handling-1) | [Expression arguments hoisted through a synthesized variable](#expression-arguments-hoisted-through-a-synthesized-variable-3) | [Return-type and signature synthesis](#return-type-and-signature-synthesis-3) | [Other `[limit]` procedural entries](#other-limit-procedural-entries-1) | [Triggers](#triggers-2) | [Loop and cursor desugaring](#loop-and-cursor-desugaring-3) | [Dynamic-SQL loop-to-aggregate rewrite](#dynamic-sql-loop-to-aggregate-rewrite-1) | [Oracle CAST length: PL/SQL body vs. top-level SQL](#oracle-cast-length-plsql-body-vs-top-level-sql-1) | [Subquery-in-expression assignment restructuring](#subquery-in-expression-assignment-restructuring-1) | [Cursor attribute mapping](#cursor-attribute-mapping-3) | [Base64 decode idiom](#base64-decode-idiom-1) | [ERROR_MESSAGE() function mapping](#error_message-function-mapping-1) | [Mid-block DECLARE hoisted to the routine's top declaration section](#mid-block-declare-hoisted-to-the-routines-top-declaration-section-1) | [Package ref-cursor type resolution and usage-inferred mode](#package-ref-cursor-type-resolution-and-usage-inferred-mode-1) | [Local variable renamed to avoid an Oracle built-in collision](#local-variable-renamed-to-avoid-an-oracle-built-in-collision) | [THROW/RAISERROR numeric error code](#throwraiserror-numeric-error-code-1) | [Constrained CAST hoisted through SELECT ... INTO ... FROM DUAL](#constrained-cast-hoisted-through-select--into--from-dual-1) | [Oracle formal parameter/return types stripped of precision and scale](#oracle-formal-parameterreturn-types-stripped-of-precision-and-scale-1) |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| [System procedures](#system-procedures-2) | [`SET IDENTITY_INSERT` coherent degrade](#set-identity_insert-coherent-degrade-1) | [Error handling](#error-handling-1) | [Expression arguments hoisted through a synthesized variable](#expression-arguments-hoisted-through-a-synthesized-variable-3) | [Return-type and signature synthesis](#return-type-and-signature-synthesis-3) | [Other `[limit]` procedural entries](#other-limit-procedural-entries-1) | [Triggers](#triggers-2) | [Loop and cursor desugaring](#loop-and-cursor-desugaring-3) | [Dynamic-SQL loop-to-aggregate rewrite](#dynamic-sql-loop-to-aggregate-rewrite-1) | [Oracle CAST length: PL/SQL body vs. top-level SQL](#oracle-cast-length-plsql-body-vs-top-level-sql-1) | [Subquery-in-expression assignment restructuring](#subquery-in-expression-assignment-restructuring-1) | [Cursor attribute mapping](#cursor-attribute-mapping-3) | [Base64 decode idiom](#base64-decode-idiom-1) | [ERROR_MESSAGE() function mapping](#error_message-function-mapping-1) | [Mid-block DECLARE hoisted to the routine's top declaration section](#mid-block-declare-hoisted-to-the-routines-top-declaration-section-1) | [Package ref-cursor type resolution and usage-inferred mode](#package-ref-cursor-type-resolution-and-usage-inferred-mode-1) | [Local variable renamed to avoid an Oracle built-in collision](#local-variable-renamed-to-avoid-an-oracle-built-in-collision) | [THROW/RAISERROR numeric error code](#throwraiserror-numeric-error-code-1) | [Constrained CAST hoisted through SELECT ... INTO ... FROM DUAL](#constrained-cast-hoisted-through-select--into--from-dual-1) | [Oracle formal parameter/return types stripped of precision and scale](#oracle-formal-parameterreturn-types-stripped-of-precision-and-scale-1) | [Loop/cursor desugaring](#loopcursor-desugaring-1) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 
 #### System procedures
 
@@ -449,6 +462,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [T-SQL sized parameter/return types (`DECIMAL(5,2)`, `NVARCHAR(50)`) → unconstrained on an Oracle routine header](oracle-formal-parameter-types-unconstrained.md) | tsql → oracle | Oracle's PL/SQL forbids length, precision, or scale on a *formal parameter* or *function return* type declaration — `PLS-00103` — even though the identical sized type is perfectly legal on a `CREATE TABLE` column. |
 
+#### Loop/cursor desugaring
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `IF EXISTS (<real query>) BEGIN ... END [ELSE ...]` → Oracle cursor `FOR` loop over a `DUAL` probe](if-exists-control-flow-to-oracle-for-loop.md) | tsql → oracle | `IF EXISTS (SELECT ...) BEGIN ... END` is ordinary control flow over real table data (not a system-catalog idempotency guard) — a migration script checking "has this step already run?" before doing more work, for example. |
+
 ### PostgreSQL as source
 
 | [Cursor attribute mapping](#cursor-attribute-mapping-4) | [Expression arguments hoisted through a synthesized variable](#expression-arguments-hoisted-through-a-synthesized-variable-4) | [Return-type and signature synthesis](#return-type-and-signature-synthesis-4) | [Triggers](#triggers-3) | [Local variable renamed to avoid an Oracle built-in collision](#local-variable-renamed-to-avoid-an-oracle-built-in-collision-1) | [SQLSTATE/SQLCODE read into T-SQL error functions](#sqlstatesqlcode-read-into-t-sql-error-functions-2) |
@@ -494,8 +513,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### PostgreSQL as target
 
-| [System procedures](#system-procedures-3) | [`SET IDENTITY_INSERT` coherent degrade](#set-identity_insert-coherent-degrade-2) | [SQL*Plus directives preserved as comments](#sqlplus-directives-preserved-as-comments-2) | [`%TYPE` / `%ROWTYPE` carrier without `--db-url`](#type--rowtype-carrier-without---db-url-2) | [Error handling](#error-handling-2) | [Expression arguments hoisted through a synthesized variable](#expression-arguments-hoisted-through-a-synthesized-variable-5) | [Return-type and signature synthesis](#return-type-and-signature-synthesis-5) | [Other `[limit]` procedural entries](#other-limit-procedural-entries-2) | [Triggers](#triggers-4) | [Loop and cursor desugaring](#loop-and-cursor-desugaring-4) | [Cursor attribute mapping](#cursor-attribute-mapping-5) | [Dynamic SQL INTO capture](#dynamic-sql-into-capture-2) | [Base64 decode idiom](#base64-decode-idiom-2) | [ERROR_MESSAGE() function mapping](#error_message-function-mapping-2) | [Mid-block DECLARE hoisted to the routine's top declaration section](#mid-block-declare-hoisted-to-the-routines-top-declaration-section-2) | [SELECT ... INTO :NEW.col pseudo-row targets](#select--into-newcol-pseudo-row-targets-1) | [Package ref-cursor type resolution and usage-inferred mode](#package-ref-cursor-type-resolution-and-usage-inferred-mode-2) | [Top-level batch wrapped for PL/pgSQL-only constructs](#top-level-batch-wrapped-for-plpgsql-only-constructs-2) | [THROW/RAISERROR numeric error code](#throwraiserror-numeric-error-code-2) |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| [System procedures](#system-procedures-3) | [`SET IDENTITY_INSERT` coherent degrade](#set-identity_insert-coherent-degrade-2) | [SQL*Plus directives preserved as comments](#sqlplus-directives-preserved-as-comments-2) | [`%TYPE` / `%ROWTYPE` carrier without `--db-url`](#type--rowtype-carrier-without---db-url-2) | [Error handling](#error-handling-2) | [Expression arguments hoisted through a synthesized variable](#expression-arguments-hoisted-through-a-synthesized-variable-5) | [Return-type and signature synthesis](#return-type-and-signature-synthesis-5) | [Other `[limit]` procedural entries](#other-limit-procedural-entries-2) | [Triggers](#triggers-4) | [Loop and cursor desugaring](#loop-and-cursor-desugaring-4) | [Cursor attribute mapping](#cursor-attribute-mapping-5) | [Dynamic SQL INTO capture](#dynamic-sql-into-capture-2) | [Base64 decode idiom](#base64-decode-idiom-2) | [ERROR_MESSAGE() function mapping](#error_message-function-mapping-2) | [Mid-block DECLARE hoisted to the routine's top declaration section](#mid-block-declare-hoisted-to-the-routines-top-declaration-section-2) | [SELECT ... INTO :NEW.col pseudo-row targets](#select--into-newcol-pseudo-row-targets-1) | [Package ref-cursor type resolution and usage-inferred mode](#package-ref-cursor-type-resolution-and-usage-inferred-mode-2) | [Top-level batch wrapped for PL/pgSQL-only constructs](#top-level-batch-wrapped-for-plpgsql-only-constructs-2) | [THROW/RAISERROR numeric error code](#throwraiserror-numeric-error-code-2) | [Convert/HASHBYTES wrapper collapse](#converthashbytes-wrapper-collapse-1) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 
 #### System procedures
 
@@ -552,6 +571,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [Row-level trigger re-reading its own table (MySQL/PostgreSQL) ↔ Oracle `COMPOUND TRIGGER`](trigger-reading-own-table.md) | postgresql/mysql ↔ oracle | A row-level trigger that aggregates a parent row from its children (`UPDATE invoice SET total = (SELECT SUM(...) FROM invoice_line WHERE invoice_id = NEW.invoice_id) WHERE id = NEW.invoice_id`) re-reads the table it's attached to. |
 | [T-SQL `INSTEAD OF` trigger → PostgreSQL (native on views, emulated on tables)](tsql-instead-of-trigger.md) | tsql → postgresql | T-SQL allows `INSTEAD OF` on both views *and* base tables — the trigger body runs **instead of** the attempted INSERT/UPDATE/DELETE, which is never applied on its own. |
+| [A purely set-based T-SQL trigger (`FROM inserted JOIN deleted`) → PostgreSQL statement-level trigger with named transition tables](tsql-set-based-trigger-to-pg-statement-level.md) | tsql → postgresql | T-SQL triggers are always statement-level, exposing the whole batch of affected rows through two pseudo-tables, `inserted`/`deleted`, that a set-based trigger body joins against directly (`INSERT ... SELECT ... FROM inserted i JOIN deleted d ON d.id = i.id`). |
 
 #### Loop and cursor desugaring
 
@@ -612,6 +632,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [T-SQL `THROW`/`RAISERROR`'s numeric error code → each target's own error-code slot](throw-raiserror-numeric-code-per-target.md) | tsql → oracle/postgresql/mysql | T-SQL's `THROW 50001, 'not found', 1` and `RAISERROR('not found', 16, 1)` (with a matching custom message id registered separately) both carry a *numeric error code* alongside the message text. |
+
+#### Convert/HASHBYTES wrapper collapse
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `HASHBYTES('SHA2_256', x)` → PostgreSQL `sha256`, wrapped for a character argument](hashbytes-sha256-to-postgresql.md) | tsql → postgresql | sqlglot canonicalizes T-SQL's `HASHBYTES('SHA2_256', x)` to a bare `SHA256(x)` call reaching PostgreSQL, but PostgreSQL's `sha256` takes a **bytea**, not text — `sha256(x)` over a character column is "function sha256(text) does not exist" at *runtime*, a defect a compile-only validity check does not catch (the call parses fine; it just never runs). |
 
 ### MySQL as source
 
@@ -891,6 +917,7 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | [Trigger body → PostgreSQL `CREATE FUNCTION ... RETURNS TRIGGER` + `CREATE TRIGGER`](trigger-body-to-pg-function.md) | cross-engine | PostgreSQL has no inline trigger body: `CREATE TRIGGER` only *names* a function, which must already exist and return `TRIGGER`. |
 | [Bare `RETURN;` inside a PostgreSQL trigger function's nested handler → `RETURN NEW;`](pg-trigger-bare-return.md) | cross-engine | Oracle's bare `RETURN;` inside an exception handler simply leaves the trigger (there is no return value to supply there). |
 | [Empty trigger body → synthesized `SET NOCOUNT ON;` no-op (T-SQL)](empty-trigger-body-noop.md) | cross-engine | T-SQL forbids an empty statement block: `BEGIN END` alone after a trigger header is a syntax error. |
+| [A purely set-based T-SQL trigger (`FROM inserted JOIN deleted`) → PostgreSQL statement-level trigger with named transition tables](tsql-set-based-trigger-to-pg-statement-level.md) | tsql → postgresql | T-SQL triggers are always statement-level, exposing the whole batch of affected rows through two pseudo-tables, `inserted`/`deleted`, that a set-based trigger body joins against directly (`INSERT ... SELECT ... FROM inserted i JOIN deleted d ON d.id = i.id`). |
 
 ## Loop and cursor desugaring
 
@@ -1036,3 +1063,15 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [`EXECUTE IMMEDIATE '...' USING v1, v2` (Oracle) → MySQL `EXECUTE ... USING @v1, @v2`, bound through session variables](mysql-execute-using-session-vars.md) | oracle → mysql | Oracle's `EXECUTE IMMEDIATE '<sql>' USING bind1, bind2` accepts routine locals and parameters directly as bind arguments. |
+
+## Loop/cursor desugaring
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `IF EXISTS (<real query>) BEGIN ... END [ELSE ...]` → Oracle cursor `FOR` loop over a `DUAL` probe](if-exists-control-flow-to-oracle-for-loop.md) | tsql → oracle | `IF EXISTS (SELECT ...) BEGIN ... END` is ordinary control flow over real table data (not a system-catalog idempotency guard) — a migration script checking "has this step already run?" before doing more work, for example. |
+
+## Convert/HASHBYTES wrapper collapse
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `HASHBYTES('SHA2_256', x)` → PostgreSQL `sha256`, wrapped for a character argument](hashbytes-sha256-to-postgresql.md) | tsql → postgresql | sqlglot canonicalizes T-SQL's `HASHBYTES('SHA2_256', x)` to a bare `SHA256(x)` call reaching PostgreSQL, but PostgreSQL's `sha256` takes a **bytea**, not text — `sha256(x)` over a character column is "function sha256(text) does not exist" at *runtime*, a defect a compile-only validity check does not catch (the call parses fine; it just never runs). |

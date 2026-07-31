@@ -211,7 +211,7 @@ engines and indicates the transpilation support status for each.
 | CREATE TABLE | ✓ | ✓ | ✓ | ✓ | ✅ |
 | ALTER TABLE ADD/DROP/MODIFY | ✓ | ✓ | ✓ | ✓ | ✅ (syntax normalization; column types/nullability are tracked in statement order across the script, so a later ALTER sees earlier type changes, and T-SQL `ALTER COLUMN` re-states the column's known NOT NULL/NULL — warned when the script never defines the column) |
 | DROP TABLE | ✓ | ✓ | ✓ | ✓ | ✅ |
-| IF EXISTS / IF NOT EXISTS | ✓ | N/A | ✓ | ✓ | ⚠️ Oracle: kept verbatim (valid on 23c+ only); no exception block is emitted — pre-23c guard planned (2026-07-24 audit, `audit/2026-07-24/06-docs-drift.md` D3) |
+| IF EXISTS / IF NOT EXISTS | ✓ | N/A | ✓ | ✓ | ⚠️ Oracle: the clause is kept verbatim (valid on 23c+ only). The T-SQL catalog-probe guard idiom (`IF NOT EXISTS(SELECT … FROM sys.…)`) is a separate path and DOES get a version-independent Oracle synthesis — see `rationale/ddl/tsql-existence-guard-catalog-probes.md` |
 | Temporary tables | ✓ (#table) | ✓ (GTT) | ✓ (TEMP) | ✓ (TEMPORARY) | ✅ |
 | IDENTITY / SERIAL / AUTO_INCREMENT | ✓ | ✓ (12c+) | ✓ | ✓ | ✅ |
 | Computed/generated columns | ✓ | ✓ | ✓ | ✓ | ✅ |

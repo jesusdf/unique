@@ -26,8 +26,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### T-SQL as source
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot) | [`MERGE` / upsert lowering](#merge--upsert-lowering) | [Multi-table `DELETE`](#multi-table-delete) | [Multi-join `UPDATE`](#multi-join-update) | [`OUTPUT` / `RETURNING`](#output--returning) | [Set-operation `ORDER BY`](#set-operation-order-by) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction) | [Recursive CTE synthesis](#recursive-cte-synthesis) |
-|---|---|---|---|---|---|---|---|
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot) | [`MERGE` / upsert lowering](#merge--upsert-lowering) | [Multi-table `DELETE`](#multi-table-delete) | [Multi-join `UPDATE`](#multi-join-update) | [`OUTPUT` / `RETURNING`](#output--returning) | [Set-operation `ORDER BY`](#set-operation-order-by) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction) | [Recursive CTE synthesis](#recursive-cte-synthesis) | [Conditional expression translation](#conditional-expression-translation) | [Literal parsing recovery](#literal-parsing-recovery) |
+|---|---|---|---|---|---|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
 
@@ -80,6 +80,18 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [Recursive CTE synthesis: `WITH RECURSIVE` keyword, Oracle's required column list, and the `MAXRECURSION` hint](recursive-cte-keyword-and-column-list.md) | tsql/mysql → all | A recursive CTE — one whose body queries its own name — needs different declaration syntax on every engine. |
+
+#### Conditional expression translation
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `IIF(cond, a, b)` / MySQL `IF(cond, a, b)` → Oracle/PostgreSQL searched `CASE`](iif-to-case-or-native.md) | tsql/mysql → oracle/postgresql | T-SQL's `IIF(cond, a, b)` and MySQL's `IF(cond, a, b)` are both a three-argument ternary conditional expression — neither function exists on Oracle or PostgreSQL, so carrying either name across verbatim would be an unresolved-function error there. |
+
+#### Literal parsing recovery
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL bare money literal (`$12.50`) → the numeric literal it means](money-literal-shorthand.md) | tsql → oracle/postgresql/mysql | T-SQL accepts a bare currency-prefixed literal like `$12.50` or `$100` as a numeric constant, but the underlying parser mis-reads it as a `table.column` reference instead — `$12.50` becomes `Column(this=Literal(50), table=Identifier($12))`, a nonsense "column `50` of table `$12`" — because the digits after the dot look like a member access, not a decimal point. |
 
 ### T-SQL as target
 
@@ -157,8 +169,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### Oracle as target
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-3) | [`MERGE` / upsert lowering](#merge--upsert-lowering-1) | [Multi-table `DELETE`](#multi-table-delete-2) | [Multi-join `UPDATE`](#multi-join-update-1) | [`OUTPUT` / `RETURNING`](#output--returning-1) | [Set-operation `ORDER BY`](#set-operation-order-by-1) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-3) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-1) | [Recursive CTE synthesis](#recursive-cte-synthesis-2) |
-|---|---|---|---|---|---|---|---|---|
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-3) | [`MERGE` / upsert lowering](#merge--upsert-lowering-1) | [Multi-table `DELETE`](#multi-table-delete-2) | [Multi-join `UPDATE`](#multi-join-update-1) | [`OUTPUT` / `RETURNING`](#output--returning-1) | [Set-operation `ORDER BY`](#set-operation-order-by-1) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-3) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-1) | [Recursive CTE synthesis](#recursive-cte-synthesis-2) | [Conditional expression translation](#conditional-expression-translation-1) | [Literal parsing recovery](#literal-parsing-recovery-1) |
+|---|---|---|---|---|---|---|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
 
@@ -218,6 +230,18 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [Recursive CTE synthesis: `WITH RECURSIVE` keyword, Oracle's required column list, and the `MAXRECURSION` hint](recursive-cte-keyword-and-column-list.md) | tsql/mysql → all | A recursive CTE — one whose body queries its own name — needs different declaration syntax on every engine. |
 
+#### Conditional expression translation
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `IIF(cond, a, b)` / MySQL `IF(cond, a, b)` → Oracle/PostgreSQL searched `CASE`](iif-to-case-or-native.md) | tsql/mysql → oracle/postgresql | T-SQL's `IIF(cond, a, b)` and MySQL's `IF(cond, a, b)` are both a three-argument ternary conditional expression — neither function exists on Oracle or PostgreSQL, so carrying either name across verbatim would be an unresolved-function error there. |
+
+#### Literal parsing recovery
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL bare money literal (`$12.50`) → the numeric literal it means](money-literal-shorthand.md) | tsql → oracle/postgresql/mysql | T-SQL accepts a bare currency-prefixed literal like `$12.50` or `$100` as a numeric constant, but the underlying parser mis-reads it as a `table.column` reference instead — `$12.50` becomes `Column(this=Literal(50), table=Identifier($12))`, a nonsense "column `50` of table `$12`" — because the digits after the dot look like a member access, not a decimal point. |
+
 ### PostgreSQL as source
 
 | [Multi-join `UPDATE`](#multi-join-update-2) | [Row-value comparisons](#row-value-comparisons-2) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-4) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-2) | [Positional GROUP BY resolved to a column name](#positional-group-by-resolved-to-a-column-name-1) |
@@ -256,8 +280,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### PostgreSQL as target
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-4) | [`MERGE` / upsert lowering](#merge--upsert-lowering-2) | [Multi-table `DELETE`](#multi-table-delete-3) | [Multi-join `UPDATE`](#multi-join-update-3) | [`OUTPUT` / `RETURNING`](#output--returning-2) | [Set-operation `ORDER BY`](#set-operation-order-by-2) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-5) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-3) | [Recursive CTE synthesis](#recursive-cte-synthesis-3) |
-|---|---|---|---|---|---|---|---|---|
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-4) | [`MERGE` / upsert lowering](#merge--upsert-lowering-2) | [Multi-table `DELETE`](#multi-table-delete-3) | [Multi-join `UPDATE`](#multi-join-update-3) | [`OUTPUT` / `RETURNING`](#output--returning-2) | [Set-operation `ORDER BY`](#set-operation-order-by-2) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-5) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-3) | [Recursive CTE synthesis](#recursive-cte-synthesis-3) | [Conditional expression translation](#conditional-expression-translation-2) | [Literal parsing recovery](#literal-parsing-recovery-2) |
+|---|---|---|---|---|---|---|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
 
@@ -317,10 +341,22 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [Recursive CTE synthesis: `WITH RECURSIVE` keyword, Oracle's required column list, and the `MAXRECURSION` hint](recursive-cte-keyword-and-column-list.md) | tsql/mysql → all | A recursive CTE — one whose body queries its own name — needs different declaration syntax on every engine. |
 
+#### Conditional expression translation
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `IIF(cond, a, b)` / MySQL `IF(cond, a, b)` → Oracle/PostgreSQL searched `CASE`](iif-to-case-or-native.md) | tsql/mysql → oracle/postgresql | T-SQL's `IIF(cond, a, b)` and MySQL's `IF(cond, a, b)` are both a three-argument ternary conditional expression — neither function exists on Oracle or PostgreSQL, so carrying either name across verbatim would be an unresolved-function error there. |
+
+#### Literal parsing recovery
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL bare money literal (`$12.50`) → the numeric literal it means](money-literal-shorthand.md) | tsql → oracle/postgresql/mysql | T-SQL accepts a bare currency-prefixed literal like `$12.50` or `$100` as a numeric constant, but the underlying parser mis-reads it as a `table.column` reference instead — `$12.50` becomes `Column(this=Literal(50), table=Identifier($12))`, a nonsense "column `50` of table `$12`" — because the digits after the dot look like a member access, not a decimal point. |
+
 ### MySQL as source
 
-| [Multi-table `DELETE`](#multi-table-delete-4) | [Row-value comparisons](#row-value-comparisons-3) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-6) | [Recursive CTE synthesis](#recursive-cte-synthesis-4) |
-|---|---|---|---|
+| [Multi-table `DELETE`](#multi-table-delete-4) | [Row-value comparisons](#row-value-comparisons-3) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-6) | [Recursive CTE synthesis](#recursive-cte-synthesis-4) | [Conditional expression translation](#conditional-expression-translation-3) |
+|---|---|---|---|---|
 
 #### Multi-table `DELETE`
 
@@ -346,10 +382,16 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [Recursive CTE synthesis: `WITH RECURSIVE` keyword, Oracle's required column list, and the `MAXRECURSION` hint](recursive-cte-keyword-and-column-list.md) | tsql/mysql → all | A recursive CTE — one whose body queries its own name — needs different declaration syntax on every engine. |
 
+#### Conditional expression translation
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `IIF(cond, a, b)` / MySQL `IF(cond, a, b)` → Oracle/PostgreSQL searched `CASE`](iif-to-case-or-native.md) | tsql/mysql → oracle/postgresql | T-SQL's `IIF(cond, a, b)` and MySQL's `IF(cond, a, b)` are both a three-argument ternary conditional expression — neither function exists on Oracle or PostgreSQL, so carrying either name across verbatim would be an unresolved-function error there. |
+
 ### MySQL as target
 
-| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-5) | [`MERGE` / upsert lowering](#merge--upsert-lowering-3) | [Multi-table `DELETE`](#multi-table-delete-5) | [Multi-join `UPDATE`](#multi-join-update-4) | [Set-operation `ORDER BY`](#set-operation-order-by-3) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-7) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-4) | [Recursive CTE synthesis](#recursive-cte-synthesis-5) |
-|---|---|---|---|---|---|---|---|
+| [`PIVOT` / `UNPIVOT`](#pivot--unpivot-5) | [`MERGE` / upsert lowering](#merge--upsert-lowering-3) | [Multi-table `DELETE`](#multi-table-delete-5) | [Multi-join `UPDATE`](#multi-join-update-4) | [Set-operation `ORDER BY`](#set-operation-order-by-3) | [Oracle join syntax and row limits (source direction)](#oracle-join-syntax-and-row-limits-source-direction-7) | [Portable row-source rewrites (PostgreSQL)](#portable-row-source-rewrites-postgresql-4) | [Recursive CTE synthesis](#recursive-cte-synthesis-5) | [Literal parsing recovery](#literal-parsing-recovery-3) |
+|---|---|---|---|---|---|---|---|---|
 
 #### `PIVOT` / `UNPIVOT`
 
@@ -400,6 +442,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [Recursive CTE synthesis: `WITH RECURSIVE` keyword, Oracle's required column list, and the `MAXRECURSION` hint](recursive-cte-keyword-and-column-list.md) | tsql/mysql → all | A recursive CTE — one whose body queries its own name — needs different declaration syntax on every engine. |
+
+#### Literal parsing recovery
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL bare money literal (`$12.50`) → the numeric literal it means](money-literal-shorthand.md) | tsql → oracle/postgresql/mysql | T-SQL accepts a bare currency-prefixed literal like `$12.50` or `$100` as a numeric constant, but the underlying parser mis-reads it as a `table.column` reference instead — `$12.50` becomes `Column(this=Literal(50), table=Identifier($12))`, a nonsense "column `50` of table `$12`" — because the digits after the dot look like a member access, not a decimal point. |
 
 ### Cross-engine / multi-directional
 
@@ -523,3 +571,15 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [`GROUP BY 1` (positional ordinal) → the actual `SELECT`-list column name](group-by-ordinal-resolved.md) | postgresql → tsql | PostgreSQL accepts a positional ordinal in `GROUP BY` — `GROUP BY 1` groups by whatever the first `SELECT`-list expression is. |
+
+## Conditional expression translation
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL `IIF(cond, a, b)` / MySQL `IF(cond, a, b)` → Oracle/PostgreSQL searched `CASE`](iif-to-case-or-native.md) | tsql/mysql → oracle/postgresql | T-SQL's `IIF(cond, a, b)` and MySQL's `IF(cond, a, b)` are both a three-argument ternary conditional expression — neither function exists on Oracle or PostgreSQL, so carrying either name across verbatim would be an unresolved-function error there. |
+
+## Literal parsing recovery
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL bare money literal (`$12.50`) → the numeric literal it means](money-literal-shorthand.md) | tsql → oracle/postgresql/mysql | T-SQL accepts a bare currency-prefixed literal like `$12.50` or `$100` as a numeric constant, but the underlying parser mis-reads it as a `table.column` reference instead — `$12.50` becomes `Column(this=Literal(50), table=Identifier($12))`, a nonsense "column `50` of table `$12`" — because the digits after the dot look like a member access, not a decimal point. |

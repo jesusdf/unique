@@ -23,8 +23,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### T-SQL as source
 
-| [The SERIAL / IDENTITY / AUTO_INCREMENT triangle](#the-serial--identity--auto_increment-triangle) | [Cross-statement schema-state-driven coercion](#cross-statement-schema-state-driven-coercion) | [Temporary tables and the `CREATE TABLE AS SELECT` ↔ `SELECT INTO` idiom](#temporary-tables-and-the-create-table-as-select--select-into-idiom) | [Foreign-key referential actions](#foreign-key-referential-actions) | [Sequences](#sequences) | [Storage and physical options](#storage-and-physical-options) | [T-SQL CREATE TYPE alias resolved to its base type](#t-sql-create-type-alias-resolved-to-its-base-type) | [DROP emitted idempotently](#drop-emitted-idempotently) |
-|---|---|---|---|---|---|---|---|
+| [The SERIAL / IDENTITY / AUTO_INCREMENT triangle](#the-serial--identity--auto_increment-triangle) | [Cross-statement schema-state-driven coercion](#cross-statement-schema-state-driven-coercion) | [Temporary tables and the `CREATE TABLE AS SELECT` ↔ `SELECT INTO` idiom](#temporary-tables-and-the-create-table-as-select--select-into-idiom) | [Foreign-key referential actions](#foreign-key-referential-actions) | [Sequences](#sequences) | [Storage and physical options](#storage-and-physical-options) | [T-SQL CREATE TYPE alias resolved to its base type](#t-sql-create-type-alias-resolved-to-its-base-type) | [DROP emitted idempotently](#drop-emitted-idempotently) | [DDL guards](#ddl-guards) |
+|---|---|---|---|---|---|---|---|---|
 
 #### The SERIAL / IDENTITY / AUTO_INCREMENT triangle
 
@@ -75,10 +75,16 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [A plain `DROP TABLE t` → `DROP TABLE IF EXISTS t` on PostgreSQL](drop-table-idempotent-if-exists.md) | tsql → postgresql | A migration script is meant to be re-runnable against a target that may already have run it once before — a bare `DROP TABLE t` errors on a second run if the table is already gone, stopping the whole script partway through. |
 
+#### DDL guards
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL system-catalog DDL guards (`OBJECT_ID`/`sys.objects`/`sys.columns`) → native `IF [NOT] EXISTS` or a synthesized per-target probe](tsql-existence-guard-catalog-probes.md) | tsql → oracle/postgresql/mysql | A T-SQL migration script often guards a `CREATE`/`DROP`/`ALTER` with a system-catalog existence check — `IF OBJECT_ID('t') IS NOT NULL DROP TABLE t` or `IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID('t')) BEGIN CREATE TABLE t (...) END` — so a second run of the same script doesn't fail on an object that's already there (or already gone). |
+
 ### T-SQL as target
 
-| [Foreign-key referential actions](#foreign-key-referential-actions-1) | [Sequences](#sequences-1) | [MySQL `ENUM` degrade — open limitation](#mysql-enum-degrade--open-limitation) | [Synthesized identifiers for anonymous constructs](#synthesized-identifiers-for-anonymous-constructs) | [Non-negativity constraint synthesis](#non-negativity-constraint-synthesis) | [TRUNCATE options](#truncate-options) | [ALTER COLUMN DROP DEFAULT](#alter-column-drop-default) | [Oracle ALTER TABLE ADD (...) parenthesized-list unwrapping](#oracle-alter-table-add--parenthesized-list-unwrapping) |
-|---|---|---|---|---|---|---|---|
+| [Foreign-key referential actions](#foreign-key-referential-actions-1) | [Sequences](#sequences-1) | [MySQL `ENUM` degrade — open limitation](#mysql-enum-degrade--open-limitation) | [Synthesized identifiers for anonymous constructs](#synthesized-identifiers-for-anonymous-constructs) | [Non-negativity constraint synthesis](#non-negativity-constraint-synthesis) | [TRUNCATE options](#truncate-options) | [ALTER COLUMN DROP DEFAULT](#alter-column-drop-default) | [Oracle ALTER TABLE ADD (...) parenthesized-list unwrapping](#oracle-alter-table-add--parenthesized-list-unwrapping) | [DDL guards](#ddl-guards-1) |
+|---|---|---|---|---|---|---|---|---|
 
 #### Foreign-key referential actions
 
@@ -128,10 +134,16 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [Oracle `ALTER TABLE ... ADD ( ... )` (parenthesized element list) → an unwrapped `ADD` clause](oracle-alter-add-parenthesized-unwrap.md) | oracle → tsql/postgresql/mysql | Oracle allows one or more table elements (columns, constraints) to be added in a single parenthesized list — `ALTER TABLE t ADD (CONSTRAINT fk FOREIGN KEY (col) REFERENCES p(id))`. |
 
+#### DDL guards
+
+| Article | Direction | Description |
+|---|---|---|
+| [Oracle catalog probes inside dynamic DDL (`user_indexes`/`user_tab_cols`) → the target's own system view](oracle-catalog-probe-rewritten-per-target.md) | oracle → tsql/postgresql | An Oracle PL/SQL script sometimes checks its own data dictionary before running dynamic DDL through `EXECUTE IMMEDIATE` — for example resolving an index's owning table before a table-less `DROP INDEX` (Oracle names only the index; T-SQL requires the table too, error 159), or gating an `ALTER TABLE ... MODIFY` on whether a column already has the target shape. |
+
 ### Oracle as source
 
-| [Sequences](#sequences-2) | [Oracle RAW(16) DEFAULT SYS_GUID() → PostgreSQL BYTEA default](#oracle-raw16-default-sys_guid--postgresql-bytea-default) | [Oracle ALTER TABLE ADD (...) parenthesized-list unwrapping](#oracle-alter-table-add--parenthesized-list-unwrapping-1) |
-|---|---|---|
+| [Sequences](#sequences-2) | [Oracle RAW(16) DEFAULT SYS_GUID() → PostgreSQL BYTEA default](#oracle-raw16-default-sys_guid--postgresql-bytea-default) | [Oracle ALTER TABLE ADD (...) parenthesized-list unwrapping](#oracle-alter-table-add--parenthesized-list-unwrapping-1) | [DDL guards](#ddl-guards-2) |
+|---|---|---|---|
 
 #### Sequences
 
@@ -151,10 +163,16 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [Oracle `ALTER TABLE ... ADD ( ... )` (parenthesized element list) → an unwrapped `ADD` clause](oracle-alter-add-parenthesized-unwrap.md) | oracle → tsql/postgresql/mysql | Oracle allows one or more table elements (columns, constraints) to be added in a single parenthesized list — `ALTER TABLE t ADD (CONSTRAINT fk FOREIGN KEY (col) REFERENCES p(id))`. |
 
+#### DDL guards
+
+| Article | Direction | Description |
+|---|---|---|
+| [Oracle catalog probes inside dynamic DDL (`user_indexes`/`user_tab_cols`) → the target's own system view](oracle-catalog-probe-rewritten-per-target.md) | oracle → tsql/postgresql | An Oracle PL/SQL script sometimes checks its own data dictionary before running dynamic DDL through `EXECUTE IMMEDIATE` — for example resolving an index's owning table before a table-less `DROP INDEX` (Oracle names only the index; T-SQL requires the table too, error 159), or gating an `ALTER TABLE ... MODIFY` on whether a column already has the target shape. |
+
 ### Oracle as target
 
-| [The SERIAL / IDENTITY / AUTO_INCREMENT triangle](#the-serial--identity--auto_increment-triangle-1) | [Temporary tables and the `CREATE TABLE AS SELECT` ↔ `SELECT INTO` idiom](#temporary-tables-and-the-create-table-as-select--select-into-idiom-1) | [Foreign-key referential actions](#foreign-key-referential-actions-2) | [Sequences](#sequences-3) | [Storage and physical options](#storage-and-physical-options-1) | [MySQL `ENUM` degrade — open limitation](#mysql-enum-degrade--open-limitation-1) | [Non-negativity constraint synthesis](#non-negativity-constraint-synthesis-1) | [TRUNCATE options](#truncate-options-1) | [T-SQL CREATE TYPE alias resolved to its base type](#t-sql-create-type-alias-resolved-to-its-base-type-1) | [ALTER COLUMN DROP DEFAULT](#alter-column-drop-default-1) |
-|---|---|---|---|---|---|---|---|---|---|
+| [The SERIAL / IDENTITY / AUTO_INCREMENT triangle](#the-serial--identity--auto_increment-triangle-1) | [Temporary tables and the `CREATE TABLE AS SELECT` ↔ `SELECT INTO` idiom](#temporary-tables-and-the-create-table-as-select--select-into-idiom-1) | [Foreign-key referential actions](#foreign-key-referential-actions-2) | [Sequences](#sequences-3) | [Storage and physical options](#storage-and-physical-options-1) | [MySQL `ENUM` degrade — open limitation](#mysql-enum-degrade--open-limitation-1) | [Non-negativity constraint synthesis](#non-negativity-constraint-synthesis-1) | [TRUNCATE options](#truncate-options-1) | [T-SQL CREATE TYPE alias resolved to its base type](#t-sql-create-type-alias-resolved-to-its-base-type-1) | [ALTER COLUMN DROP DEFAULT](#alter-column-drop-default-1) | [DDL guards](#ddl-guards-3) |
+|---|---|---|---|---|---|---|---|---|---|---|
 
 #### The SERIAL / IDENTITY / AUTO_INCREMENT triangle
 
@@ -215,6 +233,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [PostgreSQL `ALTER COLUMN a DROP DEFAULT` → Oracle `MODIFY ... DEFAULT NULL`, T-SQL dynamic-SQL script](alter-column-drop-default.md) | postgresql → oracle/tsql | PostgreSQL's `ALTER TABLE t ALTER COLUMN a DROP DEFAULT` removes a column's default expression by name-free reference — no other engine has an equivalent "just remove whatever default is there" clause. |
+
+#### DDL guards
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL system-catalog DDL guards (`OBJECT_ID`/`sys.objects`/`sys.columns`) → native `IF [NOT] EXISTS` or a synthesized per-target probe](tsql-existence-guard-catalog-probes.md) | tsql → oracle/postgresql/mysql | A T-SQL migration script often guards a `CREATE`/`DROP`/`ALTER` with a system-catalog existence check — `IF OBJECT_ID('t') IS NOT NULL DROP TABLE t` or `IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID('t')) BEGIN CREATE TABLE t (...) END` — so a second run of the same script doesn't fail on an object that's already there (or already gone). |
 
 ### PostgreSQL as source
 
@@ -259,8 +283,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### PostgreSQL as target
 
-| [The SERIAL / IDENTITY / AUTO_INCREMENT triangle](#the-serial--identity--auto_increment-triangle-2) | [Cross-statement schema-state-driven coercion](#cross-statement-schema-state-driven-coercion-1) | [Sequences](#sequences-5) | [MySQL `ENUM` degrade — open limitation](#mysql-enum-degrade--open-limitation-2) | [Non-negativity constraint synthesis](#non-negativity-constraint-synthesis-2) | [T-SQL CREATE TYPE alias resolved to its base type](#t-sql-create-type-alias-resolved-to-its-base-type-2) | [Oracle RAW(16) DEFAULT SYS_GUID() → PostgreSQL BYTEA default](#oracle-raw16-default-sys_guid--postgresql-bytea-default-1) | [Oracle ALTER TABLE ADD (...) parenthesized-list unwrapping](#oracle-alter-table-add--parenthesized-list-unwrapping-2) | [DROP emitted idempotently](#drop-emitted-idempotently-1) |
-|---|---|---|---|---|---|---|---|---|
+| [The SERIAL / IDENTITY / AUTO_INCREMENT triangle](#the-serial--identity--auto_increment-triangle-2) | [Cross-statement schema-state-driven coercion](#cross-statement-schema-state-driven-coercion-1) | [Sequences](#sequences-5) | [MySQL `ENUM` degrade — open limitation](#mysql-enum-degrade--open-limitation-2) | [Non-negativity constraint synthesis](#non-negativity-constraint-synthesis-2) | [T-SQL CREATE TYPE alias resolved to its base type](#t-sql-create-type-alias-resolved-to-its-base-type-2) | [Oracle RAW(16) DEFAULT SYS_GUID() → PostgreSQL BYTEA default](#oracle-raw16-default-sys_guid--postgresql-bytea-default-1) | [Oracle ALTER TABLE ADD (...) parenthesized-list unwrapping](#oracle-alter-table-add--parenthesized-list-unwrapping-2) | [DROP emitted idempotently](#drop-emitted-idempotently-1) | [DDL guards](#ddl-guards-4) |
+|---|---|---|---|---|---|---|---|---|---|
 
 #### The SERIAL / IDENTITY / AUTO_INCREMENT triangle
 
@@ -317,6 +341,13 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 |---|---|---|
 | [A plain `DROP TABLE t` → `DROP TABLE IF EXISTS t` on PostgreSQL](drop-table-idempotent-if-exists.md) | tsql → postgresql | A migration script is meant to be re-runnable against a target that may already have run it once before — a bare `DROP TABLE t` errors on a second run if the table is already gone, stopping the whole script partway through. |
 
+#### DDL guards
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL system-catalog DDL guards (`OBJECT_ID`/`sys.objects`/`sys.columns`) → native `IF [NOT] EXISTS` or a synthesized per-target probe](tsql-existence-guard-catalog-probes.md) | tsql → oracle/postgresql/mysql | A T-SQL migration script often guards a `CREATE`/`DROP`/`ALTER` with a system-catalog existence check — `IF OBJECT_ID('t') IS NOT NULL DROP TABLE t` or `IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID('t')) BEGIN CREATE TABLE t (...) END` — so a second run of the same script doesn't fail on an object that's already there (or already gone). |
+| [Oracle catalog probes inside dynamic DDL (`user_indexes`/`user_tab_cols`) → the target's own system view](oracle-catalog-probe-rewritten-per-target.md) | oracle → tsql/postgresql | An Oracle PL/SQL script sometimes checks its own data dictionary before running dynamic DDL through `EXECUTE IMMEDIATE` — for example resolving an index's owning table before a table-less `DROP INDEX` (Oracle names only the index; T-SQL requires the table too, error 159), or gating an `ALTER TABLE ... MODIFY` on whether a column already has the target shape. |
+
 ### MySQL as source
 
 | [Temporary tables and the `CREATE TABLE AS SELECT` ↔ `SELECT INTO` idiom](#temporary-tables-and-the-create-table-as-select--select-into-idiom-3) | [Foreign-key referential actions](#foreign-key-referential-actions-4) | [MySQL `ENUM` degrade — open limitation](#mysql-enum-degrade--open-limitation-3) | [Non-negativity constraint synthesis](#non-negativity-constraint-synthesis-3) |
@@ -349,8 +380,8 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 
 ### MySQL as target
 
-| [The SERIAL / IDENTITY / AUTO_INCREMENT triangle](#the-serial--identity--auto_increment-triangle-3) | [Storage and physical options](#storage-and-physical-options-2) | [TRUNCATE options](#truncate-options-3) | [T-SQL CREATE TYPE alias resolved to its base type](#t-sql-create-type-alias-resolved-to-its-base-type-3) | [Oracle ALTER TABLE ADD (...) parenthesized-list unwrapping](#oracle-alter-table-add--parenthesized-list-unwrapping-3) |
-|---|---|---|---|---|
+| [The SERIAL / IDENTITY / AUTO_INCREMENT triangle](#the-serial--identity--auto_increment-triangle-3) | [Storage and physical options](#storage-and-physical-options-2) | [TRUNCATE options](#truncate-options-3) | [T-SQL CREATE TYPE alias resolved to its base type](#t-sql-create-type-alias-resolved-to-its-base-type-3) | [Oracle ALTER TABLE ADD (...) parenthesized-list unwrapping](#oracle-alter-table-add--parenthesized-list-unwrapping-3) | [DDL guards](#ddl-guards-5) |
+|---|---|---|---|---|---|
 
 #### The SERIAL / IDENTITY / AUTO_INCREMENT triangle
 
@@ -381,6 +412,12 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [Oracle `ALTER TABLE ... ADD ( ... )` (parenthesized element list) → an unwrapped `ADD` clause](oracle-alter-add-parenthesized-unwrap.md) | oracle → tsql/postgresql/mysql | Oracle allows one or more table elements (columns, constraints) to be added in a single parenthesized list — `ALTER TABLE t ADD (CONSTRAINT fk FOREIGN KEY (col) REFERENCES p(id))`. |
+
+#### DDL guards
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL system-catalog DDL guards (`OBJECT_ID`/`sys.objects`/`sys.columns`) → native `IF [NOT] EXISTS` or a synthesized per-target probe](tsql-existence-guard-catalog-probes.md) | tsql → oracle/postgresql/mysql | A T-SQL migration script often guards a `CREATE`/`DROP`/`ALTER` with a system-catalog existence check — `IF OBJECT_ID('t') IS NOT NULL DROP TABLE t` or `IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID('t')) BEGIN CREATE TABLE t (...) END` — so a second run of the same script doesn't fail on an object that's already there (or already gone). |
 
 ### Cross-engine / multi-directional
 
@@ -552,3 +589,10 @@ Each article grouped by the engine it converts **from** and **to** (derived from
 | Article | Direction | Description |
 |---|---|---|
 | [A plain `DROP TABLE t` → `DROP TABLE IF EXISTS t` on PostgreSQL](drop-table-idempotent-if-exists.md) | tsql → postgresql | A migration script is meant to be re-runnable against a target that may already have run it once before — a bare `DROP TABLE t` errors on a second run if the table is already gone, stopping the whole script partway through. |
+
+## DDL guards
+
+| Article | Direction | Description |
+|---|---|---|
+| [T-SQL system-catalog DDL guards (`OBJECT_ID`/`sys.objects`/`sys.columns`) → native `IF [NOT] EXISTS` or a synthesized per-target probe](tsql-existence-guard-catalog-probes.md) | tsql → oracle/postgresql/mysql | A T-SQL migration script often guards a `CREATE`/`DROP`/`ALTER` with a system-catalog existence check — `IF OBJECT_ID('t') IS NOT NULL DROP TABLE t` or `IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID('t')) BEGIN CREATE TABLE t (...) END` — so a second run of the same script doesn't fail on an object that's already there (or already gone). |
+| [Oracle catalog probes inside dynamic DDL (`user_indexes`/`user_tab_cols`) → the target's own system view](oracle-catalog-probe-rewritten-per-target.md) | oracle → tsql/postgresql | An Oracle PL/SQL script sometimes checks its own data dictionary before running dynamic DDL through `EXECUTE IMMEDIATE` — for example resolving an index's owning table before a table-less `DROP INDEX` (Oracle names only the index; T-SQL requires the table too, error 159), or gating an `ALTER TABLE ... MODIFY` on whether a column already has the target shape. |
