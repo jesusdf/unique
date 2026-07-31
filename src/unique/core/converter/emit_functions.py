@@ -1404,6 +1404,7 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     for _early in (
         emit_compress_degrade,
         emit_pg_charcode_to_mysql,
+        emit_pg_to_hex_to_tsql_oracle,
         emit_bool_predicate_agg,
     ):
         _early_sql = _early(node, fn_name, dialect)
@@ -3618,5 +3619,6 @@ from unique.core.converter.emit_expr import (  # noqa: E402
     emit_mysql_rounded_str_len,
     emit_oracle_replace_null_guard,
     emit_pg_charcode_to_mysql,
+    emit_pg_to_hex_to_tsql_oracle,
     emit_stuff_insert,
 )

@@ -2020,13 +2020,17 @@ class TestOracleAnonymousBlock:
         out = _transpile(self.BLOCK, "oracle", "postgresql")
         upper = out.upper()
         # This top-level block degrades to a documented UNIQUE-1160 carrier
-        # (preserved commented out). Its generated PL/pgSQL DO wrapper is present
-        # but the dollar-quote is neutralized (``$$`` -> ``$ $``) so the ``--``
-        # carrier is self-contained — no raw ``$$`` that could desync a
-        # statement scanner (bug Q2/1: dollar-quote self-containment).
-        assert "DO $ $" in upper
-        assert "$ $;" in out
-        assert "$$" not in out  # no live dollar-quote delimiter leaks into a comment
+        # (preserved commented out). Comments are trivia (B42): the carrier
+        # quotes the generated PL/pgSQL DO wrapper VERBATIM — a real ``$$``,
+        # not a mangled ``$ $`` — because the dollar-quote scanners that read
+        # this output (batch_splitter.py's _find_dollar_close,
+        # similarity.py's _find_close_tag) already skip ``--`` comments while
+        # searching for a closing tag, so a tag-shaped sequence inside one of
+        # these ``--`` lines cannot desync the split (bug Q2/1's original
+        # concern is closed at the scanner, not by mangling the text).
+        assert "DO $$" in upper
+        assert "$$;" in out
+        assert "$ $" not in out
         # Cursor FOR-loop survives.
         assert "FOR R IN" in upper
         assert "END LOOP" in upper

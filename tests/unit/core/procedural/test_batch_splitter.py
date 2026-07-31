@@ -412,3 +412,113 @@ class TestOracleSplitLineCreateHeader:
         b = executable[0]
         assert b.batch_type == BatchType.PROCEDURAL
         assert "v_y" in b.sql and "END my_proc" in b.sql
+
+
+class TestOracleCommentBlindHeadWindow:
+    """B44: ``plsql_start.search(head_window)`` scanned the last 3 raw source
+    lines verbatim, so a comment merely *mentioning* ``CREATE PROCEDURE``
+    (a codegen header quoting old/deprecated code, an explanatory note)
+    tripped PL/SQL mode exactly like the real construct would — folding the
+    following, unrelated ``;``-terminated statements into one batch that
+    then waits forever for a lone ``/`` that never comes.
+    """
+
+    def test_line_comment_mentioning_create_procedure_does_not_trip_plsql(
+        self,
+    ) -> None:
+        sql = (
+            "-- codegen header\n"
+            "-- EXECUTE([CREATE PROCEDURE my_proc AS SELECT 1])\n"
+            "SELECT 1 FROM DUAL;\n"
+            "SELECT 2 FROM DUAL;\n"
+        )
+        batches = BatchSplitter.split(sql, "oracle")
+        executable = [b for b in batches if b.batch_type != BatchType.COMMENT]
+        assert len(executable) == 2, [b.sql for b in executable]
+        # The leading comment attaches to the statement it precedes (a
+        # comment is trivia, not a batch of its own) — the split itself, not
+        # the comment's placement, is what B44 fixes.
+        assert executable[0].sql.rstrip().endswith("SELECT 1 FROM DUAL")
+        assert executable[1].sql.strip() == "SELECT 2 FROM DUAL"
+
+    def test_block_comment_mentioning_create_procedure_does_not_trip_plsql(
+        self,
+    ) -> None:
+        sql = (
+            "/* CREATE PROCEDURE legacy_proc is deprecated */\n"
+            "SELECT 1 FROM DUAL;\n"
+            "SELECT 2 FROM DUAL;\n"
+        )
+        batches = BatchSplitter.split(sql, "oracle")
+        executable = [b for b in batches if b.batch_type != BatchType.COMMENT]
+        assert len(executable) == 2, [b.sql for b in executable]
+        assert executable[0].sql.rstrip().endswith("SELECT 1 FROM DUAL")
+        assert executable[1].sql.strip() == "SELECT 2 FROM DUAL"
+
+    def test_real_create_procedure_still_trips_plsql(self) -> None:
+        # Neighbor test: the fix must not make the splitter comment-blind to
+        # a REAL PL/SQL head — only to one that exists solely inside a
+        # comment.
+        sql = "CREATE PROCEDURE p AS\nBEGIN\n  NULL;\nEND;\n/\n"
+        batches = BatchSplitter.split(sql, "oracle")
+        executable = [b for b in batches if b.batch_type != BatchType.COMMENT]
+        assert len(executable) == 1, [b.sql for b in executable]
+        assert "BEGIN" in executable[0].sql and "END" in executable[0].sql
+
+
+class TestPostgresqlDollarQuoteCommentAware:
+    """B42 follow-up: ``_split_postgresql``'s dollar-quote closing-tag search
+    used a blind ``str.find`` that does not skip ``--`` comments/string
+    literals, unlike its sibling scanners (``similarity.py``'s
+    ``_find_close_tag`` already guards against exactly this). A ``$$``-shaped
+    sequence sitting inside a ``--`` comment BEFORE the routine's real
+    closing ``$$`` matched as the closing tag, ending the dollar-quoted body
+    early and shredding the rest of the routine into orphan batches — a real,
+    reproducible desync, not merely a theoretical one.
+    """
+
+    def test_dollar_like_text_in_nested_comment_does_not_close_early(self) -> None:
+        sql = (
+            "CREATE OR REPLACE FUNCTION f1() RETURNS INT LANGUAGE plpgsql AS $$\n"
+            "BEGIN\n"
+            "    -- UNIQUE-9999: some nested note mentioning $$ delimiters\n"
+            "    RETURN 1;\n"
+            "END;\n"
+            "$$;\n"
+        )
+        batches = BatchSplitter.split(sql, "postgresql")
+        assert len(batches) == 1, [b.sql for b in batches]
+        assert batches[0].sql.rstrip().endswith("$$;"), batches[0].sql
+        assert "END;" in batches[0].sql
+
+    def test_realistic_carrier_between_two_real_functions(self) -> None:
+        # The actual B42 shape: a commented-out unsupported-construct carrier
+        # (its own fake $$ open/close, both inside -- lines) sitting between
+        # two real dollar-quoted functions must not disturb either one.
+        sql = (
+            "CREATE OR REPLACE FUNCTION f1() RETURNS INT LANGUAGE plpgsql AS $$\n"
+            "BEGIN\n"
+            "    RETURN 1;\n"
+            "END;\n"
+            "$$;\n"
+            "\n"
+            "-- UNIQUE-1160: something degraded\n"
+            "-- The non-portable translation is commented out below for review:\n"
+            "-- DO $$\n"
+            "-- BEGIN\n"
+            "--     NULL;\n"
+            "-- END $$;\n"
+            "\n"
+            "CREATE OR REPLACE FUNCTION f2() RETURNS INT LANGUAGE plpgsql AS $$\n"
+            "BEGIN\n"
+            "    RETURN 2;\n"
+            "END;\n"
+            "$$;\n"
+        )
+        batches = BatchSplitter.split(sql, "postgresql")
+        assert len(batches) == 2, [b.sql for b in batches]
+        assert batches[0].sql.rstrip().endswith("$$;"), batches[0].sql
+        assert "FUNCTION f1" in batches[0].sql
+        assert batches[1].sql.rstrip().endswith("$$;"), batches[1].sql
+        assert "FUNCTION f2" in batches[1].sql
+        assert "UNIQUE-1160" in batches[1].sql

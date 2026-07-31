@@ -653,7 +653,14 @@ class BatchSplitter:
             # codegen'd scripts split ``create or replace`` and ``PROCEDURE``
             # onto separate lines, which a per-line search misses — the
             # routine then fragments at each declaration ';' (audit D9).
-            head_window = "\n".join(current[-3:])
+            # Comments are trivia (guardrail 3): a header/note that merely
+            # QUOTES "CREATE PROCEDURE" must not trip PL/SQL mode, so the
+            # window is scanned comment-blind — reusing the module's own
+            # block-comment stripper, plus a line-comment strip of the same
+            # sanctioned "comment/trivia handling" shape (guardrail 2).
+            head_window = re.sub(
+                r"--[^\n]*", "", _strip_block_comments("\n".join(current[-3:]))
+            )
             if not in_plsql and (
                 plsql_start.search(head_window) or anon_start.match(line)
             ):
@@ -769,7 +776,7 @@ class BatchSplitter:
                 m = BatchSplitter._PG_DOLLAR_OPEN.match(sql, i)
                 if m:
                     tag = m.group(0)
-                    close = sql.find(tag, m.end())
+                    close = BatchSplitter._find_dollar_close(sql, m.end(), tag)
                     end = n if close == -1 else close + len(tag)
                     line_no += sql.count("\n", i, end)
                     i = end
@@ -788,6 +795,39 @@ class BatchSplitter:
 
         emit(n, n, line_no)
         return batches
+
+    @staticmethod
+    def _find_dollar_close(sql: str, start: int, tag: str) -> int:
+        """Index of the next literal *tag* at or after *start*, skipping
+        ``--`` comments and ``'...'`` string literals (mirrors
+        ``similarity.py``'s ``_find_close_tag``) — a ``--``-commented line
+        that happens to contain a tag-shaped sequence (a documented carrier
+        quoting the routine's own would-be dollar-quote, B42) must not close
+        the REAL dollar-quoted body early and shred the rest of the routine
+        into orphan batches. Returns -1 if *tag* never recurs.
+        """
+        i, n = start, len(sql)
+        while i < n:
+            if sql[i : i + 2] == "--":
+                nl = sql.find("\n", i)
+                i = n if nl == -1 else nl + 1
+                continue
+            if sql[i] == "'":
+                j = i + 1
+                while j < n:
+                    if sql[j] == "'":
+                        if sql[j + 1 : j + 2] == "'":
+                            j += 2
+                            continue
+                        j += 1
+                        break
+                    j += 1
+                i = j
+                continue
+            if sql.startswith(tag, i):
+                return i
+            i += 1
+        return -1
 
     @staticmethod
     def _split_mysql(sql: str) -> list[Batch]:

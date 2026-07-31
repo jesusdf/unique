@@ -872,6 +872,25 @@ class ExpressionRewriter:
             )
         )
 
+    def _map_mysql_rowcount_fn_pre_ir(self, sql: str) -> str:
+        """MySQL's ``ROW_COUNT()`` -> T-SQL/Oracle's inline row-count
+        expression (B43), applied BEFORE the IR-first attempt — the IR has
+        no model for MySQL's diagnostic pseudo-function, so left to the
+        raw-text fallback it never ran (the IR-first parse "succeeds" first,
+        emitting an untranslated builtin the target's validity gate then
+        degrades the whole routine over). A narrow substitution only (not
+        the full ``_map_rowcount_fn_in_sql`` chain): LIMIT/bool-literal
+        mapping stay on their normal post-IR pass so this pre-IR step cannot
+        change whether unrelated text takes the IR path.
+        """
+        if self._t._source != "mysql":
+            return sql
+        target_expr = self._ROWCOUNT_FN_EXPR.get(self._t._target)
+        if not target_expr or not self._ROWCOUNT_FN_PATTERN.search(sql):
+            return sql
+        self._t._warn_mysql_rowcount_divergence()
+        return self._ROWCOUNT_FN_PATTERN.sub(target_expr, sql)
+
     def _map_bool_literals_in_sql(self, sql: str) -> str:
         if self._t._source != "mysql" or self._t._target != "oracle":
             return sql

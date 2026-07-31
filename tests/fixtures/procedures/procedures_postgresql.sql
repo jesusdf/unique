@@ -256,11 +256,11 @@ DROP FUNCTION IF EXISTS func5;
 -- )
 -- RETURNS TABLE
 -- LANGUAGE plpgsql
--- AS $ $
+-- AS $$
 -- BEGIN
 --     RETURN ( SELECT LTRIM ( RTRIM ( value ) ) AS item FROM STRING_SPLIT ( v_s , v_delim ) );
 -- END;
--- $ $;
+-- $$;
 -- xxxxxx xxxxxx
 
 
@@ -1832,7 +1832,7 @@ $$;
 -- CREATE OR REPLACE FUNCTION col_173_func()
 -- RETURNS TRIGGER
 -- LANGUAGE plpgsql
--- AS $ $
+-- AS $$
 -- DECLARE
 --     --   <nombre>xxxxxx</nombre>
 --     v_func1 TIMESTAMP;
@@ -1854,7 +1854,7 @@ $$;
 --     END IF;
 --     RETURN NEW;
 -- END;
--- $ $;
+-- $$;
 --
 -- CREATE OR REPLACE TRIGGER col_173
 -- AFTER UPDATE ON tbl_6

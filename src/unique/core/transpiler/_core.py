@@ -785,7 +785,21 @@ class Transpiler:
                             continue
                         reconciled_frags.add(frag)
                         # Synthesize a warning for a carrier no warning covers.
-                        if not _covering_warnings(frag, all_warnings):
+                        # "Covers" also includes an identically-coded warning
+                        # from THIS batch (B40): the parse-fallback warning is
+                        # stamped UNIQUE-1170 by exact-literal match (see
+                        # PARSE_FALLBACK_WARNING above), not the shingle
+                        # heuristic, and its wording legitimately differs from
+                        # the carrier's own text enough that
+                        # ``_warning_covers`` sees no overlap — without this
+                        # check that mismatch synthesized a second,
+                        # identically-coded warning for the same carrier.
+                        already_coded = carrier_code is not None and any(
+                            w.code == carrier_code for w in result.warnings
+                        )
+                        if not already_coded and not _covering_warnings(
+                            frag, all_warnings
+                        ):
                             all_warnings.append(
                                 _warn(
                                     frag,

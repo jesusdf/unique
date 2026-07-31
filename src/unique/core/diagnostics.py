@@ -57,25 +57,6 @@ MARKER = r"UNIQUE(?:-(?P<code>\d{4}))?:"
 #: Compiled, anchored matcher for a bare code token (e.g. in a registry check).
 CODE_RE = re.compile(r"UNIQUE-\d{4}")
 
-#: A PostgreSQL dollar-quote delimiter (``$$`` or ``$tag$``).
-_DOLLAR_TAG_RE = re.compile(r"\$[A-Za-z0-9_]*\$")
-
-
-def neutralize_dollar_quotes(text: str) -> str:
-    """Defang any ``$$``/``$tag$`` dollar-quote delimiter in *text*.
-
-    Carrier comments preserve a degraded routine by prefixing every line with
-    ``--``. When the routine's generated PostgreSQL body carried a ``DO $$`` /
-    ``AS $$`` wrapper, the ``$$`` leaked into a ``--`` line; a statement scanner
-    that tracks dollar-quotes then opens or closes a body on a *comment* line and
-    desyncs the split. Inserting a space inside each delimiter (``$$`` -> ``$ $``,
-    ``$body$`` -> ``$body $``) keeps the comment human-readable while making it
-    self-contained — it cannot terminate or open a dollar-quote. The carrier is
-    documentation, never executable (it degraded precisely because it cannot run),
-    so this trivia-only rewrite loses nothing recoverable.
-    """
-    return _DOLLAR_TAG_RE.sub(lambda m: m.group()[:-1] + " $", text)
-
 
 def is_registered(code: str) -> bool:
     """Whether *code* (e.g. ``"UNIQUE-1042"``) is a known diagnostic."""
