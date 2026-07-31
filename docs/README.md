@@ -30,6 +30,7 @@ project; every claim is traceable to a verified corpus case.
 - By topic: [datetime](rationale/datetime.md) ·
   [strings & collation](rationale/strings-collation.md) ·
   [aggregates & windows](rationale/aggregates-windows.md) ·
+  [booleans](rationale/booleans.md) ·
   [DML](rationale/dml.md) · [DDL](rationale/ddl.md) ·
   [procedural](rationale/procedural.md)
 - **[reference/warnings.md](reference/warnings.md)** — every `UNIQUE-NNNN`
