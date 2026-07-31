@@ -353,8 +353,15 @@ folded into a cluster:
   invisible to a pure keyword pass; batch 6 in particular (this file, done
   by the orchestrator under a "no more rounds" time constraint) skipped even
   the sample pass, reading only the 32/261 (12%) keyword-flagged classes.
-  **`test_pg_source_wave1.py` is the weakest-coverage batch in this sweep
-  and the most likely place to find additional gaps in a follow-up pass.**
+  ~~**`test_pg_source_wave1.py` is the weakest-coverage batch in this sweep
+  and the most likely place to find additional gaps in a follow-up pass.**~~
+  **Closed 2026-07-31 by Batch 6b** (below): all 261/261 classes now read in
+  full, no sampling. 16 new gap rows found; see that section for the
+  reconciled counts and the corrected disposition of 5 items batch 6/the
+  top-cluster table had mis-scoped (2 misclassified as silent when they
+  already warn, 3 already covered by `docs/03-unsupported.md` §7's
+  per-target impossibility-gate bullets, which this file's batch-6 pass
+  never cross-checked against).
 - **"Covered" calls were generous by instruction**, per the brief's
   explicit ask. Several rows credited as covered lean on family/umbrella
   statements (e.g. "NULL-propagation section," "§3.21 literal-fold
@@ -376,3 +383,91 @@ folded into a cluster:
   documentation-coverage sweep, not a correctness audit), and it did not
   read `tests/fixtures/challenge/*.sql` fixture files directly except where
   a worker cited one for evidence.
+
+### Batch 6b — full-recall pass (2026-07-31)
+
+**Method.** Re-derived the batch-6 keyword-grep flag set from the recall
+note's own vocabulary list and confirmed it under-flagged (55/261 classes
+match on a faithful re-run of the same keywords, vs. the 32 originally read
+— the exact 32 aren't independently reproducible from the note alone); to
+close the debt properly rather than argue over the exact prior set, this
+pass instead read **all 261 classes in the file, in source order, line 1 to
+8,399, with no sampling** (7 sequential full reads covering the whole file
+with overlapping chunk boundaries, so no line range was skipped). Each class
+was classified (a) rename/spelling, (b) warned degrade, (c)
+harness/infra/parser-fix/PG-native-fidelity-bugfix, or (d) faithful
+structural rewrite with no warning; every (d) candidate was checked against
+the **current** state of `docs/rationale/*.md` and `docs/03-unsupported.md`
+(re-read in full for this pass, since both were reported as actively
+changing while this pass ran) and against this document's own top-18-cluster
+table and Batch 6's original 13-row table, to avoid re-reporting an
+already-known gap as new.
+
+**A significant fraction of Batch 6's original candidates turned out to be
+covered by `docs/03-unsupported.md` §7** ("Per-target impossibility gates"),
+a section the original batch-6 pass — reading only 12% of the file under a
+time constraint — never had the chance to cross-reference systematically.
+§7 turns out to already document, in prose-bullet form (not the
+`### <construct>` rationale-page format the rest of this sweep matched
+against), several mechanisms this pass initially flagged as new: T-SQL
+`APPLY` taking no `ON` (LATERAL-with-real-condition degrades), a PG
+void/OUT-param function becoming a T-SQL/MySQL procedure, Oracle's
+parenthesized-join-tree flattening, and Oracle's static-DDL
+`EXECUTE IMMEDIATE` auto-wrap. A fifth candidate
+(`TestCreateTableLikeClone`) turned out to already be a **warned** degrade
+(`UNIQUE-1048`, fully written up in `docs/reference/warnings.md`) that this
+pass initially misread as silent — corrected before this table was written.
+
+**Counts.**
+
+| | Count |
+|---|---|
+| Classes read (of 261) | **261 (100%)** |
+| (d)-classified candidates (transformation, no warning) | ~95 |
+| Already covered by current docs (generous match, incl. `03-unsupported.md` §7) | ~55 |
+| Already a known gap elsewhere in this audit (top-18 clusters / batch 6's 13 rows), reinforced with new pinning tests but not counted again | ~24 |
+| **New gap rows (distinct mechanisms, not previously surfaced anywhere in this audit)** | **16** |
+
+**New gaps.**
+
+| Behavior | Representative pinning tests | Suggested rationale page | Priority |
+|---|---|---|---|
+| PG `RETURNS void` (docstring-claimed the most common plpgsql function shape in the corpus, 62x) maps to each target's neutral scalar return type (MySQL/T-SQL `INT`, Oracle `NUMBER`) with a synthesized trailing `RETURN 0`/`RETURN NULL`; an existing explicit `RETURN;` is not duplicated. | `TestReturnsVoid` | `docs/rationale/procedural.md` | HIGH |
+| PG's null-safe `IS [NOT] DISTINCT FROM` has no target operator: MySQL gets the native `<=>` (negated for `DISTINCT`); T-SQL/Oracle get a version-safe `EXISTS(SELECT a INTERSECT SELECT b)`/`NOT EXISTS(...)` rewrite, wrapped in a `CASE...THEN 1 ELSE 0 END` in value position and left bare in predicate position. (Not the same mechanism as the trigger-predicate `IS DISTINCT FROM` spelling already in `procedural.md`'s Triggers section — this is the general operator, used directly in a query.) | `TestNullSafeComparison`, `TestNullsafeValuePosition`, `TestUserVarsRowTuplesOracleDouble::test_row_tuple_intersect_unpacks` | `docs/rationale/booleans.md` or `dml.md` | HIGH |
+| Trigger-context inlining, a family absent from the (otherwise thorough) new Triggers section: `TG_NAME`/`TG_TABLE_NAME`/`TG_OP`/`TG_WHEN`/`TG_LEVEL` substitute as compile-time literal constants once a function is inlined into a specific `CREATE TRIGGER`; the same `CREATE TRIGGER`'s `EXECUTE FUNCTION` argument list resolves `TG_ARGV[n]`/`TG_NARGS` the same way (an out-of-range index degrades the trigger whole); a statement trigger's `REFERENCING NEW/OLD TABLE AS <alias>` renames every reference to `inserted`/`deleted` when the body inlines for T-SQL. | `TestTgContextConstants`, `TestTgArgvSubstitution`, `TestTransitionTableAliases` | `docs/rationale/procedural.md` (extend the Triggers section) | HIGH |
+| A bare result `SELECT` (no `INTO`) inside a MySQL/PG procedure has no PL/SQL spelling (Oracle forbids `SELECT` without `INTO`): it rewrites to `OPEN result_cursor FOR <query>` and synthesizes an `OUT SYS_REFCURSOR` parameter appended to the procedure's own signature; the rewrite recurses into TRY/CATCH-folded exception sections, and every same-script `CALL` site gains a matching local `uq_rcN SYS_REFCURSOR` variable and updated argument list. `docs/03-unsupported.md`'s own "Ref cursor OUT parameters" bullet describes a *different*, older, unconverted Oracle→T-SQL direction — this working, signature-propagating PG/MySQL→Oracle mechanism has no write-up anywhere. | `TestRefcursorInTryCatch`, `TestRefcursorCallSites` | `docs/rationale/procedural.md` | HIGH |
+| T-SQL requires `ORDER BY` inside `OVER(...)` for ranking/offset window functions and inside `OFFSET...FETCH` pagination; a neutral `ORDER BY (SELECT NULL)` is synthesized whenever the source has none (partition-only/empty window spec, bare `OFFSET n`, MySQL's 2-arg `LIMIT o,n` embedded in procedural text). Existing explicit `ORDER BY` is left untouched. | `TestWindowOrderByRequiredOnTsql`, `TestIgnoreInvisibleOffsetOrder::test_offset_without_order_gains_null_order`, `TestWave212TsqlTwoArgLimit` | `docs/rationale/aggregates-windows.md` | MED |
+| PG positional parameter references (`$1`, `$2`, ...) resolve to the declared parameter's name; type-only, argmode-first, `VARIADIC`, and dotted-unnamed-`%TYPE` parameters get synthesized names (`p1`, `p2`, ...) with every `$n` body reference rewritten to match. | `TestTypeOnlyParameters`, `TestPositionalParamReference`, `TestPgArgmodeFirstParameters`, `TestWave131Batch::test_variadic_param`, `TestWave132Batch::test_dotted_unnamed_type_param` | `docs/rationale/procedural.md` | MED |
+| T-SQL has no `JOIN ... USING(c)`: it rewrites to explicit `ON` predicates, qualifying each side through a chain of joins; after a `FULL OUTER JOIN`, a later `USING` against the now-merged column becomes `ON COALESCE(t1.c, t2.c) = t3.c`. | `TestJoinUsingOnTsql` | `docs/rationale/dml.md` | MED |
+| PG `PERFORM expr;` (evaluate-and-discard) converts to each target's own discard idiom: MySQL's native `DO expr;`; T-SQL synthesizes `DECLARE @uq_discardN SQL_VARIANT = (expr);`; Oracle synthesizes a nested block (`DECLARE uq_discard VARCHAR2(4000); BEGIN SELECT TO_CHAR(expr) INTO uq_discard FROM DUAL; END;`). | `TestPerformDiscard` | `docs/rationale/procedural.md` | MED |
+| PG `GET STACKED DIAGNOSTICS v = MESSAGE_TEXT` (inside an exception handler) desugars to a plain per-target assignment (`SQLERRM` on Oracle, `ERROR_MESSAGE()` on T-SQL). The sibling `... = ROW_COUNT` case is already thoroughly documented (`03-unsupported.md` §3.22 + the B37 rowcount-hoist entry); this `MESSAGE_TEXT` variant is not. | `TestGetDiagnostics::test_message_text_oracle` | `docs/rationale/procedural.md` | MED |
+| MySQL `REPEAT ... UNTIL cond END REPEAT` parses as a post-test loop, spelled natively per target (`LOOP ... EXIT WHEN cond END LOOP` on PG/Oracle); MySQL labeled loops (`foo: LOOP ... END LOOP foo`) and `LEAVE`/`ITERATE foo` become `<<foo>>` blocks with `EXIT foo;`/`CONTINUE;` on PG/Oracle, or a label-stripped `WHILE`/`CONTINUE` on T-SQL (no loop labels there); a `LEAVE` of the routine's own enclosing labeled `BEGIN` block becomes `RETURN`. Distinct from the already-documented `FOR`-loop/cursor-loop desugaring (cluster 3). | `TestRepeatUntilLoop`, `TestLabeledLoops`, `TestWave156LabeledBodyNoBegin`, `TestWave158LabeledBeginBlock` | `docs/rationale/procedural.md` (new "Loop desugaring" section, sibling to the existing cursor-loop entries) | MED |
+| PG `CREATE DOMAIN x AS basetype` domains are harvested per-run and resolved to their base type wherever referenced off PG (parameter/return types, `DECLARE`, `::domain` casts), since no other engine has domain types. | `TestPgDomainTypes` | `docs/rationale/ddl.md` | MED |
+| MySQL's `HAVING` may reference a `SELECT`-list alias; T-SQL/PostgreSQL/Oracle can't resolve an alias there, so the alias inlines to its full source expression (`HAVING a > 1` → `HAVING MAX(col1) > 1`). MySQL keeps the alias natively. | `TestWave157HavingAliasStringAggDistinct` | `docs/rationale/dml.md` | MED |
+| PG's bare `OFFSET n` (no `LIMIT`) maps to MySQL's documented-nowhere-in-`docs/` magic-number all-rows idiom `LIMIT 18446744073709551615 OFFSET n` (MySQL has no bare `OFFSET`); a literal `OFFSET 0` (a no-op) drops entirely instead. | `TestWave192MysqlBareOffset` | `docs/rationale/dml.md` | MED |
+| MySQL's `INSERT`/`REPLACE t SET a=1, b=2` assignment-list DML shorthand rewrites to standard `INSERT`/`REPLACE INTO t (a, b) VALUES (1, 2)` on every target. | `TestWave168InsertSetUservarIsTrue`, `TestWave189BitwiseNotReplaceSet::test_replace_set_converts` | `docs/rationale/dml.md` | LOW |
+| PG `INSERT INTO t (cols) WITH cte AS (...) SELECT ...` (CTE trailing the `INSERT` clause, valid PG) reorders to `WITH cte AS (...) INSERT INTO t (cols) SELECT ...` for T-SQL, which requires `WITH` to lead the whole batch. | `TestInsertCteHoist` | `docs/rationale/dml.md` | LOW |
+| Comma-list `DECLARE z1, z2 int;` / `SET a=1, b=2;` / `DROP TABLE a, b, c` / `DROP FUNCTION a, b` (forms sqlglot cannot parse as one statement) split into N separate per-item statements — valid everywhere, and for `DROP`, the only form Oracle accepts. | `TestWave159MultiDeclareMultiSet`, `TestWave236MultiTableDrop`, `TestWave239MultiObjectDrop` | `docs/rationale/ddl.md` / `procedural.md` | LOW |
+
+**Corrections to prior batch-6/top-cluster scoping** (found while cross-checking
+the new candidates against current docs, kept here rather than silently
+edited into the earlier tables so the audit trail stays honest):
+
+- `TestCreateTableLikeClone` (batch-6-adjacent, cluster-style finding) is
+  **not** a silent gap — `UNIQUE-1048` warns it and `docs/reference/warnings.md`
+  documents it in full. Excluded from both this table and the covered count
+  above being counted as new.
+- Cluster "LateralToApply", "OracleJoinTreeFlatten", "OracleDdlExecImmediate"
+  and "VoidOutBecomesProc" candidates found during this pass are **covered**
+  by `docs/03-unsupported.md` §7 ("Per-target impossibility gates") bullets
+  under "To T-SQL"/"To Oracle" — a prose-bullet format easy to miss when
+  matching only against `### <construct>` rationale-page headings, which is
+  why they surfaced as apparent gaps mid-pass before the full-file §7 re-read
+  caught them.
+
+**Defects noticed, not gaps (reported here, not added to any gap table).**
+None of the ~95 (d)-candidates read in this pass produced invalid or
+silently-lost output on inspection — every genuinely new gap above is a
+*faithful* conversion, just an undocumented one, consistent with this
+sweep's scope. No `[open]`-style defect was found in `test_pg_source_wave1.py`
+during this full read.
