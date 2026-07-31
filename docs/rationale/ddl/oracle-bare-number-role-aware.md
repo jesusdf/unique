@@ -2,7 +2,7 @@
 
 <!-- rationale: topic=ddl type="Cross-statement schema-state-driven coercion" direction="cross-engine" kind=article order=6 direction-inferred=true -->
 
-# Oracle bare `NUMBER` (no precision/scale) → role-aware numeric (B47)
+# Oracle bare `NUMBER` (no precision/scale) → role-aware numeric
 
 **Problem.** Oracle's unqualified `NUMBER` — no precision or scale — is
 overloaded. It is the idiomatic spelling for an integer id/count column
