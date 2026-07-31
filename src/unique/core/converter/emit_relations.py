@@ -571,11 +571,13 @@ def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
     result = ".".join(parts)
 
     if node.column_aliases and node.alias:
-        # PG's column-renaming alias has no direct T-SQL spelling on a base
-        # table; the derived-table rewrite is faithful. (PG keeps native;
-        # MySQL/Oracle statements degrade whole in the transformer.)
+        # PG's column-renaming alias has no direct T-SQL/MySQL spelling on a
+        # base table (both only accept the column-alias list on a derived
+        # table); the derived-table rewrite is faithful for both. (PG keeps
+        # native; Oracle statements degrade whole in the transformer — no
+        # spelling at all, live ORA-03048.)
         cols = ", ".join(node.column_aliases)
-        if dialect == "tsql":
+        if dialect in ("tsql", "mysql"):
             return f"(SELECT * FROM {result}) AS {node.alias}({cols})"
         return f"{result} AS {node.alias}({cols})"
 

@@ -813,7 +813,7 @@ class Transformer:
             result = [self._gate_deferrable(node) for node in result]
             result = [self._gate_column_position(node) for node in result]
             result = [self._gate_mysql_null_ntile(node) for node in result]
-        if self.context.target in ("mysql", "oracle"):
+        if self.context.target == "oracle":
             result = [self._gate_column_alias_ref(node) for node in result]
         if self.context.target != "mysql":
             result = [self._gate_invalid_date_literal(node) for node in result]
@@ -2060,11 +2060,12 @@ class Transformer:
 
     def _gate_column_alias_ref(self, node: ASTNode) -> ASTNode:
         """Degrade a statement whose base-table ref renames columns via
-        an alias list (``x AS xx(c1, c2)``) — WHOLE, on MySQL/Oracle.
+        an alias list (``x AS xx(c1, c2)``) — WHOLE, on Oracle.
 
-        Neither engine has the spelling, and the derived-table rewrite
-        T-SQL gets needs no column knowledge only because T-SQL accepts
-        the alias list on the derived table; MySQL/Oracle do not."""
+        Oracle has no spelling at all (live ORA-03048). T-SQL and MySQL
+        both get the faithful derived-table rewrite instead (``(SELECT *
+        FROM x) AS xx(c1, c2)``) — see ``_emit_table_ref`` — since neither
+        accepts the alias list on a plain base-table reference."""
         if not self._contains_column_alias_ref(node):
             return node
         reason = (

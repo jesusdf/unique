@@ -28,24 +28,23 @@ SELECT * FROM t1 LEFT JOIN t2 ON t1.a = t2.a;
 ```sql
 -- pinning tests: test_pg_source_wave1.py::TestTableColumnAliases
 select xx1 from x as xx(xx1, xx2);
--- T-SQL:
+-- T-SQL / MySQL:
 SELECT xx1 FROM (SELECT * FROM x) AS xx(xx1, xx2)
 
 select * from y left join x as xx(xx1, xx2) on y1 = xx1;
--- T-SQL:
+-- T-SQL / MySQL:
 SELECT * FROM y LEFT JOIN (SELECT * FROM x) AS xx(xx1, xx2) ON y1 = xx1
 
--- MySQL/Oracle: whole-statement carrier + warning (UNIQUE-1003) —
--- see Discussion.
+-- Oracle: whole-statement carrier + warning (UNIQUE-1003) — see Discussion.
 ```
 
-Live-verified (T-SQL, `x(c1=7, c2=8)`):
-`SELECT xx1 FROM (SELECT * FROM x) AS xx(xx1, xx2)` returns `7` — the
-renamed `xx1` really is `x`'s first column. Live-verified (T-SQL,
-`t1(1),(2)`, `t2(1)`, `t3(100),(200)`): the unwrapped join-plus-cross-join
-returns the expected 4-row result, `USING` correctly rewritten to `x.a =
-y.a` and the trailing comma-join to `t3` rewritten to an explicit `CROSS
-JOIN`.
+Live-verified (T-SQL and MySQL 8, `x(c1=7, c2=8)`):
+`SELECT xx1 FROM (SELECT * FROM x) AS xx(xx1, xx2)` returns `7` on both
+engines — the renamed `xx1` really is `x`'s first column. Live-verified
+(T-SQL, `t1(1),(2)`, `t2(1)`, `t3(100),(200)`): the unwrapped
+join-plus-cross-join returns the expected 4-row result, `USING` correctly
+rewritten to `x.a = y.a` and the trailing comma-join to `t3` rewritten to
+an explicit `CROSS JOIN`.
 
 **Discussion.** Parentheses around a join tree are semantically
 transparent — they only group; they never scope anything the way a derived
@@ -55,23 +54,18 @@ emission order so the surrounding comma-join grouping still reads
 correctly.
 
 The column-aliased table reference is the opposite case: it *is* a real
-rewrite (positional column renaming). T-SQL accepts a derived table's own
-column-alias list, so `tbl AS alias(c1, c2)` becomes `(SELECT * FROM tbl)
-AS alias(c1, c2)` there. Oracle has no equivalent at all —
+rewrite (positional column renaming). Neither T-SQL nor MySQL accepts a
+column-alias list on a plain base-table reference — only on a derived
+table — so `tbl AS alias(c1, c2)` becomes `(SELECT * FROM tbl) AS
+alias(c1, c2)` on both. Oracle has no equivalent at all —
 `SELECT xx1 FROM (SELECT * FROM x) xx(xx1, xx2)` is a live `ORA-03048`
-syntax error (verified directly against Oracle), so the whole statement
-degrades to a documented carrier there. MySQL 8 in fact accepts the
-identical derived-table column-alias syntax natively (`SELECT xx1 FROM
-(SELECT * FROM x) AS xx(xx1, xx2)` runs and returns the aliased column,
-verified directly against MySQL) — but a MySQL target still degrades to a
-carrier alongside Oracle rather than rendering the syntax natively.
+syntax error (verified directly against Oracle) — so the whole statement
+degrades to a documented carrier there.
 
-> **Note** faithful for the unwrap (live-verified above) and for the T-SQL
-> column-alias rewrite (live-verified above). Oracle's carrier degrade
-> reflects a genuine engine limit (live `ORA-03048`, verified).
-> **Warning** the MySQL carrier degrade is broader than MySQL itself
-> requires — MySQL accepts the native syntax — so a MySQL target does not
-> yet render this construct in its own idiom, even though it could.
+> **Note** faithful for the unwrap and for the T-SQL/MySQL derived-table
+> rewrite (both live-verified above).
+> **Warning** Oracle has no spelling for a column-aliased table reference;
+> the whole statement degrades to a carrier there (live `ORA-03048`).
 
 **See Also.** [`test_pg_source_wave1.py::TestParenthesizedJoinRelations`](../../../tests/integration/test_pg_source_wave1.py),
 [`test_pg_source_wave1.py::TestTableColumnAliases`](../../../tests/integration/test_pg_source_wave1.py).
