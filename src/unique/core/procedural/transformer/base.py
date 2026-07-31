@@ -2785,7 +2785,9 @@ class ProceduralTransformer:
         return False
 
     def _transform_if(self, node: IfStatement) -> ASTNode:
-        new_cond = self._wrap_bare_truth_condition(self._transform_node(node.condition))
+        new_cond = self._wrap_bare_truth_condition(
+            self._transform_in_expr_position(node.condition)
+        )
         new_then = self._ensure_non_empty_body(self._transform_body(node.then_body))
         # An ELSE that becomes empty is dropped entirely (valid everywhere);
         # only a non-empty else is kept, and if it has only comments it gets a
@@ -2829,7 +2831,7 @@ class ProceduralTransformer:
         return NullStatement()
 
     def _transform_while(self, node: WhileStatement) -> WhileStatement:
-        new_cond = self._transform_node(node.condition)
+        new_cond = self._transform_in_expr_position(node.condition)
         new_cond = self._wrap_bare_truth_condition(new_cond)
         new_body = self._ensure_non_empty_body(self._transform_body(node.body))
         return WhileStatement(condition=new_cond, body=new_body)
@@ -3629,13 +3631,21 @@ class ProceduralTransformer:
     #: without one in a SQL statement).
     _expr_position = False
 
-    def _transform_print(self, node: PrintStatement) -> PrintStatement:
+    def _transform_in_expr_position(self, node: ASTNode) -> ASTNode:
+        """Transform ``node`` as a pure PL/SQL *expression* (PRINT argument,
+        IF/WHILE condition) so Oracle's inverted CAST rules apply — a constrained
+        type is stripped (PLS-00103), unlike a SQL statement."""
         prev = self._expr_position
         self._expr_position = True
         try:
-            return PrintStatement(expression=self._transform_node(node.expression))
+            return self._transform_node(node)
         finally:
             self._expr_position = prev
+
+    def _transform_print(self, node: PrintStatement) -> PrintStatement:
+        return PrintStatement(
+            expression=self._transform_in_expr_position(node.expression)
+        )
 
     def _transform_raise_error(self, node: RaiseErrorStatement) -> ASTNode:
         if getattr(node, "reraise", False) and not getattr(
@@ -4366,9 +4376,16 @@ class ProceduralTransformer:
         # Embedded text is mid-transform (variables already target-spelled);
         # RawSQL fallbacks must not re-render it in the source dialect.
         emb_token = _conv.IR_EMBEDDED.set(True)
+        # A bare PL/SQL expression fragment (PRINT argument, IF/WHILE condition)
+        # follows Oracle's inverted CAST rules: it rejects a constrained type
+        # (PLS-00103), unlike an embedded SQL statement (SELECT … INTO), which
+        # needs the char length (ORA-00906). The caller marks the position; the
+        # fragment text cannot tell the two apart.
+        expr_token = _conv.IR_PLSQL_EXPR.set(self._expr_position)
         try:
             return self._ir_transpile_dml_inner(sql)
         finally:
+            _conv.IR_PLSQL_EXPR.reset(expr_token)
             _conv.IR_EMBEDDED.reset(emb_token)
             _conv.STRING_VARIABLES.reset(str_token)
             _conv.FETCH_STATUS_FORMS.reset(fetch_token)
