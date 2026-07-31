@@ -653,7 +653,14 @@ class BatchSplitter:
             # codegen'd scripts split ``create or replace`` and ``PROCEDURE``
             # onto separate lines, which a per-line search misses — the
             # routine then fragments at each declaration ';' (audit D9).
-            head_window = "\n".join(current[-3:])
+            # Comments are trivia (guardrail 3): a header/note that merely
+            # QUOTES "CREATE PROCEDURE" must not trip PL/SQL mode, so the
+            # window is scanned comment-blind — reusing the module's own
+            # block-comment stripper, plus a line-comment strip of the same
+            # sanctioned "comment/trivia handling" shape (guardrail 2).
+            head_window = re.sub(
+                r"--[^\n]*", "", _strip_block_comments("\n".join(current[-3:]))
+            )
             if not in_plsql and (
                 plsql_start.search(head_window) or anon_start.match(line)
             ):

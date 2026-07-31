@@ -412,3 +412,55 @@ class TestOracleSplitLineCreateHeader:
         b = executable[0]
         assert b.batch_type == BatchType.PROCEDURAL
         assert "v_y" in b.sql and "END my_proc" in b.sql
+
+
+class TestOracleCommentBlindHeadWindow:
+    """B44: ``plsql_start.search(head_window)`` scanned the last 3 raw source
+    lines verbatim, so a comment merely *mentioning* ``CREATE PROCEDURE``
+    (a codegen header quoting old/deprecated code, an explanatory note)
+    tripped PL/SQL mode exactly like the real construct would — folding the
+    following, unrelated ``;``-terminated statements into one batch that
+    then waits forever for a lone ``/`` that never comes.
+    """
+
+    def test_line_comment_mentioning_create_procedure_does_not_trip_plsql(
+        self,
+    ) -> None:
+        sql = (
+            "-- codegen header\n"
+            "-- EXECUTE([CREATE PROCEDURE my_proc AS SELECT 1])\n"
+            "SELECT 1 FROM DUAL;\n"
+            "SELECT 2 FROM DUAL;\n"
+        )
+        batches = BatchSplitter.split(sql, "oracle")
+        executable = [b for b in batches if b.batch_type != BatchType.COMMENT]
+        assert len(executable) == 2, [b.sql for b in executable]
+        # The leading comment attaches to the statement it precedes (a
+        # comment is trivia, not a batch of its own) — the split itself, not
+        # the comment's placement, is what B44 fixes.
+        assert executable[0].sql.rstrip().endswith("SELECT 1 FROM DUAL")
+        assert executable[1].sql.strip() == "SELECT 2 FROM DUAL"
+
+    def test_block_comment_mentioning_create_procedure_does_not_trip_plsql(
+        self,
+    ) -> None:
+        sql = (
+            "/* CREATE PROCEDURE legacy_proc is deprecated */\n"
+            "SELECT 1 FROM DUAL;\n"
+            "SELECT 2 FROM DUAL;\n"
+        )
+        batches = BatchSplitter.split(sql, "oracle")
+        executable = [b for b in batches if b.batch_type != BatchType.COMMENT]
+        assert len(executable) == 2, [b.sql for b in executable]
+        assert executable[0].sql.rstrip().endswith("SELECT 1 FROM DUAL")
+        assert executable[1].sql.strip() == "SELECT 2 FROM DUAL"
+
+    def test_real_create_procedure_still_trips_plsql(self) -> None:
+        # Neighbor test: the fix must not make the splitter comment-blind to
+        # a REAL PL/SQL head — only to one that exists solely inside a
+        # comment.
+        sql = "CREATE PROCEDURE p AS\nBEGIN\n  NULL;\nEND;\n/\n"
+        batches = BatchSplitter.split(sql, "oracle")
+        executable = [b for b in batches if b.batch_type != BatchType.COMMENT]
+        assert len(executable) == 1, [b.sql for b in executable]
+        assert "BEGIN" in executable[0].sql and "END" in executable[0].sql
