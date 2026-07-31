@@ -1399,6 +1399,24 @@ def _emit_week_year_field(part: str, value: str, dialect: str) -> str | None:
 def _emit_function(node: FunctionCall, dialect: str) -> str:
     """Emit a function call."""
     fn_name = node.name.upper()
+    # T-SQL COMPRESS/DECOMPRESS use the GZIP container; MySQL's same-named
+    # functions use raw zlib with a 4-byte little-endian length prefix, so the
+    # bytes differ and are NOT interchangeable (a T-SQL blob won't DECOMPRESS on
+    # MySQL). No faithful cross-container mapping exists — keep MySQL's own
+    # function but flag the value as non-equal (Oracle/PG have no COMPRESS and
+    # degrade via the validity gate already).
+    if (
+        fn_name in ("COMPRESS", "DECOMPRESS")
+        and SOURCE_DIALECT.get() == "tsql"
+        and dialect == "mysql"
+        and len(node.args) == 1
+    ):
+        _cx = _emit_expression(node.args[0], dialect)
+        return (
+            f"{fn_name}({_cx}) /* UNIQUE-1238: T-SQL {fn_name} uses the GZIP "
+            f"container; MySQL {fn_name} uses zlib with a length prefix — the "
+            "bytes differ and are not interchangeable (docs/03-unsupported.md) */"
+        )
     # Single-mechanism scalar mappings (regex match, scalar JSON extract, integer
     # division, MySQL DAYOFWEEK) each dispatch to a helper; grouped in one lookup
     # so the per-mechanism logic stays out of this function's branch budget.
@@ -1716,6 +1734,18 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if SOURCE_DIALECT.get() == "postgresql":
             return f"COALESCE(ASCII(TO_NCHAR({_asc_x})), 0)"
         return f"COALESCE(ASCII({_asc_x}), 0)"
+
+    # PG's ascii() returns the Unicode CODE POINT of the first character; MySQL
+    # ASCII returns the first BYTE (ASCII('é') = 195, the first UTF-8 byte, not
+    # 233). Read the code point via ORD over a UTF-32 conversion — each character
+    # becomes 4 big-endian bytes, so ORD yields the code point (ASCII range too).
+    if (
+        fn_name == "ASCII"
+        and SOURCE_DIALECT.get() == "postgresql"
+        and len(node.args) == 1
+        and dialect == "mysql"
+    ):
+        return f"ORD(CONVERT({_emit_expression(node.args[0], dialect)} USING utf32))"
 
     # MySQL CONCAT returns NULL if ANY argument is NULL (it propagates NULL);
     # PG/Oracle/T-SQL CONCAT ignore NULL. When a MySQL CONCAT has a literal NULL

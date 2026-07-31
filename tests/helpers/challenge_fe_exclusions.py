@@ -154,12 +154,6 @@ LEDGER: tuple[Excluded, ...] = (
         sql="SELECT chr(233), ascii('é')",
     ),
     Excluded(
-        id="ts-compress",
-        tag="defect-pending-fix",
-        reason="COMPRESS GZIP vs ZLIB container on MySQL",
-        sql="SELECT COMPRESS('data') AS r",
-    ),
-    Excluded(
         id="ts-frac-seconds",
         tag="defect-pending-fix",
         reason="fractional-second rounding .123456 vs .123457",

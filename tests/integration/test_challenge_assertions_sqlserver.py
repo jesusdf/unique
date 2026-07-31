@@ -337,9 +337,12 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
         "mysql": {"degrade": True, "absent": ["TRANSLATE("]},
     },
     "ts-compress": {
-        # MySQL has native COMPRESS (identity) — omitted.
+        # MySQL has a COMPRESS function but with a DIFFERENT container (zlib +
+        # length prefix vs T-SQL's GZIP), so the bytes are not interchangeable —
+        # a warned degrade, not an identity passthrough.
         "oracle": {"degrade": True},
         "postgresql": {"degrade": True},
+        "mysql": {"degrade": True},
     },
     "ts-concat-ws": {
         # CONCAT_WS is native on PG/MySQL (identity) — only Oracle degrades.

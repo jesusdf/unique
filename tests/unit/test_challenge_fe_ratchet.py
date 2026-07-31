@@ -67,7 +67,14 @@ from tests.helpers.corpus_diff import is_comparable
 # 0x00; mapped the source-MySQL lengthless form to VARBINARY (my-cast-binary2;
 # BINARY(n) keeps its width, Oracle stays a documented warned degrade). 1
 # removed: 9 defect-pending-fix, 5 documented-inherent, 2 session-dependent = 16.
-LEDGER_SIZE_FLOOR = 16
+#
+# 2026-07-31 (brief T4-B cont.): T-SQL COMPRESS/DECOMPRESS use the GZIP container
+# but MySQL's same-named functions use zlib + a length prefix (bytes not
+# interchangeable) — no faithful mapping, so the MySQL target now warns +
+# carriers (UNIQUE-1238) instead of silently shipping different bytes
+# (ts-compress). 1 removed: 8 defect-pending-fix, 5 documented-inherent, 2
+# session-dependent = 15.
+LEDGER_SIZE_FLOOR = 15
 
 
 def _eligible_cases() -> list[CorpusEntry]:
