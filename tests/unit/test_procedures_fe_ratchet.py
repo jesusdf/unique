@@ -24,15 +24,18 @@ from __future__ import annotations
 from tests.helpers.procedures_fe_exclusions import LEDGER, VALID_TAGS
 from tests.helpers.procedures_fe_spec import ENROLLED, discover_routines
 
-# Measured 2026-07-31 (brief A10-P1, +proc_14 at B58). Enrolled set = 13 routines:
-#   func3 (scalar); proc_13/14 (out — proc_13 degrades on 1152 -> skipped live,
-#   proc_14 compares its INOUT @query); proc_11/10/15 (tbl_7 DML), proc_16/18
-#   (tbl_8), proc_19/21 (tbl_6), proc_22/24 (tbl_3 GUID), proc_27 (4-table cascade).
-# Ledger = 20 routines (33 - 13): 6 nondeterministic-clock, 3 resultset-pg-invalid,
-# 4 dynamic-sql, 2 degrade-output-clause, 1 generated-key, 1 encoding-inherent,
-# 1 tvf-no-pg-equiv, 1 trigger-complex. proc_14 (OUTPUT INOUT dropped) left the
-# ledger when the B58 OUTPUT -> IN OUT/INOUT mapping landed and it enrolled.
-ENROLLED_FLOOR = 13
+# Measured 2026-08-01 (brief A10-P2, +proc_1/3/5 result-set capture). Enrolled set
+# = 16 routines: func3 (scalar); proc_13/14 (out — proc_13 degrades on 1152 ->
+#   skipped live, proc_14 compares its INOUT @query); proc_11/10/15 (tbl_7 DML),
+#   proc_16/18 (tbl_8), proc_19/21 (tbl_6), proc_22/24 (tbl_3 GUID), proc_27
+#   (4-table cascade); proc_1/3/5 (result sets — refcursor OUT on Oracle, refcursor
+#   INOUT on PG since B56, direct result set on MySQL).
+# Ledger = 17 routines (33 - 16): 7 nondeterministic-clock (func1/func2 +
+# proc_2/4/6/25/26), 4 dynamic-sql, 2 degrade-output-clause, 1 generated-key, 1
+# encoding-inherent, 1 tvf-no-pg-equiv, 1 trigger-complex. proc_1/3/5
+# (resultset-pg-invalid) left the ledger when B56 made the PG form runnable and
+# A10-P2 added result-set capture, so no entry carries that tag today.
+ENROLLED_FLOOR = 16
 
 
 def test_enrolled_count_at_or_above_floor() -> None:

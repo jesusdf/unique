@@ -9,8 +9,9 @@ routines *compile*; this proves each enrolled routine *does the same thing*. For
 every ``RoutineCase`` in ``procedures_fe_spec.ROUTINE_CASES`` it seeds the fixed
 inputs, creates + runs the routine from the ORIGINAL T-SQL on SQL Server and from
 the freshly transpiled output on each target, and compares the observable effect
-(a scalar return, OUT params, or table state) with the same ``normalize_rows``
-comparator ``test_challenge_live`` / ``test_corpus_results_live`` use.
+(a scalar return, OUT params, result set(s), or table state) with the same
+``normalize_rows`` comparator ``test_challenge_live`` / ``test_corpus_results_live``
+use.
 
 Key departure from ``test_challenge_live``: it skips on *any* warning, but almost
 every procedure carries at least ``UNIQUE-1193`` (SET NOCOUNT ON dropped), so a
@@ -243,6 +244,53 @@ def _call_out(conn: Any, engine: str, case: RoutineCase) -> list[tuple]:
     return [values]
 
 
+def _call_resultset(conn: Any, engine: str, case: RoutineCase) -> list[list[tuple]]:
+    """Call a result-set procedure and capture its result sets, in order.
+
+    A bare T-SQL result ``SELECT`` is lowered differently per target, so the
+    capture differs (audit design §2): Oracle appends one ``SYS_REFCURSOR`` OUT
+    param per result set — bind a **plain ``Cursor``** object (``cur.var(CURSOR)``
+    hangs on this stack); PostgreSQL appends one ``refcursor`` INOUT — pass a
+    portal-name literal and ``FETCH ALL FROM`` it in the same transaction (B56);
+    MySQL and the T-SQL source stream the sets back directly (callproc / EXEC, then
+    fetch, ``nextset`` between sets). Exactly ``case.result_sets`` sets are taken on
+    every engine — the count is the same on all (one per bare result SELECT), which
+    also drops MySQL's trailing OK-packet set.
+    """
+    n = case.result_sets
+    order = param_order(case.name)
+    in_args = positional_args(case, engine)
+    cur = conn.cursor()
+    sets: list[list[tuple]] = []
+    try:
+        if engine == "oracle":
+            outs = [conn.cursor() for _ in range(n)]
+            cur.callproc(case.name, [*in_args, *outs])
+            sets = [list(o.fetchall()) for o in outs]
+        elif engine == "postgresql":
+            portals = [f"{case.name}_rc{i + 1}" for i in range(n)]
+            placeholders = ", ".join(["%s"] * (len(in_args) + n))
+            cur.execute(f"CALL {case.name}({placeholders})", [*in_args, *portals])
+            for portal in portals:
+                cur.execute(f'FETCH ALL FROM "{portal}"')
+                sets.append(list(cur.fetchall()))
+        elif engine == "tsql":
+            arg_sql = ", ".join(seed_literal(case.args.get(p), "tsql") for p in order)
+            cur.execute(f"EXEC dbo.{case.name} {arg_sql}")
+            for _ in range(n):
+                sets.append(list(cur.fetchall()))
+                cur.nextset()
+        else:  # mysql
+            cur.callproc(case.name, tuple(in_args))
+            for _ in range(n):
+                sets.append(list(cur.fetchall()))
+                cur.nextset()
+    finally:
+        cur.close()
+    conn.commit()
+    return sets
+
+
 def _run_case(
     conn: Any, engine: str, case: RoutineCase, routine_sql: str, *, fold: bool
 ) -> list[list[tuple]]:
@@ -264,6 +312,9 @@ def _run_case(
         if case.kind == "out":
             rows = _call_out(conn, engine, case)
             return [normalize_rows(rows, empty_as_null=fold)]
+        if case.kind == "resultset":
+            sets = _call_resultset(conn, engine, case)
+            return [normalize_rows(s, empty_as_null=fold) for s in sets]
         # table_state
         _call_table_state(conn, engine, case)
         results: list[list[tuple]] = []
