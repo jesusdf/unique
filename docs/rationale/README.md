@@ -717,6 +717,18 @@ cite it; examples are copied from corpus cases verbatim (they are
 live-verified; an invented example is a liability); `faithful` may only be
 claimed where a corpus assertion or the nightly live result-diff proves it.
 
+**Write for the user — the transpiler is a black box (maintainer rule,
+2026-07-31).** An article explains how a construct translates between
+engines and why: a direct equivalence is stated and done; an inexact one
+explains exactly what diverges and why; a construct with no direct
+equivalent explains the creative alternative used and why it is needed.
+What does NOT belong in the prose: project history (that a conversion was
+once wrong, audits, campaign/finding ids, "before/after the fix"), internal
+pipeline detail (IR, parser/emitter/converter internals, library names), or
+the reason an entry exists — the entry must read the same as if the
+behavior had always been correct. Traceability stays in **See Also** (test/
+corpus citations), never as narrative.
+
 ## Reference (generated)
 
 These hand-curated pages link out to `docs/reference/` instead of duplicating
