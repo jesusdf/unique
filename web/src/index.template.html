@@ -268,7 +268,7 @@
         <button class="copy-btn" id="copy">Copy</button>
       </div>
       <div class="cm-host">
-        <textarea id="output" readonly placeholder="Translation will appear here…" spellcheck="false"></textarea>
+        <textarea id="output" placeholder="Translation will appear here…" spellcheck="false"></textarea>
       </div>
     </div>
   </div>
@@ -570,6 +570,9 @@ function showResult(warnings = [], unsupported = []) {
   ];
   clearStatus();
   const c = el("messages");
+  // Tag so a later hand-edit of the destination editor knows these rows
+  // described the transpile output and are now stale (see cmOutput "change").
+  c.dataset.kind = "result";
   if (!items.length) { c.appendChild(statusBar("ok", "OK", "Transpiled with no warnings.")); return; }
   c.appendChild(statusBar("warn", "OK", `Transpiled with ${items.length} warning${items.length > 1 ? "s" : ""}.`));
   for (const it of items) c.appendChild(detailRow(`<span class="k">${escapeHtml(it.t)}</span>${warningHtml(it.m, it.code)}`));
@@ -626,10 +629,19 @@ function showSimilarity(data) {
     cmInput.setSize("100%", null); /* height stays in CSS so media queries apply */
     cmOutput = CodeMirror.fromTextArea(el("output"), {
       mode: "text/x-pgsql", theme: "default", lineNumbers: true,
-      lineWrapping: false, readOnly: true,
+      lineWrapping: false,
     });
     cmOutput.setSize("100%", null); /* height stays in CSS so media queries apply */
     cmInput.on("change", () => { clearTimeout(detectTimer); detectTimer = setTimeout(onSourceChanged, 500); });
+    // The destination editor is editable (a user may paste a hand-migrated
+    // script to Compare against the source). A hand-edit invalidates the
+    // warnings/unsupported list from the last transpile (it described the
+    // old content), so clear it — but not a programmatic setValue (fresh
+    // transpile output, or Clear/Swap), which is followed by its own status.
+    cmOutput.on("change", (instance, changeObj) => {
+      if (changeObj.origin === "setValue") return;
+      if (el("messages").dataset.kind === "result") clearStatus();
+    });
   }
 
   const { dialects, sourceOnly } = await loadDialects();
@@ -707,6 +719,10 @@ function showSimilarity(data) {
   el("input").addEventListener("input", () => {
     if (cmInput) return;
     clearTimeout(detectTimer); detectTimer = setTimeout(onSourceChanged, 500);
+  });
+  el("output").addEventListener("input", () => {
+    if (cmOutput) return;
+    if (el("messages").dataset.kind === "result") clearStatus();
   });
   el("input").addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); transpile(); }
