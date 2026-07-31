@@ -81,11 +81,19 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
   for MySQL claiming "no spelling" — live MySQL 8 accepts it; only Oracle's
   degrade is genuine (ORA-03048). Un-gate the mysql target.
 
-### D1b — rationale residue (P3)
+### D1b/D1c — rationale residue (P3)
 
-*The batch-6b full-recall pass (`audit/2026-07-31-docs-gap-sweep.md`)
-documented its 4 HIGH rows same-day; the remaining 9 MED + 3 LOW rows are
-pending as a small future docs wave.*
+- **D1b** — the batch-6b recall pass's 9 MED + 3 LOW rows (4 HIGH done
+  same-day). *In progress 2026-07-31 (docs worker).*
+- **D1-recall-2** — `test_challenge.py` full-recall pass (batch 5 read only
+  ~99/263 classes in full; the audit's honesty notes flag it as the
+  weakest-recall batch after 6b closed). *In progress 2026-07-31.*
+- **D1c** (maintainer-visible residue, not yet scheduled) — (a) the raw
+  appendix rows of the docs-gap sweep NOT folded into the 18 clusters
+  (single-mechanism MED/LOW items, each citing a pinning test); (b) test
+  directories the sweep never covered: `tests/unit/dialects/`,
+  `tests/unit/api/`, etc. (mostly rename-class parser/emitter tests —
+  expected low yield, but unswept).
 
 ## Continuously tracked (not a discrete backlog)
 
