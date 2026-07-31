@@ -36,8 +36,17 @@ routines-unblocked and severity:*
   text without scrubbing comments (transformer.py:1897) → ~11 mysql routines.
 - **B35** — UNIQUE-1219 SET-var misclassification CORRUPTS output (closes the
   `$$` body early, leaks statements as top-level SQL) — severity-first.
-- **B36** — the four UNIQUE-1151 mapping gaps (FROM DUAL residue,
-  SYS_REFCURSOR, ROW_COUNT(), NUMTODSINTERVAL) → ~22 routines.
+- ~~B36~~ — DONE 2026-07-31 (3 of 4 causes): oracle→pg 1151 count 16 → 2.
+  SYS_REFCURSOR type map, FROM-DUAL tail strip in SELECT INTO,
+  NUMTODSINTERVAL/NUMTOYMINTERVAL → PG interval (both pipelines; 3 challenge
+  cases lifted to faithful). Cause 3 became B37b below.
+- **B37b** — extend B37's GET DIAGNOSTICS hoist to be spelling-general:
+  consume MySQL `ROW_COUNT()` (`_ROWCOUNT_FN_PATTERN`, `_expr.py:149`) →
+  clears the 8 remaining mysql→pg 1151 routines; ALSO fixes the latent
+  tsql→pg `@@ROWCOUNT`→bare-`ROW_COUNT` silent-invalid substitution
+  (`procedural/transformer/postgresql.py:38`).
+- **B36b** — two more unmapped-builtin gaps surfaced out-of-brief: mysql
+  `UNIX_TIMESTAMP()` (func2) and oracle `RAWTOHEX`/`STANDARD_HASH` (func4).
 - ~~B37~~ — DONE 2026-07-31: expression-position hoist with honest re-evaluated-condition degrade; corpus 1033 count 8 → 0.
 - **B38** — UNIQUE-1170 temp-table parse giveup: isolate before briefing. ALSO: `_split_generic` (batch_splitter.py ~663) shares the CASE-uncounted depth asymmetry B35 fixed in `_split_mysql` — a DELIMITER-less PL/SQL body with a CASE expression could tear the same way (flagged 2026-07-31, not yet reproduced).
 - **B39** — 1230/1231 placeholder-code fidelity (quality, not coverage).
