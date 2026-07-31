@@ -79,6 +79,16 @@ class FuncCase:
 #   MERGE fold                   — ts-merge-full: the full conditional MERGE
 #     (UPDATE/DELETE/INSERT + NOT MATCHED BY SOURCE) must leave the same rows
 #     in tgt on every engine after its multi-statement lowering.
+#   TRY_CAST/TRY_CONVERT column  — red3-ts-trycast-column-nonliteral /
+#     red3-ts-tryconvert-column-nonliteral: a non-literal (column) safe cast
+#     over a non-numeric value must yield NULL, not 0 (MySQL) or an aborted
+#     query (PG).
+#   window EXCLUDE               — red2-pg-window-exclude-current: EXCLUDE
+#     CURRENT ROW must not be silently dropped from the frame; Oracle passes
+#     it through natively (matches), T-SQL/MySQL correctly warn+degrade.
+#   UPDATE ORDER BY/LIMIT cap    — red3-my-update-orderby-limit-drop /
+#     red3-my-update-limit-no-orderby: MySQL's row cap must survive as a
+#     keyed-subquery UPDATE on every target, not silently update every row.
 #
 # ROW_COUNT / LAST_INSERT_ID / session functions are deliberately excluded: they
 # return engine- and session-specific values, so they are not result-comparable
@@ -110,6 +120,38 @@ FUNC_CASES: tuple[FuncCase, ...] = (
         "ts-merge-full ",
         probe="SELECT id, n FROM tgt ORDER BY id, n",
         tables=("tgt", "src"),
+    ),
+    FuncCase(
+        "challenge_sqlserver.sql",
+        "tsql",
+        "red3-ts-trycast-column-nonliteral ",
+        tables=("t",),
+    ),
+    FuncCase(
+        "challenge_sqlserver.sql",
+        "tsql",
+        "red3-ts-tryconvert-column-nonliteral ",
+        tables=("t",),
+    ),
+    FuncCase(
+        "challenge_postgresql.sql",
+        "postgresql",
+        "red2-pg-window-exclude-current ",
+        tables=("t",),
+    ),
+    FuncCase(
+        "challenge_mysql.sql",
+        "mysql",
+        "red3-my-update-orderby-limit-drop ",
+        probe="SELECT id, v FROM t ORDER BY id",
+        tables=("t",),
+    ),
+    FuncCase(
+        "challenge_mysql.sql",
+        "mysql",
+        "red3-my-update-limit-no-orderby ",
+        probe="SELECT id, v FROM t ORDER BY id",
+        tables=("t",),
     ),
 )
 
