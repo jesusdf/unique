@@ -373,11 +373,18 @@ class TestBitLiteralCoercion:
 
 
 class TestOracleBareNumberToInteger:
-    """Oracle's unqualified ``NUMBER`` (no precision) is used for integer
-    ids/counts. It must map to an integer type so identity/PK/FK columns are
-    valid — a DECIMAL can't be AUTO_INCREMENT on MySQL nor match a SERIAL PK on
-    PostgreSQL (the oracle→{mysql,postgresql} live DDL failures). ``NUMBER(p,s)``
-    keeps its DECIMAL mapping."""
+    """Oracle's unqualified ``NUMBER`` (no precision/scale) is ROLE-AWARE (B47).
+
+    A column carrying a STRUCTURAL id signal — it is (part of) the PRIMARY KEY,
+    is UNIQUE-constrained, is an identity, or is a FOREIGN KEY / REFERENCES —
+    maps to ``BIGINT`` so identity/PK/FK columns stay valid (a DECIMAL can't be
+    AUTO_INCREMENT on MySQL nor match a SERIAL PK on PostgreSQL). Every OTHER
+    bare ``NUMBER`` keeps Oracle's arbitrary precision: unbounded ``NUMERIC`` on
+    PostgreSQL (faithful, no warning), and the project's bounded
+    ``DECIMAL(38, 10)`` on MySQL/T-SQL WITH a UNIQUE-1236 warning that the
+    arbitrary precision is bounded there — never a silent BIGINT truncation of a
+    fractional value. ``NUMBER(p,s)`` (qualified) keeps its DECIMAL mapping.
+    """
 
     def setup_method(self) -> None:
         self.t = Transpiler()
@@ -386,34 +393,111 @@ class TestOracleBareNumberToInteger:
         "CREATE TABLE invoice (\n"
         "  id NUMBER GENERATED ALWAYS AS IDENTITY,\n"
         "  customer_id NUMBER NOT NULL,\n"
+        "  discount_pct NUMBER,\n"
         "  unit_price NUMBER(10, 2) NOT NULL,\n"
         "  CONSTRAINT fk FOREIGN KEY (customer_id) REFERENCES customer (id)\n"
         ")"
     )
 
+    @staticmethod
+    def _has_1236(result: object) -> bool:
+        return any(
+            getattr(w, "code", None) == "UNIQUE-1236"
+            for w in getattr(result, "warnings", [])
+        )
+
     def test_identity_and_fk_to_mysql(self) -> None:
-        out = self.t.transpile(self._DDL, "oracle", "mysql").sql
-        assert "id BIGINT AUTO_INCREMENT" in out
-        assert "customer_id BIGINT" in out
+        result = self.t.transpile(self._DDL, "oracle", "mysql")
+        out = result.sql
+        assert "id BIGINT AUTO_INCREMENT" in out  # identity -> BIGINT
+        assert "customer_id BIGINT" in out  # FK -> BIGINT
         # A qualified NUMBER(p,s) is still a decimal.
         assert "unit_price DECIMAL(10, 2)" in out
         assert "DECIMAL AUTO_INCREMENT" not in out
+        # A NON-key bare NUMBER keeps its precision as the bounded max DECIMAL,
+        # never a truncating BIGINT, and the bounding is warned.
+        assert "discount_pct DECIMAL(38, 10)" in out
+        assert "discount_pct BIGINT" not in out
+        assert self._has_1236(result)
         _valid(out, "mysql")
 
     def test_identity_and_fk_to_postgresql(self) -> None:
-        out = self.t.transpile(self._DDL, "oracle", "postgresql").sql
+        result = self.t.transpile(self._DDL, "oracle", "postgresql")
+        out = result.sql
         # GENERATED ALWAYS (immutable) is preserved, not flattened to BIGSERIAL
         # (which would silently allow explicit inserts); the BIGINT base still
         # matches the BIGINT FK column.
         assert "id BIGINT GENERATED ALWAYS AS IDENTITY" in out
         assert "customer_id BIGINT" in out
         assert "unit_price DECIMAL(10, 2)" in out or "unit_price NUMERIC(10, 2)" in out
+        # PostgreSQL has unbounded NUMERIC — the non-key column is faithful with
+        # NO warning and NO BIGINT truncation.
+        assert "discount_pct NUMERIC" in out
+        assert "discount_pct BIGINT" not in out
+        assert not self._has_1236(result)
         _valid(out, "postgresql")
 
+    def test_non_key_bare_number_to_tsql_bounded_and_warned(self) -> None:
+        result = self.t.transpile(self._DDL, "oracle", "tsql")
+        out = result.sql
+        assert "id BIGINT" in out  # identity -> BIGINT
+        assert "customer_id BIGINT" in out  # FK -> BIGINT
+        assert "discount_pct DECIMAL(38, 10)" in out
+        assert "discount_pct BIGINT" not in out
+        assert self._has_1236(result)
+        _valid(out, "tsql")
+
+    def test_table_level_primary_key_bare_number_promotes(self) -> None:
+        # A table-level PRIMARY KEY on a bare NUMBER is a structural id signal;
+        # the sibling non-key bare NUMBER is not.
+        ddl = (
+            "CREATE TABLE acct (\n"
+            "  acct_no NUMBER,\n"
+            "  balance NUMBER,\n"
+            "  PRIMARY KEY (acct_no)\n"
+            ")"
+        )
+        out = self.t.transpile(ddl, "oracle", "mysql").sql
+        assert "acct_no BIGINT" in out
+        assert "balance DECIMAL(38, 10)" in out
+        assert "balance BIGINT" not in out
+        _valid(out, "mysql")
+
+    def test_fk_to_in_script_promoted_id_promotes(self) -> None:
+        # Self-contained FK: customers.id is a bare-NUMBER PK (-> BIGINT); the
+        # referencing bare-NUMBER column must promote too for join compatibility,
+        # while a plain sibling column keeps arbitrary precision.
+        ddl = (
+            "CREATE TABLE customers (id NUMBER PRIMARY KEY, name VARCHAR2(50));\n"
+            "CREATE TABLE orders (\n"
+            "  id NUMBER PRIMARY KEY,\n"
+            "  customer_id NUMBER REFERENCES customers (id),\n"
+            "  amount NUMBER\n"
+            ")"
+        )
+        out = self.t.transpile(ddl, "oracle", "postgresql").sql
+        assert "customer_id BIGINT" in out  # inline REFERENCES -> BIGINT
+        assert "amount NUMERIC" in out  # non-key -> unbounded numeric
+        assert "amount BIGINT" not in out
+        _valid(out, "postgresql")
+
+    def test_unique_bare_number_promotes(self) -> None:
+        ddl = "CREATE TABLE t (code NUMBER UNIQUE, ratio NUMBER)"
+        result = self.t.transpile(ddl, "oracle", "mysql")
+        out = result.sql
+        assert "code BIGINT" in out  # UNIQUE -> BIGINT
+        assert "ratio DECIMAL(38, 10)" in out  # non-key -> bounded decimal
+        assert "ratio BIGINT" not in out
+        assert self._has_1236(result)
+        _valid(out, "mysql")
+
     def test_bare_decimal_from_tsql_source_unchanged(self) -> None:
-        # A bare DECIMAL from a non-Oracle source keeps its meaning (no coercion).
-        out = self.t.transpile(
+        # A bare DECIMAL from a non-Oracle source keeps its meaning (no coercion,
+        # no bounding warning — B47 is scoped to the Oracle source).
+        result = self.t.transpile(
             "CREATE TABLE t (amount DECIMAL)", "tsql", "postgresql"
-        ).sql
+        )
+        out = result.sql
         assert "BIGINT" not in out.upper()
         assert "amount DECIMAL" in out or "amount NUMERIC" in out
+        assert not self._has_1236(result)

@@ -2321,6 +2321,21 @@ def _convert_create_table(
     schema_expr = expr.this
     if isinstance(schema_expr, exp.Schema):
         table = _convert_table_ref(schema_expr.this)
+        # Structural id-role signals for the bare-Oracle-``NUMBER`` promotion
+        # (B47): a column that is (part of) the PRIMARY KEY, is UNIQUE-
+        # constrained, or is a FOREIGN KEY / REFERENCES is id-like -> BIGINT;
+        # anything else keeps Oracle's arbitrary precision. Table-level keys/FKs
+        # are collected here so the per-column decision (taken after that
+        # column's own constraints are read) can consult them. PK/UNIQUE reuse
+        # the cross-statement harvest; table-level FK local columns come straight
+        # off this statement's AST.
+        _table_key_cols: set[str] = set()
+        for _keytuple in (PK_UNIQUE_COLUMNS.get() or {}).get(table.name.lower(), []):
+            _table_key_cols.update(_keytuple)
+        _fk_cols: set[str] = set()
+        for _fk in expr.find_all(exp.ForeignKey):
+            for _c in _fk.expressions:
+                _fk_cols.add(str(getattr(_c, "name", _c)).lower())
         for col_def in schema_expr.expressions:
             if (
                 isinstance(col_def, exp.ColumnDef)
@@ -2426,25 +2441,23 @@ def _convert_create_table(
                     continue
 
                 dtype = DataType(name="VARCHAR")
+                # Oracle's unqualified NUMBER (no precision/scale) parses to a
+                # bare DECIMAL; the id-vs-value decision is deferred until this
+                # column's structural role is known (see below). NUMBER(p,s)
+                # has params and is never a bare NUMBER.
+                is_bare_number = False
                 if col_def.args.get("kind"):
                     dtype = _resolve_tsql_alias_type(
                         _convert_data_type(col_def.args["kind"])
                     )
-                    # Oracle's unqualified NUMBER (no precision/scale) parses to
-                    # a bare DECIMAL but denotes an integer id/count: map it to
-                    # BIGINT so identity/PK/FK columns are valid (a DECIMAL can't
-                    # be AUTO_INCREMENT on MySQL, nor match an integer PK for a
-                    # foreign key). Only for an Oracle source — a bare DECIMAL
-                    # from other engines keeps its meaning. NUMBER(p,s) has
-                    # params and is untouched.
-                    if (
+                    is_bare_number = (
                         source_dialect == "oracle"
                         and dtype.name.upper() in ("DECIMAL", "NUMERIC")
                         and not dtype.params
-                    ):
-                        dtype = DataType(name="BIGINT")
+                    )
 
                 nullable = True
+                is_fk = False
                 identity = False
                 identity_seed: int | None = None
                 identity_step: int | None = None
@@ -2545,7 +2558,9 @@ def _convert_create_table(
                         # Inline column FK (``c INT REFERENCES p(id) ON DELETE …``)
                         # is equivalent to a table-level FOREIGN KEY; route it
                         # there so it emits per-target instead of being silently
-                        # dropped (RC-3 — referential integrity).
+                        # dropped (RC-3 — referential integrity). It also marks
+                        # the column id-like for the bare-NUMBER promotion (B47).
+                        is_fk = True
                         sg = sqlglot_dialect_name(source_dialect)
                         col_ref = col_def.this.sql(dialect=sg)
                         constraints.append(
@@ -2567,6 +2582,32 @@ def _convert_create_table(
                                 kind="CONSTRAINT",
                             )
                         )
+
+                if is_bare_number:
+                    # B47: a bare Oracle NUMBER is promoted to BIGINT only when a
+                    # STRUCTURAL signal makes it id-like — it is (part of) the
+                    # PRIMARY KEY, is UNIQUE-constrained, is an identity, or is a
+                    # FOREIGN KEY / REFERENCES (join compatibility with the
+                    # promoted id it points at). Every other bare NUMBER keeps
+                    # Oracle's arbitrary precision as unbounded NUMERIC — the
+                    # emitter bounds+warns it on MySQL/T-SQL (UNIQUE-1236),
+                    # PostgreSQL keeps it unbounded. This avoids silently
+                    # truncating a fractional value (``discount_pct NUMBER``) to
+                    # an integer. A name like ``x_id`` is NOT a signal.
+                    _col_name = (
+                        col_def.this.name
+                        if hasattr(col_def.this, "name")
+                        else str(col_def.this)
+                    ).lower()
+                    _id_like = (
+                        identity
+                        or primary_key
+                        or unique
+                        or is_fk
+                        or _col_name in _table_key_cols
+                        or _col_name in _fk_cols
+                    )
+                    dtype = DataType(name="BIGINT" if _id_like else "NUMERIC")
 
                 columns.append(
                     ColumnDefinition(

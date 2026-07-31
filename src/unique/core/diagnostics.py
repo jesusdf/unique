@@ -1151,4 +1151,10 @@ DIAGNOSTICS: dict[str, Diagnostic] = {
         "core-PostgreSQL equivalent (needs the pgcrypto extension) — see "
         "docs/03-unsupported.md",
     ),
+    "UNIQUE-1236": _D(
+        "ddl",
+        "{dialect} has no unbounded numeric type — column … (Oracle bare NUMBER) "
+        "is bounded to DECIMAL(38, 10); values beyond that precision/scale are "
+        "not representable (docs/03-unsupported.md",
+    ),
 }

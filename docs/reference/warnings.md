@@ -2,7 +2,7 @@
 
 > **Generated — do not edit by hand.** Produced by `python scripts/generate_reference_docs.py` from the `UNIQUE-NNNN` registry (`src/unique/core/diagnostics.py`) and the rationale side-table (`src/unique/core/rationales.py`). The CI freshness gate (`python scripts/generate_reference_docs.py --check`) fails the build if this file drifts from the source data.
 
-One entry per stable diagnostic code the transpiler can emit. `code` is the grep/suppress token (`-- UNIQUE-1234: …`); every code is anchored as `warnings.md#unique-1234`. A code with a rationale entry (183 of 234) renders as a recipe: **Problem** (the triggering construct), **Solution (pointer)** (what Unique does about it — a pointer, not a worked example: the registry carries no SQL sample), **Discussion** (the engine-level reason no direct mapping exists) and **See Also** (the corpus case or test that proves it). The remaining codes render in a compact table marked `_(rationale pending)_` until a rationale is added (the coverage ratchet in `tests/unit/core/test_diagnostics.py` drives that count down).
+One entry per stable diagnostic code the transpiler can emit. `code` is the grep/suppress token (`-- UNIQUE-1234: …`); every code is anchored as `warnings.md#unique-1234`. A code with a rationale entry (184 of 235) renders as a recipe: **Problem** (the triggering construct), **Solution (pointer)** (what Unique does about it — a pointer, not a worked example: the registry carries no SQL sample), **Discussion** (the engine-level reason no direct mapping exists) and **See Also** (the corpus case or test that proves it). The remaining codes render in a compact table marked `_(rationale pending)_` until a rationale is added (the coverage ratchet in `tests/unit/core/test_diagnostics.py` drives that count down).
 
 ## Diagnostics with a rationale
 
@@ -2202,6 +2202,18 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **See Also.** [`TestOracleHashFunctionsToPostgresql::test_standard_hash_sha1_degrades_honestly`](../../tests/integration/test_function_translation.py)
 
+### <a id="unique-1236"></a>`UNIQUE-1236` — A non-id bare Oracle NUMBER column (→ MySQL / T-SQL)
+
+**Category:** `ddl` · **Message:** {dialect} has no unbounded numeric type — column … (Oracle bare NUMBER) is bounded to DECIMAL(38, 10); values beyond that precision/scale are not representable (docs/03-unsupported.md
+
+**Problem.** A non-id bare Oracle NUMBER column (→ MySQL / T-SQL)
+
+**Solution (pointer).** Warned limit — values needing more than 38 total / 10 fractional digits are not representable; PostgreSQL keeps the full precision.
+
+**Discussion.** Oracle's unqualified NUMBER holds an arbitrary-precision value. A column with no id role (not a PRIMARY KEY, UNIQUE, identity, or FOREIGN KEY) keeps that meaning as unbounded NUMERIC on PostgreSQL, but MySQL and T-SQL have no unbounded numeric type, so it is bounded to the project's canonical DECIMAL(38, 10) instead of being promoted to a fractional-value-truncating BIGINT.
+
+**See Also.** [`TestOracleBareNumberToInteger::test_non_key_bare_number_to_tsql_bounded_and_warned`](../../tests/unit/core/test_boolean_timestamp.py)
+
 ## Diagnostics without a rationale yet
 
 | Code | Category | Message template | Rationale |
@@ -2258,4 +2270,4 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 | <a id="unique-1230"></a>`UNIQUE-1230` | procedural | procedural parse note; the specific reason is carried at runtime | _(rationale pending)_ |
 | <a id="unique-1232"></a>`UNIQUE-1232` | procedural | procedural transpilation failed (internal error); the routine is preserved; the error is carried at<br>runtime | _(rationale pending)_ |
 
-234 codes across 6 categories (183 with a rationale).
+235 codes across 6 categories (184 with a rationale).

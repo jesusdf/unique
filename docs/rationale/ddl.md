@@ -235,30 +235,44 @@ being converted.
 **See Also.** [`TestB10RunningColumnTypeAlterNullability`](../../tests/integration/test_pg_source_wave1.py), [`test_alter_column_postgres_type_then_nullability`](../../tests/unit/core/test_transpiler.py) ·
 [`UNIQUE-1010`](../reference/warnings.md#unique-1010).
 
-### Oracle bare `NUMBER` (no precision/scale) → integer type
+### Oracle bare `NUMBER` (no precision/scale) → role-aware numeric (B47)
 
 **Problem.** Oracle's unqualified `NUMBER` — no precision or scale — is
-the idiomatic spelling for an integer id/count column (`id NUMBER
-GENERATED ALWAYS AS IDENTITY`, `customer_id NUMBER` as an FK), but it
-parses, dialect-neutrally, to a bare `DECIMAL`. A bare `DECIMAL` cannot be
-`AUTO_INCREMENT` on MySQL, and does not match an integer primary key for a
-foreign key on PostgreSQL — both fail at `CREATE TABLE` time on the live
-databases.
+overloaded. It is the idiomatic spelling for an integer id/count column
+(`id NUMBER GENERATED ALWAYS AS IDENTITY`, `customer_id NUMBER` as an FK),
+but it is *also* an arbitrary-precision numeric that legitimately holds a
+fractional value (`discount_pct NUMBER`). It parses, dialect-neutrally, to
+a bare `DECIMAL`. Two failure modes pull in opposite directions: a bare
+`DECIMAL` cannot be `AUTO_INCREMENT` on MySQL and does not match an integer
+PK for a foreign key on PostgreSQL (so id columns must become an integer
+type), yet blindly promoting *every* bare `NUMBER` to `BIGINT` silently
+**truncates** the fractional value of a non-id column.
 
-**Solution.**
+**Solution — the mapping is role-aware.** The promotion to `BIGINT` fires
+only when a **structural** signal makes the column id-like: it is (part of)
+the `PRIMARY KEY`, is `UNIQUE`-constrained, is an identity, or is a
+`FOREIGN KEY` / `REFERENCES` (which references another table's key — join
+compatibility, rule 3). A name like `x_id` is *not* a signal — only the
+schema structure is. Every other bare `NUMBER` keeps Oracle's arbitrary
+precision: unbounded `NUMERIC` on PostgreSQL (faithful, no warning), and
+the project's canonical bounded `DECIMAL(38, 10)` on MySQL/T-SQL — which
+have no unbounded numeric type — **with a `UNIQUE-1236` warning** that the
+precision is bounded there.
 
 ```sql
 -- tests/unit/core/test_boolean_timestamp.py::TestOracleBareNumberToInteger (_DDL)
 CREATE TABLE invoice (
-  id NUMBER GENERATED ALWAYS AS IDENTITY,
-  customer_id NUMBER NOT NULL,
-  unit_price NUMBER(10, 2) NOT NULL,
+  id NUMBER GENERATED ALWAYS AS IDENTITY,   -- identity  -> id-like
+  customer_id NUMBER NOT NULL,              -- FK        -> id-like
+  discount_pct NUMBER,                      -- no role   -> value
+  unit_price NUMBER(10, 2) NOT NULL,        -- qualified -> unchanged
   CONSTRAINT fk FOREIGN KEY (customer_id) REFERENCES customer (id)
 )
 -- oracle -> mysql:
 CREATE TABLE invoice (
   id BIGINT AUTO_INCREMENT,
   customer_id BIGINT NOT NULL,
+  discount_pct DECIMAL(38, 10) NOT NULL,    -- + UNIQUE-1236 (precision bounded)
   unit_price DECIMAL(10, 2) NOT NULL,
   CONSTRAINT fk FOREIGN KEY (customer_id) REFERENCES customer (id)
 );
@@ -266,49 +280,33 @@ CREATE TABLE invoice (
 CREATE TABLE invoice (
   id BIGINT GENERATED ALWAYS AS IDENTITY,
   customer_id BIGINT NOT NULL,
+  discount_pct NUMERIC,                      -- unbounded, faithful, no warning
   unit_price DECIMAL(10, 2) NOT NULL,
   CONSTRAINT fk FOREIGN KEY (customer_id) REFERENCES customer (id)
 );
 ```
 
 `NUMBER(10, 2)` (qualified — has precision/scale) keeps its `DECIMAL`
-mapping unchanged in both cases; only the bare form is promoted to
-`BIGINT`. A bare `DECIMAL` from a *non*-Oracle source is left completely
-alone (`test_bare_decimal_from_tsql_source_unchanged`): `CREATE TABLE t
-(amount DECIMAL)` from T-SQL stays `amount DECIMAL`/`NUMERIC` on
-PostgreSQL, confirming the promotion is gated on the Oracle source dialect,
-not on "this looks like a bare decimal."
+mapping unchanged: it is not a *bare* `NUMBER` and never reaches this logic.
+A bare `DECIMAL` from a *non*-Oracle source is left completely alone
+(`test_bare_decimal_from_tsql_source_unchanged`): `CREATE TABLE t (amount
+DECIMAL)` from T-SQL stays `amount DECIMAL`/`NUMERIC` on PostgreSQL,
+confirming the whole mechanism is gated on the Oracle source dialect, not
+on "this looks like a bare decimal."
 
-**Discussion — correcting the premise this entry was filed under.** The
-promotion is **not** conditioned on the column's role (PK/FK/identity)
-despite the surrounding code comment motivating it that way. Reading the
-implementation
-(`src/unique/core/converter/convert.py::_convert_create_table`, the
-`source_dialect == "oracle" and dtype.name.upper() in ("DECIMAL",
-"NUMERIC") and not dtype.params` gate, lines ~2440–2445): it fires for
-**every** bare-`NUMBER` column from an Oracle source, unconditionally — the
-constraint/PK/FK/identity resolution in the same function runs *after*
-this type substitution and is never consulted by it. `NUMBER(p,s)` is the
-only escape hatch.
-
-> **Warning** — this is a real, live-checkable divergence risk with **no
-> guard and no warning** today: an ordinary Oracle column that legitimately
-> holds a fractional value but happens to be declared as a bare `NUMBER`
-> (e.g. `discount_pct NUMBER`, no PK/FK/identity role at all) is silently
-> promoted to `BIGINT` on every non-Oracle target, truncating any
-> fractional value it could otherwise hold:
-> ```sql
-> -- probed directly against the transpiler (not corpus/test-pinned — no
-> -- existing test exercises a non-key bare NUMBER column):
-> CREATE TABLE t (discount_pct NUMBER, name VARCHAR2(50))
-> -- oracle -> mysql / postgresql: discount_pct BIGINT   (no warning)
-> ```
-> `TestOracleBareNumberToInteger`'s three tests only exercise identity/PK/FK
-> columns and the cross-dialect guard, so none of them would catch this.
-> Flagged here rather than fixed (this page is docs-only); worth a
-> fix-brief for a future BLUE pass — likely a role check (PK/FK/identity)
-> gating the promotion, falling back to a sized `DECIMAL`/`NUMERIC`
-> otherwise.
+**Discussion.** The id-vs-value decision is deferred inside
+`src/unique/core/converter/convert.py::_convert_create_table` until the
+column's own constraints have been read, and consults the structural
+signals collected for the statement: the inline `PRIMARY KEY` / `UNIQUE` /
+identity / `REFERENCES` constraints on the column, the table-level
+`FOREIGN KEY` local columns (off this statement's AST), and the cross-
+statement PK/UNIQUE harvest (`PK_UNIQUE_COLUMNS`) for table-level keys. A
+non-id column is emitted as an unbounded `NUMERIC`; the bounded-target
+substitution and its warning live in the DDL emitter's type-gap map
+(`emit_ddl.py::_type_gap_map`, `UNIQUE-1236`), which is the layer that
+knows the concrete target — PostgreSQL keeps `NUMERIC` unbounded, MySQL and
+T-SQL bound it to `DECIMAL(38, 10)` (the same spelling `TO_NUMBER` and the
+numeric casts already use) and warn.
 
 **See Also.** [`TestOracleBareNumberToInteger`](../../tests/unit/core/test_boolean_timestamp.py).
 

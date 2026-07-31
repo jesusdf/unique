@@ -598,6 +598,12 @@ trailing `-- UNIQUE:` note and a warning (never silently):
   boolean-style `BIT` map used to truncate it to 1 bit silently). Bit-string
   literals/functions on those targets remain in the unsigned-64 limit family.
 - Fractional-seconds precision above 6 → clamped to `(6)` on MySQL.
+- A non-id bare Oracle `NUMBER` (arbitrary precision, no `PRIMARY KEY`/`UNIQUE`/
+  identity/`FOREIGN KEY` role) → PostgreSQL unbounded `NUMERIC` (faithful, no
+  note), MySQL/T-SQL bounded `DECIMAL(38, 10)` (`UNIQUE-1236` — those engines
+  have no unbounded numeric type; values beyond 38 total / 10 fractional digits
+  are not representable). An id-role bare `NUMBER` maps to `BIGINT` instead (so
+  identity/PK/FK columns stay valid); `NUMBER(p,s)` keeps its `DECIMAL` mapping.
 - T-SQL `SMALLDATETIME` → Oracle `DATE` (superset, no note needed).
 
 The datetime/interval closest-type mappings above also apply to PL/SQL variable
