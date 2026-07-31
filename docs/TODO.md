@@ -81,26 +81,10 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
 
 ### Small findings (P3 unless noted)
 
-- **B59** (P3, found during B54) — pg→pg identity of `to_hex(x)` also emits
-  the invalid phantom `HEX(x)` (the identity direction bypasses the new
-  mapping); route identity through passthrough.
+- ~~B59~~ — DONE 2026-07-31: pg identity respells canonical HEX back to `TO_HEX`; all 4 directions live-verified lowercase-unpadded.
 
-- **B58** (P1-class, found by the A10-P1 harness, live-verified) — a T-SQL
-  OUTPUT parameter is semantically INOUT, but the transpiler emits
-  write-only `OUT` on every target — the caller's input value is dropped:
-  proc_14 (`@query = @query + ' ' + @filter`) returns `'base flt'` on T-SQL
-  and NULL on Oracle/PG/MySQL, ZERO warnings. Class fix: a read OUTPUT
-  param maps to `IN OUT`/`INOUT`; affects any OUTPUT param read in a body
-  (proc_13/14 in the fixtures). Ledgered `defect-pending-fix` meanwhile.
-- **B55** (P2, found during D1b2, live-verified on Oracle) — two invalid
-  Oracle CAST-context combinations outside the pinned shapes: an
-  explicit-length CAST inside an expression ARGUMENT emits PLS-00103-invalid
-  output, and a lengthless CAST inside an embedded SQL statement (e.g.
-  `SELECT … INTO`) emits ORA-00906-invalid output (the `IR_EMBEDDED`
-  length-stripping decision keys on in-body vs not, missing these two
-  quadrants). The rationale article
-  `procedural/oracle-cast-length-plsql-body-vs-sql-statement.md` documents
-  only the two verified-safe combinations.
+- ~~B58~~ — DONE 2026-07-31: T-SQL OUTPUT → INOUT at the single parser source point (unconditional faithful; all emitters already spelled it; OUTPUT→INOUT→OUTPUT round-trips). proc_14 enrolled (13), live 'base flt' on all 3 targets.
+- ~~B55~~ — DONE 2026-07-31: the real axis is PL/SQL-expression vs SQL-statement (`IR_PLSQL_EXPR` ContextVar from `_expr_position`, extended to IF/WHILE, subquery resets); all 4 quadrants live-VALID on Oracle 23c; also fixes CLOB-in-SELECT-INTO.
 - ~~B54~~ — DONE 2026-07-31: `to_hex` mapped faithfully to tsql (VARBINARY+style-2+pad-strip) and oracle (TO_CHAR XXXX), live-verified 0/255/2^32/max-bigint.
 - ~~B53~~ — DONE 2026-07-31: ratchet re-baselined counting `==`/`!=`/dialect-tuple membership; new floor 924.
 
@@ -144,12 +128,12 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
 - ~~D1b~~ — DONE 2026-07-31: all 12 batch-6b rows written as 14 entries.
 - ~~D1-recall-2~~ — DONE 2026-07-31: 215/263 classes read in full (batch
   5b appendix); recall debt closed; 18 new gap rows → D1b2.
-- **D1c** (maintainer-visible residue, not yet scheduled) — (a) the raw
-  appendix rows of the docs-gap sweep NOT folded into the 18 clusters
-  (single-mechanism MED/LOW items, each citing a pinning test); (b) test
-  directories the sweep never covered: `tests/unit/dialects/`,
-  `tests/unit/api/`, etc. (mostly rename-class parser/emitter tests —
-  expected low yield, but unswept).
+- ~~D1c~~ — DONE 2026-07-31: (a) all 115 raw appendix rows reconciled — 49
+  covered, 53 → 41 new articles, 13 LOW deferred with reasons; (b) the
+  remaining test dirs swept in full (batch 8: 40 files, 3 gaps → articles,
+  everything else 0-gap) — **the entire test tree is now swept**. Rationale
+  corpus ≈ 181 articles; generator hardened (delink, span-aware sentence
+  cut, multi-line-span link checker).
 
 ## Continuously tracked (not a discrete backlog)
 
