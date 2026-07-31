@@ -55,7 +55,21 @@ routines-unblocked and severity:*
 - **B36b** — two more unmapped-builtin gaps surfaced out-of-brief: mysql
   `UNIX_TIMESTAMP()` (func2) and oracle `RAWTOHEX`/`STANDARD_HASH` (func4).
 - ~~B37~~ — DONE 2026-07-31: expression-position hoist with honest re-evaluated-condition degrade; corpus 1033 count 8 → 0.
-- **B38** — UNIQUE-1170 temp-table parse giveup: isolate before briefing. ALSO: `_split_generic` (batch_splitter.py ~663) shares the CASE-uncounted depth asymmetry B35 fixed in `_split_mysql` — a DELIMITER-less PL/SQL body with a CASE expression could tear the same way (flagged 2026-07-31, not yet reproduced).
+- ~~B38~~ — DONE 2026-07-31: `_peel_leading_statements` in `_core.py` splits a
+  folded `<companion DDL> + <routine>` procedural batch — leading statements
+  go through the DML/DDL pipeline (with their own validity gate), the routine
+  parses alone. proc_2/7/8/9 oracle→pg: 1170 gone, GTT + full plpgsql emitted,
+  all four execute on real PG; mysql-source same-shape fixed too (compiles on
+  real Oracle). tsql needs no peel (GO separates). The `_split_generic`
+  CASE-depth flag was REFUTED: no such function; `_split_oracle`'s
+  `begin_depth` is dead (flush only on `/`), `_split_postgresql` tracks only
+  dollar-quotes — immune. `test_procedural_leading_ddl.py`.
+- **B44** (P3, found during B38) — `_split_oracle`'s `plsql_start.search`
+  matches "CREATE PROCEDURE" inside a *comment* (the codegen line
+  `-- EXECUTE([CREATE PROCEDURE …])`), setting `in_plsql` early — that's what
+  folds the GTT into the routine batch in the first place. Latent guardrail-3
+  (comments are trivia) wrinkle; harmless post-B38 (the peel undoes it) but
+  the splitter should not read comment text.
 - ~~B39~~ — DONE 2026-07-31: parse/transform warnings ship `code=None` and the
   existing carrier reconciliation backfills the specific code (exact-literal
   match for the parse-fallback warning via `PARSE_FALLBACK_WARNING`); a new
