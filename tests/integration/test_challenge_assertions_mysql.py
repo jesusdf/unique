@@ -151,6 +151,18 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
             "absent": ["CAST(1 = 1 AS"],
         },
     },
+    # invalid: MySQL HAVING without GROUP BY (a post-window row filter) has no
+    # form on T-SQL/Oracle/PG — the query is wrapped so HAVING becomes an outer
+    # WHERE. On T-SQL the wrapped derived table (uq_h) needs every computed
+    # column named (RANK() has none — error 8155), so it takes a uq_col alias.
+    "my-having-noagg": {
+        "tsql": {
+            "present": ["AS uq_col2", "uq_h", "WHERE x > 0"],
+            "absent": ["HAVING"],
+        },
+        "oracle": {"present": ["uq_h", "WHERE x > 0"], "absent": ["HAVING"]},
+        "postgresql": {"present": ["uq_h", "WHERE x > 0"], "absent": ["HAVING"]},
+    },
     "my-cast-int": {
         "tsql": {
             "present": ["CAST(ROUND(2.7, 0) AS BIGINT)"],

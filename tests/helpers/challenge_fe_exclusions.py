@@ -130,12 +130,6 @@ LEDGER: tuple[Excluded, ...] = (
         sql="SELECT DATE_ADD('2020-01-31',INTERVAL 1 MONTH), DATE_ADD('2020-01-01',INTERVAL 1 DAY), DATE_SUB('2020-03-01',INTERVAL 1 DAY), '2020-01-01'+INTERVAL 1 HOUR",
     ),
     Excluded(
-        id="my-having-noagg",
-        tag="defect-pending-fix",
-        reason="HAVING without GROUP BY lowers to an unnamed derived column",
-        sql="SELECT x, RANK() OVER (ORDER BY x) FROM (SELECT 1 x UNION ALL SELECT 2) t HAVING x>0",
-    ),
-    Excluded(
         id="my-insert-oob",
         tag="defect-pending-fix",
         reason="out-of-bounds INSERT() emulation not guarded",
@@ -206,12 +200,6 @@ LEDGER: tuple[Excluded, ...] = (
         tag="defect-pending-fix",
         reason="multibyte CHR/ASCII not reproduced on MySQL",
         sql="SELECT chr(233), ascii('é')",
-    ),
-    Excluded(
-        id="po-distinct-case",
-        tag="defect-pending-fix",
-        reason="DISTINCT lowers to an unnamed derived-table column",
-        sql="SELECT DISTINCT x FROM (VALUES ('a'),('A'),('a'),('B')) v(x) ORDER BY x",
     ),
     Excluded(
         id="postgresql-qdrop",

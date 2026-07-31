@@ -845,6 +845,19 @@ CASES.update(
                 "mysql": Expect(("UNION ALL",), ("VALUES (1)",)),
             },
         ),
+        # invalid: a case-sensitive DISTINCT gets a binary COLLATE on the string
+        # key, but T-SQL wraps the DISTINCT (under a null-priority ORDER key) in
+        # the uq_d derived table — where COLLATE strips the column name (error
+        # 8155). Re-alias the collated column so the wrapper is valid (result A,
+        # B, a, live-verified).
+        "po-distinct-case": Case(
+            "po-distinct-case ",
+            {
+                "tsql": Expect(
+                    present=("COLLATE Latin1_General_BIN2 AS x", "uq_d"),
+                ),
+            },
+        ),
         # func: DISTINCT ON (a) keeps one row per a (first by ORDER BY); a plain
         # SELECT DISTINCT would keep every (a,b) pair. Rewrite to ROW_NUMBER()
         # OVER (PARTITION BY a ORDER BY …) = 1 in a derived table. All = 2 rows.

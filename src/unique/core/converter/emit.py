@@ -2062,7 +2062,11 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         )
         and any(_order_null_priority_key(o, dialect) for o in node.order_by)
     ):
-        inner = _emit_select(dataclasses.replace(node, order_by=()), dialect)
+        # Every derived-table column must be named (error 8155); a DISTINCT over
+        # a computed/collated projection has none (the COLLATE below also strips
+        # a bare column's name), so name them before wrapping.
+        _dist_inner = _name_tsql_derived_columns(dataclasses.replace(node, order_by=()))
+        inner = _emit_select(_dist_inner, dialect)
         rendered_items = []
         for o in node.order_by:
             key = _order_null_priority_key(o, dialect)
@@ -2081,7 +2085,11 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         and not _has_aggregate(node.having)
         and into is None
     ):
-        _inner = dataclasses.replace(node, having=None)
+        # A computed projection (RANK()/expression) has no name — error 8155 in
+        # the T-SQL uq_h derived table; name it before wrapping (a synthesized
+        # alias on an unnamed column is valid on every target, so this is applied
+        # unconditionally rather than behind a dialect check).
+        _inner = _name_tsql_derived_columns(dataclasses.replace(node, having=None))
         _hcond = _emit_condition(node.having, dialect)
         return f"SELECT * FROM ({_emit_select(_inner, dialect)}) uq_h\nWHERE {_hcond}"
     parts: list[str] = []
@@ -2223,7 +2231,13 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
                     and c.table is None
                     and c.name.lower() in _dstr
                 ):
-                    _cstr = f"{_cstr} COLLATE {_dcoll}"
+                    # COLLATE strips the output column name; a T-SQL DISTINCT
+                    # wrapped in the uq_d derived table then has an unnamed
+                    # column (error 8155). Re-alias to the source name so the
+                    # wrapper and its outer ORDER BY resolve (harmless on MySQL,
+                    # which keeps the same output-column name either way).
+                    _alias = _ident(c.name, c.quoted, dialect)
+                    _cstr = f"{_cstr} COLLATE {_dcoll} AS {_alias}"
                 _col_parts.append(_cstr)
             cols = ", ".join(_col_parts) or "*"
         parts.append(f"SELECT {distinct}{top}{cols}")
