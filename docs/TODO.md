@@ -105,11 +105,12 @@ routines-unblocked and severity:*
   (`TestOracleBareNumberToInteger`) and the shipped fixtures → needs the
   maintainer's call before a fix-brief. Documented with a Warning callout in
   `docs/rationale/ddl.md` meanwhile.
-- **B46** (P2, found during D1-W3, probed) — a T-SQL `RETURN NULL` NOT
-  followed by a semicolon swallows the NEXT statement (`SELECT @x`) into its
-  `UNIQUE-1177` discarded-value comment — no-silent-loss violation; the
-  sibling bare-`RETURN` case has a `test_following_statement_not_absorbed`
-  guard, the value-`RETURN` case does not.
+- ~~B46~~ — DONE 2026-07-31: `_parse_expression_until_semicolon` treated a
+  DML verb as a boundary only at line start; boundary now unconditional for
+  T-SQL source (matches the `_DECLARE_DML_BOUNDARY` precedent), with a
+  `FOR`-preceded exception for the cursor-for-query idiom (caught by a real
+  regression in the neighbor sweep). `TestReturnValueBoundary` + the
+  strengthened original assertion.
 - ~~B45~~ — DONE 2026-07-31: `_is_native_bool_type` per-target hook +
   `_bool_vars` tracking keeps `TRUE`/`FALSE` for Oracle native-BOOLEAN
   declares/params/assignments/comparisons/RETURN (`BOOLEAN_VARIABLES`
