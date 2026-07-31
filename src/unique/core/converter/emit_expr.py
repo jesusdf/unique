@@ -582,6 +582,17 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             # no inline-cast spelling elsewhere (wave 163).
             dtype = re.sub(r"(?i)\s+CHARACTER\s+SET\s+\S+$", "", dtype)
         mapped = _CAST_TYPE_MAP.get(dialect, {}).get(dtype.upper())
+        # MySQL CAST(x AS BINARY) with no length is a VARIABLE-length binary
+        # (only BINARY(n) pads to n); T-SQL's bare BINARY is fixed BINARY(30) and
+        # right-pads the value with 0x00, changing it. Map the lengthless MySQL
+        # form to VARBINARY so no padding is added (BINARY(n) keeps its width).
+        if (
+            dialect == "tsql"
+            and SOURCE_DIALECT.get() == "mysql"
+            and dtype.upper() == "BINARY"
+            and not node.target_type.params
+        ):
+            dtype, mapped = "VARBINARY", None
         if (
             mapped
             and dialect == "oracle"
@@ -1060,6 +1071,163 @@ def _emit_operand(
         ):
             return f"({text})"
     return text
+
+
+def emit_mysql_rounded_str_len(
+    node: FunctionCall, fn_name: str, dialect: str
+) -> str | None:
+    """MySQL-source REPEAT count / LEFT length that is a float, rounded per target.
+
+    MySQL rounds a fractional REPEAT count / LEFT length; PG REPEAT/LEFT reject a
+    numeric arg (repeat/left(text, numeric) do not exist) and T-SQL LEFT
+    truncates. Round to match (cast to INTEGER on PG, clamp negatives to 0).
+    Returns None unless the source is MySQL and the length is a non-integer arg;
+    REPEAT->T-SQL (REPLICATE) and LEFT->Oracle (SUBSTR) are handled elsewhere.
+    """
+    if (
+        SOURCE_DIALECT.get() != "mysql"
+        or len(node.args) != 2
+        or _is_nonneg_int_literal(node.args[1])
+    ):
+        return None
+    s = _emit_expression(node.args[0], dialect)
+    n = _emit_expression(node.args[1], dialect)
+    if fn_name == "REPEAT" and dialect != "oracle":  # PG (T-SQL handled earlier)
+        return f"REPEAT({s}, CAST(ROUND({n}) AS INTEGER))"
+    if fn_name == "LEFT" and dialect == "tsql":
+        _n = f"ROUND({n}, 0)"
+        return f"LEFT({s}, CASE WHEN {_n} < 0 THEN 0 ELSE {_n} END)"
+    if fn_name == "LEFT" and dialect == "postgresql":
+        return (
+            f"LEFT({s}, CAST(CASE WHEN ROUND({n}) < 0 THEN 0 "
+            f"ELSE ROUND({n}) END AS INTEGER))"
+        )
+    return None
+
+
+def emit_stuff_insert(node: FunctionCall, up: str, dialect: str) -> str | None:
+    """4-arg STUFF/INSERT (delete ``len`` chars at ``start``, insert ``new``).
+
+    PG has OVERLAY, MySQL INSERT(); Oracle rebuilds with SUBSTR-concat; T-SQL
+    keeps STUFF. When the SOURCE is MySQL, INSERT() returns the ORIGINAL string
+    for an out-of-range position (0 or > length) — guard the bounds so the value
+    is preserved (T-SQL STUFF returns NULL there, PG OVERLAY errors, the Oracle
+    concat mis-splices). Returns None for a non-4-arg call.
+    """
+    if up != "STUFF" or len(node.args) != 4:
+        return None
+    s, start, length, new = (_emit_expression(a, dialect) for a in node.args)
+    core = {
+        "tsql": f"STUFF({s}, {start}, {length}, {new})",
+        "mysql": f"INSERT({s}, {start}, {length}, {new})",
+        "postgresql": f"OVERLAY({s} PLACING {new} FROM {start} FOR {length})",
+    }.get(
+        dialect,
+        f"(SUBSTR({s}, 1, {start} - 1) || {new} || SUBSTR({s}, {start} + {length}))",
+    )
+    if SOURCE_DIALECT.get() != "mysql":
+        return core
+    _lenfn = "LEN" if dialect == "tsql" else "LENGTH"
+    return f"CASE WHEN {start} < 1 OR {start} > {_lenfn}({s}) THEN {s} ELSE {core} END"
+
+
+def emit_oracle_replace_null_guard(
+    node: FunctionCall, fn_name: str, dialect: str
+) -> str | None:
+    """MySQL REPLACE with a nullable search/replace arg -> Oracle guard, or None.
+
+    A non-literal search/replace arg may be NULL at runtime; MySQL then returns
+    NULL, but Oracle ignores a NULL search/replace and returns the subject
+    (docs/rationale/strings-collation/replace-and-null.md). PG/T-SQL propagate
+    NULL natively; only Oracle needs a ``CASE WHEN <arg> IS NULL THEN NULL`` guard
+    (the subject is NULL-safe; a literal NULL is folded by the caller).
+    """
+    if (
+        fn_name != "REPLACE"
+        or SOURCE_DIALECT.get() != "mysql"
+        or dialect != "oracle"
+        or len(node.args) != 3
+    ):
+        return None
+    _nullable = [a for a in node.args[1:] if not isinstance(a, Literal)]
+    if not _nullable:
+        return None
+    _all = ", ".join(_emit_expression(a, dialect) for a in node.args)
+    _guard = " OR ".join(f"{_emit_expression(a, dialect)} IS NULL" for a in _nullable)
+    return f"CASE WHEN {_guard} THEN NULL ELSE REPLACE({_all}) END"
+
+
+def emit_compress_degrade(node: FunctionCall, fn_name: str, dialect: str) -> str | None:
+    """T-SQL COMPRESS/DECOMPRESS -> MySQL: a warned carrier, or None.
+
+    T-SQL uses the GZIP container; MySQL's same-named functions use raw zlib with
+    a 4-byte length prefix, so the bytes are not interchangeable. No faithful
+    mapping — keep MySQL's function but flag it (Oracle/PG have no COMPRESS and
+    degrade via the validity gate).
+    """
+    if (
+        fn_name not in ("COMPRESS", "DECOMPRESS")
+        or SOURCE_DIALECT.get() != "tsql"
+        or dialect != "mysql"
+        or len(node.args) != 1
+    ):
+        return None
+    _cx = _emit_expression(node.args[0], dialect)
+    return (
+        f"{fn_name}({_cx}) /* UNIQUE-1240: T-SQL {fn_name} uses the GZIP "
+        f"container; MySQL {fn_name} uses zlib with a length prefix — the "
+        "bytes differ and are not interchangeable (docs/03-unsupported.md) */"
+    )
+
+
+def emit_pg_charcode_to_mysql(
+    node: FunctionCall, fn_name: str, dialect: str
+) -> str | None:
+    """PG ascii()/to_hex() -> MySQL, matching the source value, or None.
+
+    PG ascii() returns the code POINT (ascii('é')=233) while MySQL ASCII returns
+    the first BYTE (195); read the code point via ORD over a UTF-32 conversion.
+    PG to_hex() is lowercase while MySQL HEX() is uppercase; fold to lowercase.
+    """
+    if (
+        SOURCE_DIALECT.get() != "postgresql"
+        or dialect != "mysql"
+        or len(node.args) != 1
+    ):
+        return None
+    if fn_name == "ASCII":
+        return f"ORD(CONVERT({_emit_expression(node.args[0], dialect)} USING utf32))"
+    if fn_name == "HEX":
+        return f"LOWER(HEX({_emit_expression(node.args[0], dialect)}))"
+    return None
+
+
+def emit_bool_predicate_agg(
+    node: FunctionCall, fn_name: str, dialect: str
+) -> str | None:
+    """A MySQL-source SUM/AVG/MIN/MAX/COUNT over a boolean predicate, or None.
+
+    MySQL aggregates a boolean predicate as 0/1; T-SQL/PG reject a predicate as an
+    aggregate value. Materialize it as a tri-state 0/1 CASE (NULL predicate stays
+    NULL, preserving COUNT/AVG semantics); AVG on T-SQL keeps its *1.0 decimal
+    promotion. Oracle 23c takes the boolean directly.
+    """
+    from unique.core.converter.emit import _is_predicate_node
+
+    if (
+        fn_name not in ("SUM", "AVG", "MIN", "MAX", "COUNT")
+        or SOURCE_DIALECT.get() != "mysql"
+        or dialect not in ("tsql", "postgresql")
+        or len(node.args) != 1
+        or not _is_predicate_node(node.args[0])
+    ):
+        return None
+    _bp = _emit_expression(node.args[0], dialect)
+    _bnum = f"CASE WHEN {_bp} THEN 1 WHEN NOT ({_bp}) THEN 0 END"
+    _bdist = "DISTINCT " if node.distinct else ""
+    if fn_name == "AVG" and dialect != "postgresql":  # T-SQL needs *1.0
+        return f"AVG({_bdist}({_bnum}) * 1.0)"
+    return f"{fn_name}({_bdist}{_bnum})"
 
 
 def _is_integer_operand(node: object) -> bool:

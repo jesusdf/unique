@@ -157,6 +157,20 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
             "absent": ["TRY_CAST", "GETDATE"],
         },
     },
+    # T-SQL CAST(int AS DATETIME) reads the number as days since 1900-01-01.
+    # Oracle/PG add the integer to a DATE; MySQL reads ``DATE + int`` as NUMERIC
+    # addition (19000102), so it must use ADDDATE day arithmetic instead.
+    "ts-cast-int-datetime": {
+        "oracle": {"present": ["DATE '1900-01-01' + 1"], "absent": ["CAST(1 AS DATE"]},
+        "postgresql": {
+            "present": ["CAST('1900-01-01' AS DATE) + 1"],
+            "absent": ["CAST(1 AS"],
+        },
+        "mysql": {
+            "present": ["ADDDATE(CAST('1900-01-01' AS DATE), 1)"],
+            "absent": ["CAST('1900-01-01' AS DATE) + 1"],
+        },
+    },
     "ts-cursor": {
         "oracle": {
             "present": ["CURSOR V_C IS", "WHILE V_C%FOUND LOOP"],
@@ -323,9 +337,12 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
         "mysql": {"degrade": True, "absent": ["TRANSLATE("]},
     },
     "ts-compress": {
-        # MySQL has native COMPRESS (identity) — omitted.
+        # MySQL has a COMPRESS function but with a DIFFERENT container (zlib +
+        # length prefix vs T-SQL's GZIP), so the bytes are not interchangeable —
+        # a warned degrade, not an identity passthrough.
         "oracle": {"degrade": True},
         "postgresql": {"degrade": True},
+        "mysql": {"degrade": True},
     },
     "ts-concat-ws": {
         # CONCAT_WS is native on PG/MySQL (identity) — only Oracle degrades.

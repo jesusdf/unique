@@ -1399,6 +1399,16 @@ def _emit_week_year_field(part: str, value: str, dialect: str) -> str | None:
 def _emit_function(node: FunctionCall, dialect: str) -> str:
     """Emit a function call."""
     fn_name = node.name.upper()
+    # Early source/target-scoped rewrites (helpers in emit_expr) that degrade or
+    # rebuild the whole call; each returns None when it does not apply.
+    for _early in (
+        emit_compress_degrade,
+        emit_pg_charcode_to_mysql,
+        emit_bool_predicate_agg,
+    ):
+        _early_sql = _early(node, fn_name, dialect)
+        if _early_sql is not None:
+            return _early_sql
     # Single-mechanism scalar mappings (regex match, scalar JSON extract, integer
     # division, MySQL DAYOFWEEK) each dispatch to a helper; grouped in one lookup
     # so the per-mechanism logic stays out of this function's branch budget.
@@ -1473,7 +1483,12 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         # with an explicit CAST for anything that is not a plain literal (those
         # are handled as ANSI date literals elsewhere).
         if fn_name == "TS_OR_DS_TO_DATE" and not isinstance(inner, Literal):
-            return f"CAST({_emit_expression(inner, dialect)} AS DATE)"
+            _cast = f"CAST({_emit_expression(inner, dialect)} AS DATE)"
+            # Oracle's DATE type keeps the time, so a plain CAST leaves the clock
+            # on; TRUNC drops it to match MySQL/T-SQL DATE() (date part only).
+            if dialect == "oracle":
+                return f"TRUNC({_cast})"
+            return _cast
         return _emit_expression(inner, dialect)
 
     # GREATEST/LEAST compare strings by collation: PostgreSQL/Oracle are
@@ -1748,9 +1763,8 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         )
 
     # MySQL REPLACE propagates NULL — REPLACE(str, NULL, x) is NULL — while
-    # Oracle's REPLACE ignores a NULL search/replace and returns the subject
-    # unchanged. With a literal NULL argument the MySQL result is NULL; fold it
-    # (PG already propagates; MySQL target keeps native REPLACE).
+    # Oracle ignores a NULL search/replace. With a LITERAL NULL argument the
+    # MySQL result is NULL; fold it (a non-literal NULL is guarded below).
     if (
         fn_name == "REPLACE"
         and SOURCE_DIALECT.get() == "mysql"
@@ -1758,6 +1772,10 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         and any(isinstance(a, Literal) and a.value is None for a in node.args)
     ):
         return "NULL"
+
+    _rng = emit_oracle_replace_null_guard(node, fn_name, dialect)
+    if _rng is not None:
+        return _rng
 
     # MySQL/Oracle/PostgreSQL REPLACE matches case-sensitively; T-SQL uses the
     # subject's collation (case-insensitive by default), so REPLACE('AbC','a','X')
@@ -1868,31 +1886,9 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             _rp_n = f"ROUND({_rp_n}, 0)"
             _rp_n = f"CASE WHEN {_rp_n} < 0 THEN 0 ELSE {_rp_n} END"
         return f"REPLICATE({_rp_s}, {_rp_n})"
-    # MySQL rounds a float LEFT length (LEFT('hello', 2.9) = 'hel') and returns
-    # '' for a negative one; T-SQL LEFT truncates the float and errors on a
-    # negative. Round (with the scale T-SQL needs) and clamp.
-    if (
-        fn_name == "LEFT"
-        and SOURCE_DIALECT.get() == "mysql"
-        and dialect == "tsql"
-        and len(node.args) == 2
-        and not _is_nonneg_int_literal(node.args[1])
-    ):
-        _lf_s = _emit_expression(node.args[0], dialect)
-        _lf_n = f"ROUND({_emit_expression(node.args[1], dialect)}, 0)"
-        return f"LEFT({_lf_s}, CASE WHEN {_lf_n} < 0 THEN 0 ELSE {_lf_n} END)"
-    # MySQL LEFT with a negative length returns '' ; PostgreSQL reads a negative
-    # length as "all but the last |n|". Clamp to 0 to preserve the empty string.
-    if (
-        fn_name == "LEFT"
-        and SOURCE_DIALECT.get() == "mysql"
-        and dialect == "postgresql"
-        and len(node.args) == 2
-        and not _is_nonneg_literal(node.args[1])
-    ):
-        _lf_s = _emit_expression(node.args[0], dialect)
-        _lf_n = _emit_expression(node.args[1], dialect)
-        return f"LEFT({_lf_s}, CASE WHEN {_lf_n} < 0 THEN 0 ELSE {_lf_n} END)"
+    _rsl = emit_mysql_rounded_str_len(node, fn_name, dialect)
+    if _rsl is not None:
+        return _rsl
     # The reverse: PostgreSQL LEFT with a negative length returns "all but the
     # last |n|" (LEFT('abc', -1) = 'ab'); MySQL returns '' for a negative
     # length, and T-SQL/Oracle error/NULL on it. Reproduce PostgreSQL's
@@ -2613,17 +2609,13 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if dialect == "oracle":
             return f"DECODE({', '.join(parts)})"
         subject, whens, i = parts[0], [], 1
-        # Oracle DECODE coerces every result (and the default) to the FIRST
-        # result's datatype. PostgreSQL instead resolves the CASE to a single
-        # common type and rejects a text branch mixed with a numeric ELSE
-        # (DECODE(1,1,'a',...,99) -> 'invalid input syntax for type integer').
-        # When the first result is a string literal, cast numeric-literal
-        # result/default branches to text to mirror Oracle's coercion.
-        # The target's coercion type for a first-result-is-string DECODE (only
-        # PostgreSQL is strict enough about CASE result types to need it); a
-        # dict so other strict dialects can join without a new string-compare.
+        # Oracle DECODE coerces every result to the FIRST result's type. When
+        # that is a string, PG rejects a numeric ELSE mixed in ('invalid input
+        # syntax for type integer') and T-SQL tries to convert the text branch TO
+        # int (integer has higher precedence) — both need the numeric branches
+        # cast to a character type to mirror Oracle's coercion.
         _first_result = node.args[2] if len(node.args) >= 3 else None
-        _coerce_type = {"postgresql": "TEXT"}.get(dialect)
+        _coerce_type = {"postgresql": "TEXT", "tsql": "VARCHAR(4000)"}.get(dialect)
         _coerce_text = (
             _coerce_type is not None
             and isinstance(_first_result, Literal)
@@ -3204,6 +3196,9 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         # string, n=0 returns '' which Oracle treats as NULL either way).
         s = _emit_expression(node.args[0], dialect)
         n = _emit_expression(node.args[1], dialect)
+        # MySQL rounds a float length; Oracle SUBSTR truncates, so round to match.
+        if SOURCE_DIALECT.get() == "mysql" and not _is_nonneg_int_literal(node.args[1]):
+            n = f"ROUND({n})"
         return f"SUBSTR({s}, 1, {n})"
     if up == "INITCAP" and node.args and dialect in ("oracle", "postgresql"):
         # Oracle and PG INITCAP take a single argument; sqlglot appends a
@@ -3436,37 +3431,14 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return (
                 f"RPAD({s}, LENGTH({s}) * {n}, {s})"  # exact, incl. n=0 -> '' (NULL).
             )
+        # MySQL rounds a float count; Oracle's RPAD length truncates.
+        if SOURCE_DIALECT.get() == "mysql":
+            n = f"ROUND({n})"
         # A non-literal count may be negative at runtime; clamp so it yields ''.
         return f"RPAD({s}, GREATEST(LENGTH({s}) * {n}, 0), {s})"
-    # MySQL INSERT() returns the original string when the position is 0 or past
-    # the string's end; T-SQL STUFF returns NULL there. Guard the bounds so the
-    # MySQL value is preserved (the in-bounds case is identical).
-    if (
-        up == "STUFF"
-        and len(node.args) == 4
-        and dialect == "tsql"
-        and SOURCE_DIALECT.get() == "mysql"
-    ):
-        _st_s, _st_pos, _st_len, _st_new = (
-            _emit_expression(a, dialect) for a in node.args
-        )
-        _stuff = f"STUFF({_st_s}, {_st_pos}, {_st_len}, {_st_new})"
-        return (
-            f"CASE WHEN {_st_pos} < 1 OR {_st_pos} > LEN({_st_s}) THEN {_st_s} ELSE "
-            f"{_stuff} END"
-        )
-    # STUFF(s, start, len, new): delete `len` chars at `start`, insert `new`.
-    # PG has OVERLAY, MySQL has INSERT(); Oracle has neither, so SUBSTR-concat.
-    # T-SQL keeps STUFF natively.
-    if up == "STUFF" and len(node.args) == 4 and dialect != "tsql":
-        s, start, length, new = (_emit_expression(a, dialect) for a in node.args)
-        if dialect == "mysql":
-            return f"INSERT({s}, {start}, {length}, {new})"
-        if dialect == "postgresql":
-            return f"OVERLAY({s} PLACING {new} FROM {start} FOR {length})"
-        return (
-            f"(SUBSTR({s}, 1, {start} - 1) || {new} || SUBSTR({s}, {start} + {length}))"
-        )
+    _stuff_sql = emit_stuff_insert(node, up, dialect)
+    if _stuff_sql is not None:
+        return _stuff_sql
     if dialect == "postgresql" and up == "MEDIAN" and len(node.args) == 1:
         x = _emit_expression(node.args[0], dialect)
         return f"PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY {x})"
@@ -3641,5 +3613,10 @@ from unique.core.converter.emit_expr import (  # noqa: E402
     _is_date_only_literal,
     _is_integer_operand,
     _is_nonneg_int_literal,
-    _is_nonneg_literal,
+    emit_bool_predicate_agg,
+    emit_compress_degrade,
+    emit_mysql_rounded_str_len,
+    emit_oracle_replace_null_guard,
+    emit_pg_charcode_to_mysql,
+    emit_stuff_insert,
 )

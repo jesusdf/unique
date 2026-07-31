@@ -2,7 +2,7 @@
 
 > **Generated — do not edit by hand.** Produced by `python scripts/generate_reference_docs.py` from the `UNIQUE-NNNN` registry (`src/unique/core/diagnostics.py`) and the rationale side-table (`src/unique/core/rationales.py`). The CI freshness gate (`python scripts/generate_reference_docs.py --check`) fails the build if this file drifts from the source data.
 
-One entry per stable diagnostic code the transpiler can emit. `code` is the grep/suppress token (`-- UNIQUE-1234: …`); every code is anchored as `warnings.md#unique-1234`. A code with a rationale entry (187 of 238) renders as a recipe: **Problem** (the triggering construct), **Solution (pointer)** (what Unique does about it — a pointer, not a worked example: the registry carries no SQL sample), **Discussion** (the engine-level reason no direct mapping exists) and **See Also** (the corpus case or test that proves it). The remaining codes render in a compact table marked `_(rationale pending)_` until a rationale is added (the coverage ratchet in `tests/unit/core/test_diagnostics.py` drives that count down).
+One entry per stable diagnostic code the transpiler can emit. `code` is the grep/suppress token (`-- UNIQUE-1234: …`); every code is anchored as `warnings.md#unique-1234`. A code with a rationale entry (188 of 239) renders as a recipe: **Problem** (the triggering construct), **Solution (pointer)** (what Unique does about it — a pointer, not a worked example: the registry carries no SQL sample), **Discussion** (the engine-level reason no direct mapping exists) and **See Also** (the corpus case or test that proves it). The remaining codes render in a compact table marked `_(rationale pending)_` until a rationale is added (the coverage ratchet in `tests/unit/core/test_diagnostics.py` drives that count down).
 
 ## Diagnostics with a rationale
 
@@ -2250,6 +2250,18 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **See Also.** [`TestGenericHintDroppedWithLighterWarning::test_maxdop_and_recompile_dropped`](../../tests/integration/test_tsql_maxrecursion_option.py)
 
+### <a id="unique-1240"></a>`UNIQUE-1240` — COMPRESS() / DECOMPRESS() (T-SQL → MySQL)
+
+**Category:** `expression` · **Message:** T-SQL COMPRESS/DECOMPRESS use the GZIP container; MySQL's same-named functions use zlib with a length prefix — the bytes differ and are not interchangeable (docs/03-unsupported.md
+
+**Problem.** COMPRESS() / DECOMPRESS() (T-SQL → MySQL)
+
+**Solution (pointer).** Warned limit — the transpiled COMPRESS runs on MySQL but returns different bytes than SQL Server's GZIP output; DECOMPRESS on the matching engine still round-trips.
+
+**Discussion.** Both engines have COMPRESS/DECOMPRESS functions, but with different on-disk containers: SQL Server uses the GZIP format (RFC 1952) while MySQL uses raw zlib (RFC 1950) prefixed with a 4-byte little-endian uncompressed-length header. The compressed bytes are therefore not interchangeable — a blob produced by one engine will not DECOMPRESS on the other — and there is no built-in cross-container conversion, so the MySQL function is kept but the value is flagged as non-equal.
+
+**See Also.** [`ts-compress`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
+
 ## Diagnostics without a rationale yet
 
 | Code | Category | Message template | Rationale |
@@ -2306,4 +2318,4 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 | <a id="unique-1230"></a>`UNIQUE-1230` | procedural | procedural parse note; the specific reason is carried at runtime | _(rationale pending)_ |
 | <a id="unique-1232"></a>`UNIQUE-1232` | procedural | procedural transpilation failed (internal error); the routine is preserved; the error is carried at<br>runtime | _(rationale pending)_ |
 
-238 codes across 6 categories (187 with a rationale).
+239 codes across 6 categories (188 with a rationale).

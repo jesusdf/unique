@@ -1176,4 +1176,10 @@ DIAGNOSTICS: dict[str, Diagnostic] = {
         "no portable equivalent — a pure optimizer directive with no effect on "
         "the result set; the hint is dropped (see docs/03-unsupported.md)",
     ),
+    "UNIQUE-1240": _D(
+        "expression",
+        "T-SQL COMPRESS/DECOMPRESS use the GZIP container; MySQL's same-named "
+        "functions use zlib with a length prefix — the bytes differ and are not "
+        "interchangeable (docs/03-unsupported.md",
+    ),
 }

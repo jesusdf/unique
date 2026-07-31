@@ -112,105 +112,57 @@ LEDGER: tuple[Excluded, ...] = (
         sql="SELECT USER AS r FROM DUAL",
     ),
     Excluded(
-        id="my-agg-boolean",
-        tag="defect-pending-fix",
-        reason="SUM/AVG over boolean predicate unsupported/precision on targets",
-        sql="SELECT SUM(x>1), COUNT(x>1), AVG(x>1), MAX(x>1) FROM (SELECT 1 x UNION ALL SELECT 2 UNION ALL SELECT 3) t",
-    ),
-    Excluded(
-        id="my-cast-binary2",
-        tag="defect-pending-fix",
-        reason="fixed-width BINARY padding not reproduced on T-SQL",
-        sql="SELECT CONVERT('abc',BINARY), CONVERT('abc' USING latin1), CAST('abc' AS BINARY)",
-    ),
-    Excluded(
-        id="my-insert-oob",
-        tag="defect-pending-fix",
-        reason="out-of-bounds INSERT() emulation not guarded",
-        sql="SELECT INSERT('abc', 10, 1, 'X') AS r",
-    ),
-    Excluded(
-        id="my-insert-zeropos",
-        tag="defect-pending-fix",
-        reason="INSERT() at position 0 / negative substring length",
-        sql="SELECT INSERT('abcdef', 0, 2, 'XY') AS r",
-    ),
-    Excluded(
-        id="my-left-float",
-        tag="defect-pending-fix",
-        reason="float length arg: MySQL rounds, emulation truncates / left(unknown,numeric)",
-        sql="SELECT LEFT('hello', 2.9) AS r",
-    ),
-    Excluded(
-        id="my-repeat-float",
-        tag="defect-pending-fix",
-        reason="float count arg: MySQL rounds, emulation truncates",
-        sql="SELECT REPEAT('ab', 2.9) AS r",
-    ),
-    Excluded(
-        id="my-ts-to-date",
-        tag="defect-pending-fix",
-        reason="Oracle DATE keeps the time component (DATE() should drop it)",
-        sql="SELECT DATE(TIMESTAMP '2020-01-01 14:30') AS r",
-    ),
-    Excluded(
-        id="ora-frac-seconds",
-        tag="defect-pending-fix",
-        reason="EXTRACT(SECOND) fractional vs integer DATEPART on targets",
-        sql="SELECT TO_TIMESTAMP('2020-01-01 10:20:30.123456','YYYY-MM-DD HH24:MI:SS.FF6'), EXTRACT(SECOND FROM TIMESTAMP '2020-01-01 10:20:30.123456') FROM DUAL",
-    ),
-    Excluded(
         id="ora-interval-out",
-        tag="defect-pending-fix",
-        reason="year-month interval flattened to a day count on PG",
+        tag="documented-inherent",
+        reason=(
+            "the transpiler output is FAITHFUL — NUMTOYMINTERVAL(14,'MONTH') -> PG "
+            "INTERVAL '14 MONTH' is a true 14-month year-month interval, equal to "
+            "Oracle's — but the FE harness cannot compare it: oracledb returns an "
+            "IntervalYM (comparator 'interval_ym:14') while psycopg flattens the PG "
+            "interval to a timedelta day count ('interval_dt:...'), and the "
+            "comparator deliberately never equates a year-month interval to a fixed "
+            "day count (14 months has no fixed day count). Driver-representation "
+            "limit, not a transpile defect (the DS leg NUMTODSINTERVAL matches)"
+        ),
         sql="SELECT NUMTOYMINTERVAL(14,'MONTH'), NUMTODSINTERVAL(90000,'SECOND') FROM DUAL",
     ),
     Excluded(
         id="ora-lpad-tochar",
-        tag="defect-pending-fix",
-        reason="TO_CHAR '#' overflow mask fidelity",
+        tag="documented-inherent",
+        reason=(
+            "Oracle's number-format model has a 'B' element (blank integer part "
+            "when zero) and a '#' OVERFLOW marker returned when a value does not fit "
+            "the mask — TO_CHAR(5,'FMB')='#' (live-checked). PG's to_char has "
+            "neither: to_char(5,'FMB')='' (live-checked), so LPAD gives '00000000' "
+            "vs Oracle's '0000000#'. No PG equivalent for the '#'/'B' semantics — "
+            "inherent format-model divergence"
+        ),
         sql="SELECT LPAD(TO_CHAR(5,'FMB'), 8, '0') FROM DUAL",
     ),
     Excluded(
         id="ora-numtointerval",
-        tag="defect-pending-fix",
-        reason="year-month interval flattened to a day count on PG",
+        tag="documented-inherent",
+        reason=(
+            "same as ora-interval-out: NUMTOYMINTERVAL(18,'MONTH') -> PG INTERVAL "
+            "'18 MONTH' is faithful, but the year-month leg is not comparable across "
+            "the oracledb IntervalYM vs psycopg timedelta-flattened representations "
+            "(the comparator never equates a YM interval to a fixed day count). The "
+            "DS leg NUMTODSINTERVAL(1.5,'DAY') matches"
+        ),
         sql="SELECT NUMTODSINTERVAL(1.5,'DAY'), NUMTOYMINTERVAL(18,'MONTH') FROM DUAL",
     ),
     Excluded(
-        id="pg-baseconv",
-        tag="defect-pending-fix",
-        reason="base-conversion argument mapping wrong on MySQL",
-        sql="SELECT 255::bit(8)::text,to_hex(255),255::text",
-    ),
-    Excluded(
-        id="pg-chr-ascii-unicode",
-        tag="defect-pending-fix",
-        reason="multibyte CHR/ASCII not reproduced on MySQL",
-        sql="SELECT chr(233), ascii('é')",
-    ),
-    Excluded(
-        id="reda-ora-decode-mixed-type",
-        tag="defect-pending-fix",
-        reason="DECODE mixed-type default lowers to a rejected int CAST",
-        sql="SELECT DECODE(1, 1, 'a', 2, 'b', 99) AS r FROM DUAL",
-    ),
-    Excluded(
-        id="ts-cast-int-datetime",
-        tag="defect-pending-fix",
-        reason="CAST(int AS DATETIME): date vs integer on MySQL",
-        sql="SELECT CAST(1 AS DATETIME) AS r",
-    ),
-    Excluded(
-        id="ts-compress",
-        tag="defect-pending-fix",
-        reason="COMPRESS GZIP vs ZLIB container on MySQL",
-        sql="SELECT COMPRESS('data') AS r",
-    ),
-    Excluded(
         id="ts-frac-seconds",
-        tag="defect-pending-fix",
-        reason="fractional-second rounding .123456 vs .123457",
+        tag="documented-inherent",
+        reason=(
+            "inherent sub-second precision-model divergence: T-SQL DATETIME2 default "
+            "scale is 7 digits (100ns) and the value is stored then the Python driver "
+            "TRUNCATES the 7th digit to microseconds (.1234567 -> .123456); PG "
+            "TIMESTAMP / MySQL DATETIME(6) are microsecond (6 digits) and ROUND the "
+            "input literal (.1234567 -> .123457). The 7th digit is unrepresentable "
+            "off T-SQL and truncate-vs-round is an engine choice, not reproducible "
+            "for runtime column values — inherent (the DATETIME .123 leg matches)"
+        ),
         sql="SELECT CAST('2020-01-01 10:20:30.1234567' AS DATETIME2), CAST('2020-01-01 10:20:30.123' AS DATETIME)",
     ),
 )
