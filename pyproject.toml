@@ -126,6 +126,9 @@ max-statements = 679  # _emit_function
 # re-exports shared state/helpers via ``from ._base import *``; F403/F405 are the
 # expected cost of that pattern (mypy still resolves the names via __all__).
 "src/unique/core/converter/*.py" = ["F403", "F405"]
+# The FE exclusions ledger stores each excluded case's exact executable SQL on
+# one line (it is the match key) — a data file, so long SQL literals are fine.
+"tests/helpers/challenge_fe_exclusions.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.13"
