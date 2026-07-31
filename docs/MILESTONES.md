@@ -10,6 +10,48 @@ Newest first.
 
 ---
 
+## Backlog liquidation — Q1, D1, A10 (2026-07-31, agentic team mode)
+
+The full pending backlog worked in one architect-directed session
+(detail: [`docs/DONE.md`](DONE.md) §50–§51; A10 report
+[`audit/2026-07-31-a10-fe-coverage.md`](../audit/2026-07-31-a10-fe-coverage.md)).
+
+**Q1** (oracle/mysql-source procedural degrades): all six triaged briefs
+closed — B34/B35 (comment-trivia gates, CASE-balanced splitter), B36+B36b
+(builtin/type mappings incl. type-aware RAWTOHEX and the honest SHA1 degrade
+under new `UNIQUE-1235`), B37+B37b (the spelling-general implicit-rowcount
+hoist), B38 (leading-companion-DDL peel; proc_2/7/8/9 execute on real PG),
+B39 (warning codes inherit their carrier's specific code). Fresh baseline
+moved from 28/32 + 21/31 NEW-degraded routines to the two standing fronts
+only (embedded-DML-as-text, dynamic SQL). Same-day findings fixed: **B41**
+(mysql SIGNAL/RESIGNAL into the raise IR — was invalid output with the
+message lost), **B45** (Oracle native-BOOLEAN keeps TRUE/FALSE — was live
+PLS-00382), **B46** (value-RETURN no longer swallows a same-line statement).
+
+**D1** (rationale docs-gap wave): 10 worker waves over the 18-cluster sweep
+— a NEW `booleans.md` page, NEW Triggers / Loop-and-cursor / Error-handling /
+signature-synthesis sections in `procedural.md`, ddl/dml/strings/aggregates
+extensions, the ADD_MONTHS doc CORRECTION, and the batch-6b full-recall pass
+(261/261 classes; 16 new gaps, 4 HIGH documented same-day). Every entry
+example is real transpiler output; live probes surfaced B45/B47/B48 and two
+A10-T4 additions along the way.
+
+**A10** (functional-equivalence coverage): suspicion confirmed and closed at
+the harness level — 691/960 challenge cases FE-comparable but only 21
+enrolled; now **496 auto-enrolled** in the nightly result-diff behind a
+43-case named-exclusions ledger with a monotonic-down ratchet, comparator
+canonicalization (datetime/interval/JSON), and warned-pairs excluded at
+transpile time. The measurement sweep surfaced ~27 unwarned real-defect
+pairs (ledgered `defect-pending-fix`, backlog A10-T4). The nightly
+`Challenge live` job, red since the prior campaign's final cycle landed five
+table-reading `[class=func]` cases without setup, went green again (NF-1:
+self-contained scenarios + curated FuncCase probes; 83→0 failing params).
+
+Remaining from the session: the small-findings backlog (B40/B42/B43/B44,
+B47 maintainer decision, B48), D1b (9 MED + 3 LOW recall rows), A10-T2
+(precision policy — maintainer), A10-T4 (defect triage), A10-P (procedures
+live-compare).
+
 ## Post-campaign backlog executed — B29/B30/B31/B32×3/T8/F1/F2 (2026-07-30)
 
 The approved backlog worked in agentic team mode, closing the loop the
