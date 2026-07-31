@@ -118,12 +118,6 @@ LEDGER: tuple[Excluded, ...] = (
         sql="SELECT SUM(x>1), COUNT(x>1), AVG(x>1), MAX(x>1) FROM (SELECT 1 x UNION ALL SELECT 2 UNION ALL SELECT 3) t",
     ),
     Excluded(
-        id="my-cast-binary2",
-        tag="defect-pending-fix",
-        reason="fixed-width BINARY padding not reproduced on T-SQL",
-        sql="SELECT CONVERT('abc',BINARY), CONVERT('abc' USING latin1), CAST('abc' AS BINARY)",
-    ),
-    Excluded(
         id="ora-frac-seconds",
         tag="defect-pending-fix",
         reason="EXTRACT(SECOND) fractional vs integer DATEPART on targets",

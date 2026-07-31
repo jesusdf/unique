@@ -61,7 +61,13 @@ from tests.helpers.corpus_diff import is_comparable
 # int (T-SQL precedence) and errored; the numeric branches now cast to
 # VARCHAR(4000) as PG already did to TEXT (reda-ora-decode-mixed-type). 1
 # removed: 10 defect-pending-fix, 5 documented-inherent, 2 session-dependent = 17.
-LEDGER_SIZE_FLOOR = 17
+#
+# 2026-07-31 (brief T4-B cont.): MySQL lengthless CAST(x AS BINARY) is
+# variable-width, but T-SQL's bare BINARY is fixed BINARY(30) and pads with
+# 0x00; mapped the source-MySQL lengthless form to VARBINARY (my-cast-binary2;
+# BINARY(n) keeps its width, Oracle stays a documented warned degrade). 1
+# removed: 9 defect-pending-fix, 5 documented-inherent, 2 session-dependent = 16.
+LEDGER_SIZE_FLOOR = 16
 
 
 def _eligible_cases() -> list[CorpusEntry]:

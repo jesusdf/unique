@@ -582,6 +582,17 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             # no inline-cast spelling elsewhere (wave 163).
             dtype = re.sub(r"(?i)\s+CHARACTER\s+SET\s+\S+$", "", dtype)
         mapped = _CAST_TYPE_MAP.get(dialect, {}).get(dtype.upper())
+        # MySQL CAST(x AS BINARY) with no length is a VARIABLE-length binary
+        # (only BINARY(n) pads to n); T-SQL's bare BINARY is fixed BINARY(30) and
+        # right-pads the value with 0x00, changing it. Map the lengthless MySQL
+        # form to VARBINARY so no padding is added (BINARY(n) keeps its width).
+        if (
+            dialect == "tsql"
+            and SOURCE_DIALECT.get() == "mysql"
+            and dtype.upper() == "BINARY"
+            and not node.target_type.params
+        ):
+            dtype, mapped = "VARBINARY", None
         if (
             mapped
             and dialect == "oracle"

@@ -163,6 +163,17 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
         "oracle": {"present": ["uq_h", "WHERE x > 0"], "absent": ["HAVING"]},
         "postgresql": {"present": ["uq_h", "WHERE x > 0"], "absent": ["HAVING"]},
     },
+    # MySQL CAST(x AS BINARY) with no length is variable-width; T-SQL bare BINARY
+    # is fixed BINARY(30) and pads with 0x00, so it must map to VARBINARY (Oracle
+    # has no BINARY cast -> documented warned degrade; PG BYTEA is exact).
+    "my-cast-binary2": {
+        "tsql": {
+            "present": ["CAST('abc' AS VARBINARY)"],
+            "absent": ["CAST('abc' AS BINARY)"],
+        },
+        "oracle": {"degrade": True},
+        "postgresql": {"present": ["CAST('abc' AS BYTEA)"], "absent": ["BINARY"]},
+    },
     "my-cast-int": {
         "tsql": {
             "present": ["CAST(ROUND(2.7, 0) AS BIGINT)"],
@@ -563,7 +574,10 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
     # (also avoids PG OVERLAY's "negative substring length" error at FROM 0).
     "my-insert-zeropos": {
         "tsql": {
-            "present": ["0 > LEN('abcdef') THEN 'abcdef'", "STUFF('abcdef', 0, 2, 'XY')"],
+            "present": [
+                "0 > LEN('abcdef') THEN 'abcdef'",
+                "STUFF('abcdef', 0, 2, 'XY')",
+            ],
             "absent": ["INSERT("],
         },
         "oracle": {
@@ -718,7 +732,9 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
             "absent": ["SUBSTR('hello', 1, 2.9)"],
         },
         "postgresql": {
-            "present": ["CAST(CASE WHEN ROUND(2.9) < 0 THEN 0 ELSE ROUND(2.9) END AS INTEGER)"],
+            "present": [
+                "CAST(CASE WHEN ROUND(2.9) < 0 THEN 0 ELSE ROUND(2.9) END AS INTEGER)"
+            ],
             "absent": ["LEFT('hello', 2.9)"],
         },
     },
