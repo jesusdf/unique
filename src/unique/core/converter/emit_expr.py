@@ -1202,6 +1202,56 @@ def emit_pg_charcode_to_mysql(
     return None
 
 
+def emit_pg_to_hex_to_tsql_oracle(
+    node: FunctionCall, fn_name: str, dialect: str
+) -> str | None:
+    """PG to_hex(x) -> T-SQL/Oracle, matching the unpadded lowercase value, or
+    None (B54).
+
+    Neither engine has a matching built-in — left as bare ``HEX(x)`` (the
+    generic sqlglot name) it was an unwarned runtime error (T-SQL resolves it
+    to a phantom ``dbo.HEX``, Oracle to an undefined function). PG's to_hex()
+    has NO zero-padding, so both rebuilds get the fixed-width hex string from
+    the engine's own primitive and strip the padding back out:
+
+    - T-SQL: CAST through VARBINARY(8) (matching PG's bigint overload) then
+      CONVERT(..., 2) for the fixed-width hex text; the CASE+PATINDEX finds
+      the first non-'0' character (or reports "all zero" via PATINDEX's
+      not-found 0) since T-SQL has no built-in leading-zero trim.
+    - Oracle: TO_CHAR(x, 'XXXXXXXXXXXXXXXX') is already the fixed-width hex
+      text (16 X's = 64 bits); TRIM removes only its leading space, and
+      LOWER folds the case to match PG.
+
+    Live-verified against PostgreSQL 16 / SQL Server 2022 / Oracle 23 for 0,
+    255, the 32-bit boundary (4294967295/4294967296) and the max bigint
+    (2**63-1) — byte-for-byte equal to PG's to_hex(x::bigint) in every case.
+    """
+    if fn_name != "HEX" or SOURCE_DIALECT.get() != "postgresql" or len(node.args) != 1:
+        return None
+    builder = _PG_TO_HEX_BUILDERS.get(dialect)
+    if builder is None:
+        return None
+    return builder(_emit_expression(node.args[0], dialect))
+
+
+def _to_hex_oracle(arg: str) -> str:
+    return f"LOWER(TRIM(TO_CHAR({arg}, 'XXXXXXXXXXXXXXXX')))"
+
+
+def _to_hex_tsql(arg: str) -> str:
+    h = f"CONVERT(VARCHAR(16), CAST(CAST({arg} AS BIGINT) AS VARBINARY(8)), 2)"
+    return (
+        "LOWER(CASE WHEN PATINDEX('%[^0]%', "
+        f"{h}) = 0 THEN '0' ELSE SUBSTRING({h}, PATINDEX('%[^0]%', {h}), 16) END)"
+    )
+
+
+_PG_TO_HEX_BUILDERS: dict[str, Callable[[str], str]] = {
+    "oracle": _to_hex_oracle,
+    "tsql": _to_hex_tsql,
+}
+
+
 def emit_bool_predicate_agg(
     node: FunctionCall, fn_name: str, dialect: str
 ) -> str | None:

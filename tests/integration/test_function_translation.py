@@ -503,3 +503,57 @@ class TestOracleHashArgumentTypeAwareness:
         # the positive RAW classification is not yet reachable.
         out = _ir("oracle", "postgresql", "RAWTOHEX(v_raw_var)")
         assert out is None or "CONVERT_TO" not in out.upper()
+
+
+class TestPgToHexToTsqlOracle:
+    """B54: standalone PostgreSQL ``to_hex(x)`` reached T-SQL/Oracle as a bare
+    ``HEX(x)`` call — neither engine has that built-in (T-SQL resolves it to
+    a phantom ``dbo.HEX``, Oracle to an undefined function), a runtime error
+    with zero warning. Faithfully rebuilt instead of degraded: live-verified
+    against PostgreSQL 16 / SQL Server 2022 / Oracle 23 for 0, small values
+    (255), values crossing the 32-bit boundary (4294967295/4294967296), and
+    the max bigint (2**63-1) — every value byte-for-byte equal to PG's
+    ``to_hex(x::bigint)`` (PG's function has no zero-padding, unlike a plain
+    hex CONVERT/TO_CHAR, which both targets' expressions strip back out).
+    """
+
+    def test_tsql_translates(self) -> None:
+        out = _t("SELECT to_hex(x) FROM t", "tsql", source="postgresql")
+        assert_translated(
+            out,
+            "tsql",
+            present=(
+                "CAST(CAST(x AS BIGINT) AS VARBINARY(8))",
+                "PATINDEX",
+            ),
+            absent=("HEX(", "TO_HEX"),
+        )
+
+    def test_oracle_translates(self) -> None:
+        out = _t("SELECT to_hex(x) FROM t", "oracle", source="postgresql")
+        assert_translated(
+            out,
+            "oracle",
+            present=("LOWER(TRIM(TO_CHAR(x, 'XXXXXXXXXXXXXXXX')))",),
+            absent=("HEX(", "TO_HEX"),
+        )
+
+    def test_mysql_target_unaffected(self) -> None:
+        # Pre-existing mapping (emit_pg_charcode_to_mysql) must not regress.
+        out = _t("SELECT to_hex(x) FROM t", "mysql", source="postgresql")
+        assert "LOWER(HEX(x))" in out
+
+    def test_hex_from_other_sources_is_not_reinterpreted(self) -> None:
+        # The mapping is keyed on SOURCE_DIALECT == postgresql; a genuine
+        # MySQL HEX() reaching T-SQL/Oracle is a different (untranslated
+        # builtin) problem and must not be silently rewritten as if it were
+        # PG's to_hex.
+        out = _t("SELECT HEX(x) FROM t", "tsql", source="mysql")
+        assert "PATINDEX" not in out
+
+    def test_procedural_function_body_translates(self) -> None:
+        # Same mechanism, procedural pipeline (dual-pipeline symmetry rule).
+        out = _ir("postgresql", "oracle", "to_hex(x)")
+        assert out is not None
+        assert "LOWER(TRIM(TO_CHAR(x, 'XXXXXXXXXXXXXXXX')))" in out
+        assert "TO_HEX" not in out.upper()

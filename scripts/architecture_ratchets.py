@@ -53,8 +53,11 @@ FLOORS: dict[str, int] = {
     # ``!= "<dialect>"``, and tuple membership (``in ("tsql",)`` /
     # ``in ("a", "b")``) where every element of the tuple is a dialect name
     # (re-baselined 2026-07-31 — the original regex only saw ``==`` and was
-    # blind to the other two equally-real forms).
-    "shared_dialect_compares": 923,
+    # blind to the other two equally-real forms). +1 same day (B54): the new
+    # to_hex(x) PG->tsql/oracle mapping needs exactly one source-dialect
+    # guard (``SOURCE_DIALECT.get() != "postgresql"``) to gate a genuine new
+    # per-engine correctness fix — not a re-grown cascade.
+    "shared_dialect_compares": 924,
     # Functions over cyclomatic complexity 10 across src/ (F4/F5).
     "c901_offenders": 114,
 }
