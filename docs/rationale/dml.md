@@ -1,9 +1,9 @@
 # DML: PIVOT/UNPIVOT, MERGE, DELETE, row values
 
 `PIVOT`/`UNPIVOT` relation rewrites, `MERGE`/upsert lowering, multi-table
-`DELETE`, row caps, row-value comparisons, `OUTPUT`/`RETURNING`, and
-set-operation `ORDER BY`. See [README.md](README.md) for the entry format and
-sourcing rules.
+`DELETE`, row caps, row-value comparisons, `OUTPUT`/`RETURNING`,
+set-operation `ORDER BY`, and Oracle's join-mark/`ROWNUM`/`DUAL` idioms as a
+*source*. See [README.md](README.md) for the entry format and sourcing rules.
 
 ## `PIVOT` / `UNPIVOT`
 
@@ -393,3 +393,139 @@ defect, not an approved limit).
 > result unordered with no warning.
 
 **See Also.** [`reda-ts-setop-orderby`](../../tests/fixtures/challenge/challenge_sqlserver.sql).
+
+## Oracle join syntax and row limits (source direction)
+
+The entries below run **from** Oracle. The rest of this page (and
+[§7](../03-unsupported.md) "To Oracle") documents the opposite direction —
+a T-SQL/PostgreSQL comma-join or parenthesized join tree flattened *onto*
+Oracle — which is a different mechanism (Oracle's `FROM` grammar rejects a
+parenthesized join tree, ORA-00907); do not confuse the two.
+
+### Oracle `(+)` outer-join mark → explicit `LEFT JOIN … ON`; comma joins → `CROSS JOIN`
+
+**Problem.** Oracle's legacy join syntax has no `JOIN` keyword at all: tables
+are comma-listed in `FROM`, and `col(+)` on one side of a `WHERE` predicate
+marks that table as the *optional* (outer) side of the join — the row is
+still produced, NULL-extended, when no match exists.
+
+**Solution.**
+
+```sql
+-- pinning test: tests/unit/core/test_oracle_join_mark.py::TestOracleJoinMark
+-- (no challenge-corpus case yet)
+SELECT a.x, b.y FROM ta a, tb b WHERE a.id = b.id(+)
+-- PostgreSQL / MySQL / T-SQL:
+SELECT a.x, b.y FROM ta a LEFT JOIN tb b ON a.id = b.id
+
+-- a comma join with no (+) mark at all:
+SELECT a.x FROM a, b WHERE a.id = b.id
+-- -> FROM a CROSS JOIN b WHERE a.id = b.id   (not INNER JOIN: there is no ON)
+```
+
+Live-verified (Oracle, PostgreSQL, MySQL, T-SQL; seed rows `ta(1,'a1')
+(2,'a2') (3,'a3')`, `tb(1,'b1') (2,'b2')`): all four return `('a1','b1')
+('a2','b2') ('a3', NULL)` for the query above — the unmatched `ta` row keeps
+its NULL-extended `b.y`.
+
+**Discussion.** `(+)` and the bare comma join are Oracle-only syntax with no
+target-engine equivalent, so the join must be reconstructed explicitly. A
+comma join carries no `ON` clause to promote into `INNER JOIN`, so it becomes
+`CROSS JOIN` (the faithful unfiltered Cartesian product) plus the original
+predicate in `WHERE`, never a guessed `INNER JOIN` — emitting `INNER JOIN` with
+no `ON` is invalid on every target, and inferring one from an unrelated
+`WHERE` predicate would silently change which rows survive. `(+)` similarly
+becomes an explicit `LEFT JOIN … ON`, with the marked side moved to the
+outer/right position: an early version emitted `INNER JOIN` with no `ON` at
+all here too — a syntax error on PostgreSQL/MySQL/T-SQL and a silent
+LEFT→INNER semantic change everywhere.
+
+> **Note** faithful — live-verified identical rows on Oracle, PostgreSQL,
+> MySQL and T-SQL (see above).
+
+**See Also.** [`tests/unit/core/test_oracle_join_mark.py`](../../tests/unit/core/test_oracle_join_mark.py)
+(note: this test lives in `tests/unit/core/`, not `tests/integration/`) ·
+challenge `red2-ora-plus-outer-join-dup` (`tests/fixtures/challenge/challenge_oracle.sql`,
+tagged `[fixed]`) is a **related but distinct**, already-fixed defect — a
+table with *two* `(+)` predicates used to duplicate that table's join into an
+extra `CROSS JOIN` — which this single-predicate mechanism never exhibited ·
+[§7](../03-unsupported.md) "To Oracle" (the reverse-direction
+parenthesized-join-tree gate).
+
+### `ROWNUM <= n` (Oracle) → `LIMIT` / `TOP` / `FETCH FIRST`
+
+**Problem.** Oracle's `ROWNUM` is a pseudo-column numbering rows as they are
+produced; `WHERE ROWNUM <= n` is Oracle's idiom for capping a result to `n`
+rows — with no ordering guarantee unless paired with an `ORDER BY` (the
+`ROWNUM` filter applies before any sort).
+
+**Solution.**
+
+```sql
+-- pinning test: tests/unit/core/test_rownum_dual.py::TestRownum
+-- (no challenge-corpus case yet)
+SELECT * FROM t WHERE ROWNUM <= 5
+-- PostgreSQL / MySQL: SELECT * FROM t LIMIT 5
+-- T-SQL:              SELECT TOP 5 * FROM t
+```
+
+`ROWNUM <= n` / `ROWNUM < n+1` folds to a plain `LIMIT n` (PostgreSQL/MySQL)
+or `TOP n` (T-SQL); a `ROWNUM` predicate ANDed with another condition keeps
+that condition in `WHERE` and only the row cap moves. Live-verified
+(seed rows `1, 2, 3`): Oracle's `WHERE ROWNUM <= 2` and PostgreSQL's
+`LIMIT 2` both return exactly 2 of the 3 rows.
+
+**Discussion.** No other engine has a pseudo-column numbering rows before
+`ORDER BY`; each target's own row-cap clause is the direct equivalent for the
+common `ROWNUM <= n` idiom. `ROWNUM` used outside a simple upper-bound
+predicate (e.g. projected in the select list, compared with `>`, or assigned
+to a variable) has no such direct rewrite and is signalled rather than
+silently passed through or dropped.
+
+> **Note** faithful for the `ROWNUM <= n` / `< n+1` upper-bound form — same
+> row *count* as Oracle's own (both are unordered without an explicit
+> `ORDER BY`, mirroring this page's "`DELETE TOP (n)` row caps" entry's
+> "faithful to `TOP`'s own unordered semantics" reasoning, applied here to a
+> read instead of a delete). `[limit]` (warned) for any other `ROWNUM` shape.
+
+**See Also.** [`tests/unit/core/test_rownum_dual.py::TestRownum`](../../tests/unit/core/test_rownum_dual.py)
+(note: lives in `tests/unit/core/`, not `tests/integration/`).
+
+### `FROM DUAL` synthesis and removal (bidirectional)
+
+**Problem.** Oracle has no table-less `SELECT` — `SELECT 1` is
+`ORA-00923` — so every scalar `SELECT` needs a `FROM` clause; Oracle's
+answer is `DUAL`, a one-row system table. Every other engine allows (or, for
+MySQL, merely tolerates) a bare `SELECT` with no `FROM` at all.
+
+**Solution.**
+
+```sql
+-- pinning test: tests/unit/core/test_rownum_dual.py::TestFromDual
+SELECT 1 FROM dual                    -- Oracle source
+-- PostgreSQL / T-SQL: SELECT 1                 (DUAL dropped)
+-- MySQL:              SELECT 1 FROM dual       (DUAL kept - MySQL accepts it)
+
+SELECT 1                              -- T-SQL/MySQL source, Oracle target
+-- Oracle: SELECT 1 FROM DUAL                    (DUAL synthesized)
+```
+
+Going **from** Oracle, `FROM dual` is dropped for PostgreSQL and T-SQL (a
+bare `SELECT 1` is valid on both) but kept for MySQL, which also accepts
+`FROM DUAL` natively — dropping it there would be gratuitous churn, not a
+correctness fix. Going **to** Oracle from any table-less source `SELECT`
+(T-SQL, MySQL, or an Oracle round-trip), `FROM DUAL` is synthesized so the
+statement stays valid Oracle; a `SELECT` that already has a real `FROM`
+clause is left untouched, and a leading comment on the statement survives the
+rewrite.
+
+**Discussion.** `DUAL` is a real, literal table name on every engine that
+recognizes it (Oracle, MySQL) — not a keyword — so it cannot be mapped, only
+added or removed depending on whether the target requires (Oracle), accepts
+(MySQL) or has no use for (PostgreSQL/T-SQL) a `FROM`-less scalar `SELECT`.
+
+> **Note** faithful — a one-row scalar `SELECT` returns the same single row
+> whether or not `FROM (DUAL|dual)` is present/absent on a target that
+> tolerates both forms.
+
+**See Also.** [`tests/unit/core/test_rownum_dual.py::TestFromDual`](../../tests/unit/core/test_rownum_dual.py).
