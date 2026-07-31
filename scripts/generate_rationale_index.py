@@ -317,28 +317,35 @@ def _by_engine_section(articles: list[Article]) -> str:
     )
     parts.append(_table(["Engine", "As source", "As target"], jump_rows))
     parts.append("\n")
+
+    def _topic_tables(selected: list[Article]) -> None:
+        """One sub-table per topic (topic title as a linked sub-heading)."""
+        for topic in _TOPIC_ORDER:
+            rows = [
+                (f"[{a.title}]({a.topic}/{a.slug}.md)", a.description)
+                for a in selected
+                if a.topic == topic
+            ]
+            if not rows:
+                continue
+            parts.append(f"#### [{_TOPIC_TITLE[topic]}]({topic}/README.md)\n\n")
+            parts.append(_table(["Article", "Description"], rows))
+            parts.append("\n")
+
     for eng in _ENGINES:
         for role, idx in (("as source", 0), ("as target", 1)):
-            rows = [
-                (
-                    f"[{a.title}]({a.topic}/{a.slug}.md)",
-                    _TOPIC_TITLE[a.topic],
-                    a.description,
-                )
-                for a in sorted(real, key=lambda x: (x.topic, x.order))
-                if eng in parsed[a][idx]
-            ]
             parts.append(f"### {_ENGINE_LABEL[eng]} {role}\n\n")
-            parts.append(_table(["Article", "Topic", "Description"], rows))
-            parts.append("\n")
-    cross = [
-        (f"[{a.title}]({a.topic}/{a.slug}.md)", _TOPIC_TITLE[a.topic], a.description)
-        for a in sorted(real, key=lambda x: (x.topic, x.order))
-        if parsed[a][2]
-    ]
+            _topic_tables(
+                [
+                    a
+                    for a in sorted(real, key=lambda x: (x.topic, x.order))
+                    if eng in parsed[a][idx]
+                ]
+            )
     parts.append("### Cross-engine / multi-directional\n\n")
-    parts.append(_table(["Article", "Topic", "Description"], cross))
-    parts.append("\n")
+    _topic_tables(
+        [a for a in sorted(real, key=lambda x: (x.topic, x.order)) if parsed[a][2]]
+    )
     return "".join(parts)
 
 
