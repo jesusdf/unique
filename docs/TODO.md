@@ -72,6 +72,12 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
 
 ### Small findings (P3 unless noted)
 
+- **B54** (P3, found during T4-B, probed) — a standalone `to_hex(x)` →
+  T-SQL/Oracle emits an unwarned phantom `dbo.HEX` / `HEX` call that errors
+  at runtime (not in the FE ledger — different shape than pg-baseconv's
+  fixed leg). Map faithfully (tsql `CONVERT(VARCHAR, x, 2)`-family / oracle
+  `TO_CHAR(x,'FMXX...')` or LOWER(RAWTOHEX)-family — live-verify) or degrade
+  warned.
 - **B53** (P3, architect finding 2026-07-31) — the `shared_dialect_compares`
   architecture ratchet counts only `== "<dialect>"` spellings; two same-day
   fixes (B49, B51) legitimately added dialect dispatch written as
