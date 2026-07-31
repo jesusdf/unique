@@ -633,6 +633,15 @@ an intrinsic limitation, or otherwise changes the compatibility surface.
 
 When that happens, update the relevant docs in the same commit:
 
+- **`docs/rationale/`** (maintainer contract, 2026-08-01) — any NEW or CHANGED
+  conversion that is **not a direct equivalence** (a rewrite, hoist, guard
+  synthesis, decomposition, compensation, creative alternative) ships its
+  rationale **article** in the same commit, written to the black-box contract
+  in `docs/rationale/_index_appendix.md` (and regenerate the indexes:
+  `python scripts/generate_rationale_index.py`). "Documented in
+  03-unsupported" does NOT count as rationale coverage unless the item is a
+  genuine approved degradation — a faithful creative conversion documented
+  only there is misfiled.
 - **`docs/03-unsupported.md`** — move an item out of "unsupported/partial" when it
   now works, or add one when a new limitation is found. Keep the reason accurate.
 - **`docs/01-compatibility.md`** — the feature matrix and any per-dialect notes.

@@ -1,10 +1,26 @@
 # Transpilation rationale
 
-Why Unique emits what it emits when a construct has **no direct equivalent**
-on a target engine, or when the faithful conversion is **non-obvious**
-("creative"). Written for users outside the project: each entry explains the
-source construct's semantics, the *engine-level* reason a direct mapping does
-not exist, what Unique emits instead, and exactly what (if anything) diverges.
+**The wiki our users consult when they don't understand why something
+translated the way it did.** A user typically works with one or two engines;
+these pages are organized so that view comes first (the by-engine indexes).
+
+The contract (maintainer, 2026-08-01):
+
+- **Scope is the whole application**: every conversion Unique performs that
+  is **not a direct equivalence** belongs here — a rewrite, hoist, guard
+  synthesis, decomposition, compensation, or creative alternative — whether
+  it ends faithful or divergent. The scope is NOT limited to any audit,
+  sweep, or test set performed at some point in time; those are verification
+  tools, the contract is total coverage.
+- Each entry explains the source construct's semantics, the *engine-level*
+  reason a direct mapping does not exist, what Unique emits instead, and
+  exactly what (if anything) diverges — with the transpiler treated as a
+  **black box** (no internals, no project history).
+- **Coverage means a rationale article exists.** An entry in
+  `docs/03-unsupported.md` counts as coverage only for a *genuine approved
+  degradation* (a warned limit); a faithful creative conversion documented
+  only there is misfiled — it gets an article here, and 03-unsupported
+  cross-links it.
 
 This is the narrative companion to two machine-checked sources of truth:
 
