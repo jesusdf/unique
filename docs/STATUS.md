@@ -1,6 +1,17 @@
 # Unique — Project Status
 
-## Current state: v0.35.0 (**M0–M4 complete**; three 2026-07-30 challenge campaign cycles closed 94 findings, 92 `[fixed]` — corpus at **791 `[fixed]` / 169 `[limit]` / 0 `[open]`** of 960; the post-campaign feature backlog — B29–B33, T8, F1, F2 — is executed; pending: Q1, triaged into briefs B34–B39)
+## Current state: v0.38.0 (**M0–M4 complete**; the 2026-07-31 backlog liquidation closed Q1 [briefs B34–B39 + same-day findings B41/B45/B46], D1 [the 18-cluster rationale docs wave, incl. the new `booleans.md` page and full-recall pass], and A10's FE measurement + harness — **496 challenge cases now auto-enrolled** in the nightly result-diff behind a 43-case ratcheted ledger; corpus unchanged at **791 `[fixed]` / 169 `[limit]` / 0 `[open]`** of 960; pending residue in `docs/TODO.md`: A10-T4 defect triage, two maintainer decisions [B47, A10-T2], small findings B40/B42–B44/B48, D1b)
+
+**Backlog liquidation 2026-07-31 (PURPLE-directed, agentic team mode)**: the
+whole pending backlog executed in one session — see the top entry of
+`docs/MILESTONES.md`, `docs/DONE.md` §50–§51, and
+`audit/2026-07-31-a10-fe-coverage.md`. Highlights: the implicit-rowcount
+hoist is spelling-general across sources; mysql SIGNAL/RESIGNAL reaches the
+raise IR (was invalid output with the message lost); the leading-companion-DDL
+batch shape parses (proc_2/7/8/9 execute on real PostgreSQL); warning
+`.code`s match their carriers; Oracle native-BOOLEAN keeps `TRUE`/`FALSE`
+(was live PLS-00382); the functional-equivalence nightly went from 21 to 496
+compared cases and the previously-red `Challenge live` job is green.
 
 **Challenge campaign 2026-07-30 (three cycles, PURPLE-directed red&blue)
 CLOSED**: cycle 1 (61 findings), cycle 2 (27 findings, seeded), cycle 3 (6
@@ -26,15 +37,16 @@ similarity between two scripts) and **F2** its web UI Compare button — see
 a stray `$$` inside a commented carrier body, and an orphan transaction
 closer surviving a degraded opener) is closed per `git log` (`62d5493`,
 `75dd020`, pinned by `0cba085`). **Q1** (the Oracle-source/MySQL-source
-procedural degrade rate on the PostgreSQL pivot) has been triaged
-(`audit/2026-07-30-q1-triage.md`): a fresh measurement puts the actionable
-gap at 28/32 oracle→postgresql and 21/31 mysql→postgresql routines
-degrading to carriers, and two of the top mechanisms turned out to be
-**transpiler bugs, not approved degrades** — a `UNIQUE-1171` false positive
-from unscrubbed-comment `@name` scanning, and a `UNIQUE-1219` SET-variable
+procedural degrade rate on the PostgreSQL pivot) was triaged
+(`audit/2026-07-30-q1-triage.md`) and **fully executed 2026-07-31**
+(`docs/DONE.md` §50): the actionable gap fell from 28/32 oracle→postgresql
+and 21/31 mysql→postgresql routines to the two standing fronts only
+(embedded-DML-as-text, dynamic SQL). Two of the top mechanisms had turned
+out to be **transpiler bugs, not approved degrades** — a `UNIQUE-1171` false
+positive from unscrubbed-comment `@name` scanning, and a `UNIQUE-1219`
+SET-variable
 misclassification that corrupts output by closing the routine body's `$$`
-quoting early. Six briefs (B34–B39) are ready in `docs/TODO.md`; none are
-implemented yet.
+quoting early — both fixed among the six briefs.
 
 **Direction-residue campaign closed 2026-07-17** (waves 103–239, user-declared
 architectural floor at `469917a`): the six corpus directions (pg-source and
@@ -76,7 +88,8 @@ The **2026-07-24 audit** (`audit/2026-07-24/` — remediation verification,
 10 new live-verified S1s, prevention plan, pre-analyzed fix briefs) and its
 **entire B1–B28 backlog were executed 2026-07-24→25** in agentic team mode
 (`docs/MILESTONES.md`, `docs/DONE.md` §44). The pending backlog in
-`docs/TODO.md` now holds only **Q1**'s six triaged briefs (B34–B39) plus the
+`docs/TODO.md` now holds only the 2026-07-31 liquidation's residue (A10
+follow-ups, two maintainer decisions, small findings, D1b) plus the
 continuously-tracked rationale-coverage ratchet (see "Diagnostic codes"
 below) and the challenge-corpus intake.
 
@@ -299,10 +312,10 @@ Six complementary layers:
 The version is single-sourced from `unique.__version__` and released via
 `scripts/release.py`. History: `docs/MILESTONES.md` (closed backlog sections)
 and `docs/DONE.md` (detailed archive). Backlog: `docs/TODO.md` (currently
-holds **Q1**'s six triaged briefs, B34–B39 — the Oracle/MySQL-source
-procedural degrade-rate front — plus the continuously-tracked
-rationale-coverage ratchet and challenge-corpus intake; every other discrete
-item closed and archived).
+holds the 2026-07-31 liquidation residue — A10 defect triage and design
+follow-ups, the B47/A10-T2 maintainer decisions, small findings — plus the
+continuously-tracked rationale-coverage ratchet and challenge-corpus intake;
+every other discrete item closed and archived).
 
 ---
 *Last reviewed: 2026-07-30.*
