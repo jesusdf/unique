@@ -2095,6 +2095,30 @@ RATIONALES: dict[str, Rationale] = {
             "post-update DELETE WHERE evaluation order."
         ),
     ),
+    "UNIQUE-1141": _R(
+        construct=(
+            "MERGE WHEN [NOT] MATCHED THEN DO NOTHING (PostgreSQL) → T-SQL/"
+            "Oracle, either with an action type sqlglot models but the "
+            "MERGE-clause carve-out doesn't recognize, or where carving out "
+            "the DO NOTHING clause leaves no action of that match kind at "
+            "all"
+        ),
+        reason=(
+            "T-SQL/Oracle have no DO NOTHING merge action; the normal "
+            "rewrite folds an unconditional DO NOTHING into a NOT (...) "
+            "condition on every later same-kind clause (first-match-wins "
+            "semantics), but that fold has nothing to attach to when "
+            "DO NOTHING was the ONLY clause of its match kind (the whole "
+            "MERGE reduces to no action for that kind) or when the merge "
+            "action itself is one the carve-out does not recognize as "
+            "either DELETE or DO NOTHING."
+        ),
+        example_case=(
+            "tests/integration/test_challenge.py::TestMergeDoNothingCarveOut::"
+            "test_unknown_var_action_degrades"
+        ),
+        divergence="Warned limit — statement preserved as a comment.",
+    ),
     "UNIQUE-1143": _R(
         construct=(
             "A trailing FOR UPDATE / FOR SHARE row-lock clause "

@@ -2,7 +2,7 @@
 
 > **Generated — do not edit by hand.** Produced by `python scripts/generate_reference_docs.py` from the `UNIQUE-NNNN` registry (`src/unique/core/diagnostics.py`) and the rationale side-table (`src/unique/core/rationales.py`). The CI freshness gate (`python scripts/generate_reference_docs.py --check`) fails the build if this file drifts from the source data.
 
-One entry per stable diagnostic code the transpiler can emit. `code` is the grep/suppress token (`-- UNIQUE-1234: …`); every code is anchored as `warnings.md#unique-1234`. A code with a rationale entry (200 of 239) renders as a recipe: **Problem** (the triggering construct), **Solution (pointer)** (what Unique does about it — a pointer, not a worked example: the registry carries no SQL sample), **Discussion** (the engine-level reason no direct mapping exists) and **See Also** (the corpus case or test that proves it). The remaining codes render in a compact table marked `_(rationale pending)_` until a rationale is added (the coverage ratchet in `tests/unit/core/test_diagnostics.py` drives that count down).
+One entry per stable diagnostic code the transpiler can emit. `code` is the grep/suppress token (`-- UNIQUE-1234: …`); every code is anchored as `warnings.md#unique-1234`. A code with a rationale entry (213 of 239) renders as a recipe: **Problem** (the triggering construct), **Solution (pointer)** (what Unique does about it — a pointer, not a worked example: the registry carries no SQL sample), **Discussion** (the engine-level reason no direct mapping exists) and **See Also** (the corpus case or test that proves it). The remaining codes render in a compact table marked `_(rationale pending)_` until a rationale is added (the coverage ratchet in `tests/unit/core/test_diagnostics.py` drives that count down).
 
 ## Diagnostics with a rationale
 
@@ -510,6 +510,18 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **See Also.** [`my-bintypes`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
+### <a id="unique-1047"></a>`UNIQUE-1047` — MySQL SET column type — an unordered combination of values (→ other engines)
+
+**Category:** `ddl` · **Message:** MySQL SET type on {col_name} has no {dialect} equivalent; stored as {varchar}({total_len}). Allowed members: {quoted_values}
+
+**Problem.** MySQL SET column type — an unordered combination of values (→ other engines)
+
+**Solution (pointer).** Warned limit — the value-combination constraint is not enforced on the target.
+
+**Discussion.** Only MySQL has a 'combination of values' column type; unlike ENUM (one value from a list, mappable to VARCHAR + CHECK IN (...)), a SET holds any comma-joined subset of its allowed members, which no single CHECK expression can validate, so it maps to a plain VARCHAR with no CHECK, noting the allowed members for reference.
+
+**See Also.** [`TestOutputValidity::test_statements_parse_in_target_dialect`](../../tests/integration/test_real_world.py)
+
 ### <a id="unique-1048"></a>`UNIQUE-1048` — T-SQL structure-clone CREATE TABLE t2 LIKE t1 (→ T-SQL / Oracle)
 
 **Category:** `ddl` · **Message:** LIKE clone copies column structure only here; the source's indexes/keys are not cloned
@@ -858,6 +870,18 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **See Also.** [`red2-pg-window-exclude-current`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
+### <a id="unique-1079"></a>`UNIQUE-1079` — DATEADD/DATEDIFF with a unit no target engine expresses (e.g. NANOSECOND) (→ PostgreSQL/Oracle/MySQL)
+
+**Category:** `expression` · **Message:** {fn} unit '{unit_sql}' has no {dialect} equivalent — the value was not computed (docs/03-unsupported.md
+
+**Problem.** DATEADD/DATEDIFF with a unit no target engine expresses (e.g. NANOSECOND) (→ PostgreSQL/Oracle/MySQL)
+
+**Solution (pointer).** Warned limit — degrades to a NULL carrier naming the unit for review.
+
+**Discussion.** T-SQL's DATEADD/DATEDIFF accept any real datepart, including ones finer than any other engine's date-arithmetic vocabulary (no engine besides T-SQL has a NANOSECOND unit); there is no unit to translate to, so the value cannot be computed.
+
+**See Also.** [`TestDateAddDiffUnits::test_unmapped_diff_unit_degrades_not_invalid`](../../tests/integration/test_challenge.py)
+
 ### <a id="unique-1080"></a>`UNIQUE-1080` — Sequence CURRVAL — current value without advancing (→ T-SQL)
 
 **Category:** `expression` · **Message:** T-SQL has no sequence CURRVAL; capture NEXT VALUE FOR {seq} in a variable — see docs/03-unsupported.md
@@ -869,6 +893,18 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 **Discussion.** T-SQL has NEXT VALUE FOR but no CURRVAL; there is no way to read a sequence's current value without advancing it.
 
 **See Also.** [`ora-seq-use`](../../tests/fixtures/challenge/challenge_oracle.sql)
+
+### <a id="unique-1081"></a>`UNIQUE-1081` — A day-of-week value mapped to T-SQL DATEPART(WEEKDAY, ...) (→ T-SQL)
+
+**Category:** `expression` · **Message:** DATEPART(WEEKDAY) is @@DATEFIRST-dependent; assumes the session default (Sunday=1
+
+**Problem.** A day-of-week value mapped to T-SQL DATEPART(WEEKDAY, ...) (→ T-SQL)
+
+**Solution (pointer).** Faithful when @@DATEFIRST is left at its default (7/Sunday); otherwise the value shifts.
+
+**Discussion.** T-SQL's WEEKDAY datepart is not a fixed numbering — it shifts with the session's @@DATEFIRST setting — while every source engine's own day-of-week function (MySQL DAYOFWEEK, PostgreSQL DOW, Oracle's anchor formula) is fixed Sunday=1; the mapping is only correct under T-SQL's untouched default.
+
+**See Also.** [`TestFalseUnmapMappedSymmetrically::test_mysql_dayofweek_maps_per_engine`](../../tests/integration/test_challenge.py)
 
 ### <a id="unique-1082"></a>`UNIQUE-1082` — An empty-string result on Oracle ('' ≡ NULL)
 
@@ -1134,6 +1170,30 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **See Also.** [`reda-ora-forupdate-of-col`](../../tests/fixtures/challenge/challenge_oracle.sql)
 
+### <a id="unique-1106"></a>`UNIQUE-1106` — CREATE INDEX over an expression, e.g. CREATE INDEX ix ON t (a * 2) (→ T-SQL)
+
+**Category:** `statement` · **Message:** T-SQL has no expression/function index; add a computed column and index it (docs/03-unsupported.md
+
+**Problem.** CREATE INDEX over an expression, e.g. CREATE INDEX ix ON t (a * 2) (→ T-SQL)
+
+**Solution (pointer).** Warned limit — statement preserved as a comment; add a computed column and index it by hand.
+
+**Discussion.** T-SQL has no expression/functional index at all — an index can only cover column names — so there is no CREATE INDEX form to target; a computed column plus an index on it is the closest workaround, but it is a schema change the transpiler cannot make unilaterally.
+
+**See Also.** [`ora-functional-index`](../../tests/fixtures/challenge/challenge_oracle.sql)
+
+### <a id="unique-1107"></a>`UNIQUE-1107` — T-SQL SELECT IDENTITY(type, seed, incr) ... INTO t2 (→ other engines)
+
+**Category:** `statement` · **Message:** T-SQL IDENTITY() in SELECT INTO reproduced as ROW_NUMBER (id values match); the identity/auto-increment column property is not portable in a CREATE TABLE AS SELECT (docs/03-unsupported.md
+
+**Problem.** T-SQL SELECT IDENTITY(type, seed, incr) ... INTO t2 (→ other engines)
+
+**Solution (pointer).** Faithful values, warned limit on the property — id values match; the column is a plain (non-auto-increment) column on the target.
+
+**Discussion.** No engine has an IDENTITY() scalar function; the row-numbering values it produces are reproduced with ROW_NUMBER() so the id column's values match, but the identity/auto-increment property (a schema attribute) has no spelling inside a CREATE-TABLE-AS-SELECT on any target.
+
+**See Also.** [`reda-ts-select-into-identity`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
+
 ### <a id="unique-1108"></a>`UNIQUE-1108` — ADD CONSTRAINT ... NOT VALID (PostgreSQL, deferred validation) → T-SQL/Oracle/MySQL
 
 **Category:** `statement` · **Message:** {dialect} has no ALTER … NOT VALID; the constraint is validated immediately (PostgreSQL defers it
@@ -1169,6 +1229,18 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 **Discussion.** T-SQL's ALTER COLUMN has no USING conversion-expression clause at all — it can only re-cast to the new type using the engine's own implicit conversion, with no way to run an arbitrary expression over the existing data during the ALTER.
 
 **See Also.** [`TestWave199CteDeleteUsingAlterUsing::test_alter_using_expression_carriers`](../../tests/integration/test_pg_source_wave1.py)
+
+### <a id="unique-1111"></a>`UNIQUE-1111` — PostgreSQL ALTER COLUMN ... {SET|DROP} NOT NULL on a column the script never declares (→ MySQL/T-SQL)
+
+**Category:** `statement` · **Message:** {dialect} needs the column's declared type to alter its nullability and the script does not define {_nn_tbl_raw}.{_nn_col}; original postgresql statement preserved
+
+**Problem.** PostgreSQL ALTER COLUMN ... {SET|DROP} NOT NULL on a column the script never declares (→ MySQL/T-SQL)
+
+**Solution (pointer).** Warned limit — degrades to a documented carrier rather than guessing a type.
+
+**Discussion.** MySQL's MODIFY and T-SQL's ALTER COLUMN both require re-stating the column's full type in the same clause that changes its nullability (PostgreSQL's own form needs only the constraint); without the script's own CREATE TABLE to harvest that type from, there is nothing to re-state.
+
+**See Also.** [`TestCrossStatementMetadata::test_unknown_column_degrades_warned`](../../tests/integration/test_challenge.py)
 
 ### <a id="unique-1112"></a>`UNIQUE-1112` — ADD COLUMN ... GENERATED ALWAYS AS IDENTITY / SERIAL (→ MySQL)
 
@@ -1433,6 +1505,18 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 **Discussion.** MySQL has no clause that returns affected-row values alongside a data-modifying statement — LAST_INSERT_ID() only ever returns the last auto-increment value, not arbitrary column values, and there is no set-returning DML form at all.
 
 **See Also.** [`TestOutputClauseToMySQL::test_output_into_var_is_documented_not_returning`](../../tests/integration/test_procedural.py)
+
+### <a id="unique-1141"></a>`UNIQUE-1141` — MERGE WHEN [NOT] MATCHED THEN DO NOTHING (PostgreSQL) → T-SQL/Oracle, either with an action type sqlglot models but the MERGE-clause carve-out doesn't recognize, or where carving out the DO NOTHING clause leaves no action of that match kind at all
+
+**Category:** `statement` · **Message:** MERGE WHEN NOT MATCHED DO NOTHING has no faithful rewrite; reason carried at runtime
+
+**Problem.** MERGE WHEN [NOT] MATCHED THEN DO NOTHING (PostgreSQL) → T-SQL/Oracle, either with an action type sqlglot models but the MERGE-clause carve-out doesn't recognize, or where carving out the DO NOTHING clause leaves no action of that match kind at all
+
+**Solution (pointer).** Warned limit — statement preserved as a comment.
+
+**Discussion.** T-SQL/Oracle have no DO NOTHING merge action; the normal rewrite folds an unconditional DO NOTHING into a NOT (...) condition on every later same-kind clause (first-match-wins semantics), but that fold has nothing to attach to when DO NOTHING was the ONLY clause of its match kind (the whole MERGE reduces to no action for that kind) or when the merge action itself is one the carve-out does not recognize as either DELETE or DO NOTHING.
+
+**See Also.** [`TestMergeDoNothingCarveOut::test_unknown_var_action_degrades`](../../tests/integration/test_challenge.py)
 
 ### <a id="unique-1142"></a>`UNIQUE-1142` — T-SQL MERGE with a MATCHED UPDATE and a conditional MATCHED DELETE whose condition reads a column the UPDATE assigns (→ Oracle)
 
@@ -2190,6 +2274,30 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **See Also.** [`ts-insert-output`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
+### <a id="unique-1213"></a>`UNIQUE-1213` — A T-SQL default-constraint value with no valid target spelling (e.g. NEWID() → MySQL)
+
+**Category:** `orchestration` · **Message:** T-SQL default constraint value has no {target} equivalent
+
+**Problem.** A T-SQL default-constraint value with no valid target spelling (e.g. NEWID() → MySQL)
+
+**Solution (pointer).** Warned limit — the statement is preserved as a comment; add the target-native equivalent (e.g. a UUID default/trigger) by hand.
+
+**Discussion.** The default value is transpiled like any other expression, but some T-SQL built-ins (NEWID's UUID generation, chief among them) have no spelling on some targets at all; shipping the untranslated fragment as a DEFAULT would leave invalid DDL, so the whole default-constraint statement is checked against the target's own grammar and, on failure, preserved as a comment instead.
+
+**See Also.** [`TestTranspiler::test_add_default_non_portable_value_falls_back`](../../tests/unit/core/test_transpiler.py)
+
+### <a id="unique-1214"></a>`UNIQUE-1214` — A standalone T-SQL/MySQL SET TRANSACTION ISOLATION LEVEL READ COMMITTED batch (→ Oracle)
+
+**Category:** `orchestration` · **Message:** READ COMMITTED is Oracle's default isolation level (no-op; noted so a following SET TRANSACTION mode statement can still open the transaction
+
+**Problem.** A standalone T-SQL/MySQL SET TRANSACTION ISOLATION LEVEL READ COMMITTED batch (→ Oracle)
+
+**Solution (pointer).** Faithful (no-op on both engines) — kept as a comment so a following SET TRANSACTION mode statement can still open the transaction.
+
+**Discussion.** READ COMMITTED is Oracle's default isolation level, and Oracle requires SET TRANSACTION to be a transaction's very first statement (ORA-01453 otherwise); keeping this one would block a following mapped SET TRANSACTION (e.g. READ ONLY) from opening the transaction. Same no-op fact as UNIQUE-1129, reached by a different route: 1129 fires once the statement has survived into the sqlglot-based passthrough pipeline as an ordinary node (e.g. it shares a batch with a preceding statement); 1214 fires when the statement is (or opens) its own whole batch, handled directly at the orchestration layer before any sqlglot parse of it.
+
+**See Also.** [`TestSetTransactionModes::test_oracle_read_only`](../../tests/integration/test_challenge.py)
+
 ### <a id="unique-1215"></a>`UNIQUE-1215` — SET ROLE (PostgreSQL/MySQL/Oracle) → T-SQL
 
 **Category:** `orchestration` · **Message:** T-SQL has no SET ROLE (use role membership / EXECUTE AS); statement preserved as a comment.
@@ -2250,6 +2358,18 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **See Also.** [`TestMysqlSessionKnobsDegrade::test_knob_degrades`](../../tests/integration/test_pg_source_wave1.py)
 
+### <a id="unique-1220"></a>`UNIQUE-1220` — A transpiled statement that the sqlglot output gate accepts but the real target engine rejects (opt-in live output validation only)
+
+**Category:** `orchestration` · **Message:** live {target} validation rejected this statement ({first_err}); preserved as a comment
+
+**Problem.** A transpiled statement that the sqlglot output gate accepts but the real target engine rejects (opt-in live output validation only)
+
+**Solution (pointer).** Warned limit — the statement is preserved as a comment carrying the live engine's rejection reason; only reachable with an explicit live-validation URL, not in normal use.
+
+**Discussion.** sqlglot's writer is deliberately lenient (it renders SQL it cannot fully validate rather than refuse); a live connection to the actual target engine is the final arbiter, so when a development run opts into it and the engine itself raises on the generated statement, the statement is degraded to a carrier with the engine's own error rather than shipping SQL known to fail.
+
+**See Also.** [`TestLiveOutputValidation::test_live_pg_rejects_become_carriers`](../../tests/integration/test_pg_source_wave1.py)
+
 ### <a id="unique-1221"></a>`UNIQUE-1221` — TEXTIMAGE_ON <filegroup> — a T-SQL LOB-storage-placement clause (→ PostgreSQL/MySQL/Oracle)
 
 **Category:** `orchestration` · **Message:** T-SQL TEXTIMAGE_ON filegroup clause dropped (physical storage, no logical-schema impact)
@@ -2309,6 +2429,42 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 **Discussion.** The IF/ELSE guard rewrite (e.g. into PostgreSQL's DO $$ ... IF ... THEN ... END IF; END $$) can carry a PRINT-only ELSE body into the target's own diagnostic-output statement, but an ELSE with real DML/DDL has no such narrow, safe rewrite — dropping vs. keeping it both risk changing which branch runs, so it is flagged rather than guessed at.
 
 **See Also.** [`TestGuardElseBranch::test_non_print_else_warns`](../../tests/unit/core/test_guard_translation.py)
+
+### <a id="unique-1227"></a>`UNIQUE-1227` — T-SQL ALTER COLUMN ... NULL (a redundant, explicit nullability re-statement) → Oracle
+
+**Category:** `ddl` · **Message:** Oracle MODIFY keeps the column's current nullability; the redundant NULL is omitted (an explicit NULL raises ORA-01451 when the column is already nullable)
+
+**Problem.** T-SQL ALTER COLUMN ... NULL (a redundant, explicit nullability re-statement) → Oracle
+
+**Solution (pointer).** Faithful — the column's nullability is unchanged either way; only the redundant keyword is dropped, with a warning so the directive isn't silently lost.
+
+**Discussion.** Oracle's MODIFY raises ORA-01451 if a column already allows NULL and the statement redundantly re-states NULL (only a change TO NOT NULL, or FROM NOT NULL back to nullable, is a real MODIFY); since the column's current nullability is what the source ALTER COLUMN is re-stating unchanged, the redundant keyword is dropped rather than shipped as an error-raising MODIFY.
+
+**See Also.** [`TestTranspiler::test_alter_column_varbinary_max_omits_redundant_null`](../../tests/unit/core/test_transpiler.py)
+
+### <a id="unique-1228"></a>`UNIQUE-1228` — Internal: a semantic sqlglot AST argument no converter function reads while building the IR (a structural safety-net, not a specific SQL construct)
+
+**Category:** `validation` · **Message:** internal: a parsed sqlglot construct was not consumed by the converter (unread arg) — the construct may be dropped; the specific arg is carried at runtime
+
+**Problem.** Internal: a semantic sqlglot AST argument no converter function reads while building the IR (a structural safety-net, not a specific SQL construct)
+
+**Solution (pointer).** Warned limit — the construct may be silently dropped; the specific arg name is carried in the warning for review.
+
+**Discussion.** The converter walks sqlglot's parsed AST and hands each node's semantic args to a per-construct _convert_* function; this tripwire records any arg sqlglot considers meaningful (not in a reviewed allow-list of genuinely inert ones) that no function ever reads — evidence a clause on that node type may be silently dropped from the IR/output before anyone specifically decided to drop it, rather than proof any given run actually lost something.
+
+**See Also.** [`TestConverterIntegration::test_warn_mode_flags_unread_arg`](../../tests/unit/core/test_unread_args.py)
+
+### <a id="unique-1230"></a>`UNIQUE-1230` — A procedural-routine parse note with no more specific diagnostic code to inherit (e.g. transpiling a routine to its own source dialect, a no-op transform that leaves no carrier in the output)
+
+**Category:** `procedural` · **Message:** procedural parse note; the specific reason is carried at runtime
+
+**Problem.** A procedural-routine parse note with no more specific diagnostic code to inherit (e.g. transpiling a routine to its own source dialect, a no-op transform that leaves no carrier in the output)
+
+**Solution (pointer).** Warned note — informational; the routine's behavior is unaffected, only the diagnostic code is generic rather than specific.
+
+**Discussion.** A procedural parse warning is raised without a fixed code of its own; when the routine is rewritten, a later pass normally infers the specific code from whichever carrier comment ended up covering the same construct in the output — but a same-dialect (no-op) transform, or any other case that leaves no matching carrier, has nothing to infer from, so the generic fallback code ships instead of an invented specific one.
+
+**See Also.** [`test_genuinely_generic_parse_warning_keeps_fallback_code`](../../tests/integration/test_procedural_warning_codes.py)
 
 ### <a id="unique-1231"></a>`UNIQUE-1231` — Any ProceduralTransformer-level warning with no more specific UNIQUE-NNNN code of its own
 
@@ -2414,16 +2570,10 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 | <a id="unique-1029"></a>`UNIQUE-1029` | statement | @@ERROR has no top-level {dialect} equivalent; use an exception handler | _(rationale pending)_ |
 | <a id="unique-1035"></a>`UNIQUE-1035` | statement | TABLESAMPLE by row count has no Oracle SAMPLE form (docs/03-unsupported.md | _(rationale pending)_ |
 | <a id="unique-1036"></a>`UNIQUE-1036` | statement | TABLESAMPLE by row count has no PostgreSQL equivalent (docs/03-unsupported.md | _(rationale pending)_ |
-| <a id="unique-1047"></a>`UNIQUE-1047` | ddl | MySQL SET type on {col_name} has no {dialect} equivalent; stored as {varchar}({total_len}). Allowed<br>members: {quoted_values} | _(rationale pending)_ |
 | <a id="unique-1070"></a>`UNIQUE-1070` | expression | Oracle DEFAULT ... ON CONVERSION ERROR has no {dialect} error-safe cast for this type; fallback<br>dropped -- see docs/03-unsupported.md | _(rationale pending)_ |
 | <a id="unique-1072"></a>`UNIQUE-1072` | expression | …; no {dialect} mapping — review | _(rationale pending)_ |
-| <a id="unique-1079"></a>`UNIQUE-1079` | expression | {fn} unit '{unit_sql}' has no {dialect} equivalent — the value was not computed<br>(docs/03-unsupported.md | _(rationale pending)_ |
-| <a id="unique-1081"></a>`UNIQUE-1081` | expression | DATEPART(WEEKDAY) is @@DATEFIRST-dependent; assumes the session default (Sunday=1 | _(rationale pending)_ |
 | <a id="unique-1086"></a>`UNIQUE-1086` | expression | EXTRACT({part}) has no {dialect} equivalent — the value was not computed (docs/03-unsupported.md | _(rationale pending)_ |
 | <a id="unique-1102"></a>`UNIQUE-1102` | statement | MySQL NOT ENFORCED (a CHECK defined but not validated) has no target equivalent; enforced here | _(rationale pending)_ |
-| <a id="unique-1106"></a>`UNIQUE-1106` | statement | T-SQL has no expression/function index; add a computed column and index it (docs/03-unsupported.md | _(rationale pending)_ |
-| <a id="unique-1107"></a>`UNIQUE-1107` | statement | T-SQL IDENTITY() in SELECT INTO reproduced as ROW_NUMBER (id values match); the identity/auto-<br>increment column property is not portable in a CREATE TABLE AS SELECT (docs/03-unsupported.md | _(rationale pending)_ |
-| <a id="unique-1111"></a>`UNIQUE-1111` | statement | {dialect} needs the column's declared type to alter its nullability and the script does not define<br>{_nn_tbl_raw}.{_nn_col}; original postgresql statement preserved | _(rationale pending)_ |
 | <a id="unique-1117"></a>`UNIQUE-1117` | statement | MySQL admin command has no {dialect} equivalent; run the target's own maintenance. | _(rationale pending)_ |
 | <a id="unique-1120"></a>`UNIQUE-1120` | statement | SET SESSION AUTHORIZATION has no {dialect} equivalent; switch users natively. | _(rationale pending)_ |
 | <a id="unique-1121"></a>`UNIQUE-1121` | statement | PostgreSQL session setting has no {dialect} equivalent; configure the session natively. | _(rationale pending)_ |
@@ -2431,7 +2581,6 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 | <a id="unique-1130"></a>`UNIQUE-1130` | statement | READ COMMITTED is Oracle's default isolation level (no-op; kept as a note so a following SET<br>TRANSACTION mode statement can still open the transaction | _(rationale pending)_ |
 | <a id="unique-1131"></a>`UNIQUE-1131` | statement | Oracle has no {level} isolation level (supports READ COMMITTED/SERIALIZABLE only); statement<br>dropped. Original | _(rationale pending)_ |
 | <a id="unique-1135"></a>`UNIQUE-1135` | statement | session-variable SELECT INTO has no cross-dialect equivalent; rewrite as the target's assignment<br>form. Original | _(rationale pending)_ |
-| <a id="unique-1141"></a>`UNIQUE-1141` | statement | MERGE WHEN NOT MATCHED DO NOTHING has no faithful rewrite; reason carried at runtime | _(rationale pending)_ |
 | <a id="unique-1144"></a>`UNIQUE-1144` | statement | Unhandled … | _(rationale pending)_ |
 | <a id="unique-1149"></a>`UNIQUE-1149` | expression | UNPIVOT has no {dialect} equivalent and the source columns are not visible to rewrite it as UNION<br>ALL — see docs/03-unsupported.md | _(rationale pending)_ |
 | <a id="unique-1150"></a>`UNIQUE-1150` | expression | PIVOT has no {dialect} equivalent and the source columns are not visible to rewrite it as<br>conditional aggregation — see docs/03-unsupported.md | _(rationale pending)_ |
@@ -2440,14 +2589,8 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 | <a id="unique-1191"></a>`UNIQUE-1191` | procedural | OUTPUT <expr> dropped — populate the temp table manually | _(rationale pending)_ |
 | <a id="unique-1199"></a>`UNIQUE-1199` | procedural | T-SQL system procedure has no … equivalent; original: {original} | _(rationale pending)_ |
 | <a id="unique-1204"></a>`UNIQUE-1204` | procedural | no MySQL equivalent: ALTER TRIGGER … … | _(rationale pending)_ |
-| <a id="unique-1213"></a>`UNIQUE-1213` | orchestration | T-SQL default constraint value has no {target} equivalent | _(rationale pending)_ |
-| <a id="unique-1214"></a>`UNIQUE-1214` | orchestration | READ COMMITTED is Oracle's default isolation level (no-op; noted so a following SET TRANSACTION mode<br>statement can still open the transaction | _(rationale pending)_ |
-| <a id="unique-1220"></a>`UNIQUE-1220` | orchestration | live {target} validation rejected this statement ({first_err}); preserved as a comment | _(rationale pending)_ |
 | <a id="unique-1224"></a>`UNIQUE-1224` | orchestration | batch commented out (unrecognized migration-guard shape); the specific batch is carried at runtime | _(rationale pending)_ |
-| <a id="unique-1227"></a>`UNIQUE-1227` | ddl | Oracle MODIFY keeps the column's current nullability; the redundant NULL is omitted (an explicit<br>NULL raises ORA-01451 when the column is already nullable) | _(rationale pending)_ |
-| <a id="unique-1228"></a>`UNIQUE-1228` | validation | internal: a parsed sqlglot construct was not consumed by the converter (unread arg) — the construct<br>may be dropped; the specific arg is carried at runtime | _(rationale pending)_ |
 | <a id="unique-1229"></a>`UNIQUE-1229` | validation | DML transpilation failed (internal error); the source statement is preserved as a comment; the error<br>is carried at runtime | _(rationale pending)_ |
-| <a id="unique-1230"></a>`UNIQUE-1230` | procedural | procedural parse note; the specific reason is carried at runtime | _(rationale pending)_ |
 | <a id="unique-1232"></a>`UNIQUE-1232` | procedural | procedural transpilation failed (internal error); the routine is preserved; the error is carried at<br>runtime | _(rationale pending)_ |
 
-239 codes across 6 categories (200 with a rationale).
+239 codes across 6 categories (213 with a rationale).
