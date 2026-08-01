@@ -2286,15 +2286,15 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **See Also.** [`TestTranspiler::test_add_default_non_portable_value_falls_back`](../../tests/unit/core/test_transpiler.py)
 
-### <a id="unique-1214"></a>`UNIQUE-1214` — A standalone T-SQL/MySQL SET TRANSACTION ISOLATION LEVEL READ COMMITTED batch (→ Oracle)
+### <a id="unique-1214"></a>`UNIQUE-1214` — SET TRANSACTION ISOLATION LEVEL READ COMMITTED (T-SQL/MySQL/PostgreSQL) → Oracle
 
 **Category:** `orchestration` · **Message:** READ COMMITTED is Oracle's default isolation level (no-op; noted so a following SET TRANSACTION mode statement can still open the transaction
 
-**Problem.** A standalone T-SQL/MySQL SET TRANSACTION ISOLATION LEVEL READ COMMITTED batch (→ Oracle)
+**Problem.** SET TRANSACTION ISOLATION LEVEL READ COMMITTED (T-SQL/MySQL/PostgreSQL) → Oracle
 
 **Solution (pointer).** Faithful (no-op on both engines) — kept as a comment so a following SET TRANSACTION mode statement can still open the transaction.
 
-**Discussion.** READ COMMITTED is Oracle's default isolation level, and Oracle requires SET TRANSACTION to be a transaction's very first statement (ORA-01453 otherwise); keeping this one would block a following mapped SET TRANSACTION (e.g. READ ONLY) from opening the transaction. Same no-op fact as UNIQUE-1129: 1129 is reported when the statement shares a batch with other statements; 1214 when it is (or opens) a batch of its own.
+**Discussion.** READ COMMITTED is Oracle's default isolation level, and Oracle requires SET TRANSACTION to be a transaction's very first statement (ORA-01453 otherwise); keeping this one would block a following mapped SET TRANSACTION (e.g. READ ONLY) from opening the transaction.
 
 **See Also.** [`TestSetTransactionModes::test_oracle_read_only`](../../tests/integration/test_challenge.py)
 
@@ -2571,26 +2571,33 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 | <a id="unique-1035"></a>`UNIQUE-1035` | statement | TABLESAMPLE by row count has no Oracle SAMPLE form (docs/03-unsupported.md | _(rationale pending)_ |
 | <a id="unique-1036"></a>`UNIQUE-1036` | statement | TABLESAMPLE by row count has no PostgreSQL equivalent (docs/03-unsupported.md | _(rationale pending)_ |
 | <a id="unique-1070"></a>`UNIQUE-1070` | expression | Oracle DEFAULT ... ON CONVERSION ERROR has no {dialect} error-safe cast for this type; fallback<br>dropped -- see docs/03-unsupported.md | _(rationale pending)_ |
-| <a id="unique-1072"></a>`UNIQUE-1072` | expression | …; no {dialect} mapping — review | _(rationale pending)_ |
 | <a id="unique-1086"></a>`UNIQUE-1086` | expression | EXTRACT({part}) has no {dialect} equivalent — the value was not computed (docs/03-unsupported.md | _(rationale pending)_ |
-| <a id="unique-1102"></a>`UNIQUE-1102` | statement | MySQL NOT ENFORCED (a CHECK defined but not validated) has no target equivalent; enforced here | _(rationale pending)_ |
-| <a id="unique-1117"></a>`UNIQUE-1117` | statement | MySQL admin command has no {dialect} equivalent; run the target's own maintenance. | _(rationale pending)_ |
-| <a id="unique-1120"></a>`UNIQUE-1120` | statement | SET SESSION AUTHORIZATION has no {dialect} equivalent; switch users natively. | _(rationale pending)_ |
-| <a id="unique-1121"></a>`UNIQUE-1121` | statement | PostgreSQL session setting has no {dialect} equivalent; configure the session natively. | _(rationale pending)_ |
-| <a id="unique-1129"></a>`UNIQUE-1129` | statement | READ COMMITTED is Oracle's default isolation level (no-op; kept as a note so a following SET<br>TRANSACTION mode statement can still open the transaction | _(rationale pending)_ |
-| <a id="unique-1130"></a>`UNIQUE-1130` | statement | READ COMMITTED is Oracle's default isolation level (no-op; kept as a note so a following SET<br>TRANSACTION mode statement can still open the transaction | _(rationale pending)_ |
 | <a id="unique-1131"></a>`UNIQUE-1131` | statement | Oracle has no {level} isolation level (supports READ COMMITTED/SERIALIZABLE only); statement<br>dropped. Original | _(rationale pending)_ |
-| <a id="unique-1135"></a>`UNIQUE-1135` | statement | session-variable SELECT INTO has no cross-dialect equivalent; rewrite as the target's assignment<br>form. Original | _(rationale pending)_ |
-| <a id="unique-1144"></a>`UNIQUE-1144` | statement | Unhandled … | _(rationale pending)_ |
 | <a id="unique-1149"></a>`UNIQUE-1149` | expression | UNPIVOT has no {dialect} equivalent and the source columns are not visible to rewrite it as UNION<br>ALL — see docs/03-unsupported.md | _(rationale pending)_ |
 | <a id="unique-1150"></a>`UNIQUE-1150` | expression | PIVOT has no {dialect} equivalent and the source columns are not visible to rewrite it as<br>conditional aggregation — see docs/03-unsupported.md | _(rationale pending)_ |
 | <a id="unique-1181"></a>`UNIQUE-1181` | procedural | INSTEAD OF trigger aggregates over the inserted/deleted transition table; PostgreSQL INSTEAD OF<br>triggers are row-level only — port by hand (docs/03-unsupported.md | _(rationale pending)_ |
 | <a id="unique-1189"></a>`UNIQUE-1189` | procedural | EXECUTE IMMEDIATE USING bindings dropped; inline them or use sp_executesql parameters | _(rationale pending)_ |
 | <a id="unique-1191"></a>`UNIQUE-1191` | procedural | OUTPUT <expr> dropped — populate the temp table manually | _(rationale pending)_ |
-| <a id="unique-1199"></a>`UNIQUE-1199` | procedural | T-SQL system procedure has no … equivalent; original: {original} | _(rationale pending)_ |
 | <a id="unique-1204"></a>`UNIQUE-1204` | procedural | no MySQL equivalent: ALTER TRIGGER … … | _(rationale pending)_ |
 | <a id="unique-1224"></a>`UNIQUE-1224` | orchestration | batch commented out (unrecognized migration-guard shape); the specific batch is carried at runtime | _(rationale pending)_ |
 | <a id="unique-1229"></a>`UNIQUE-1229` | validation | DML transpilation failed (internal error); the source statement is preserved as a comment; the error<br>is carried at runtime | _(rationale pending)_ |
 | <a id="unique-1232"></a>`UNIQUE-1232` | procedural | procedural transpilation failed (internal error); the routine is preserved; the error is carried at<br>runtime | _(rationale pending)_ |
 
-239 codes across 6 categories (213 with a rationale).
+## Reserved codes
+
+Registered so the number is never reused, but not expected in transpiler output — either every construct that could trigger the code is reported under another code, or the code was consolidated into a surviving sibling.
+
+| Code | Category | Message template | Status |
+|---|---|---|---|
+| <a id="unique-1072"></a>`UNIQUE-1072` | expression | …; no {dialect} mapping — review | _Reserved_ — not currently emitted — every construct that could trigger it is reported under an<br>earlier, more specific code |
+| <a id="unique-1102"></a>`UNIQUE-1102` | statement | MySQL NOT ENFORCED (a CHECK defined but not validated) has no target equivalent; enforced here | _Reserved_ — not currently emitted — every construct that could trigger it is reported under an<br>earlier, more specific code |
+| <a id="unique-1117"></a>`UNIQUE-1117` | statement | MySQL admin command has no {dialect} equivalent; run the target's own maintenance. | _Reserved_ — not currently emitted — superseded by UNIQUE-1219 |
+| <a id="unique-1120"></a>`UNIQUE-1120` | statement | SET SESSION AUTHORIZATION has no {dialect} equivalent; switch users natively. | _Reserved_ — not currently emitted — superseded by UNIQUE-1217 |
+| <a id="unique-1121"></a>`UNIQUE-1121` | statement | PostgreSQL session setting has no {dialect} equivalent; configure the session natively. | _Reserved_ — not currently emitted — superseded by UNIQUE-1218 |
+| <a id="unique-1129"></a>`UNIQUE-1129` | statement | READ COMMITTED is Oracle's default isolation level (no-op; kept as a note so a following SET<br>TRANSACTION mode statement can still open the transaction | _Reserved_ — consolidated into UNIQUE-1214 (2026-08-01) |
+| <a id="unique-1130"></a>`UNIQUE-1130` | statement | READ COMMITTED is Oracle's default isolation level (no-op; kept as a note so a following SET<br>TRANSACTION mode statement can still open the transaction | _Reserved_ — consolidated into UNIQUE-1214 (2026-08-01) |
+| <a id="unique-1135"></a>`UNIQUE-1135` | statement | session-variable SELECT INTO has no cross-dialect equivalent; rewrite as the target's assignment<br>form. Original | _Reserved_ — not currently emitted — superseded by UNIQUE-1003 |
+| <a id="unique-1144"></a>`UNIQUE-1144` | statement | Unhandled … | _Reserved_ — not currently emitted — reachable only through an internal safety net, with no known<br>triggering SQL |
+| <a id="unique-1199"></a>`UNIQUE-1199` | procedural | T-SQL system procedure has no … equivalent; original: {original} | _Reserved_ — not currently emitted — the calls it covered are reported under UNIQUE-1198 |
+
+239 codes across 6 categories (213 with a rationale, 10 reserved).

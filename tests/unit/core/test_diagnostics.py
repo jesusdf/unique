@@ -17,7 +17,7 @@ from pathlib import Path
 
 from unique.core import diagnostics
 from unique.core.diagnostics import DIAGNOSTICS
-from unique.core.rationales import RATIONALES, Rationale
+from unique.core.rationales import RATIONALES, RESERVED, Rationale
 
 _SRC = Path(diagnostics.__file__).parent.parent  # …/src/unique
 _ROOT = _SRC.parent.parent  # repo root
@@ -100,19 +100,18 @@ def test_is_registered():
 # To lower it: add honestly-sourced entries to unique.core.rationales.RATIONALES
 # (each traceable to a docs/fixtures/challenge/ corpus case or an existing
 # test node id — never invented), then set this to the new, smaller count.
-# Current: 239 registered − 213 with a rationale = 26. This session (PEND-1,
-# 2026-08-01, across a session-limit reset) added 25 of the 51 codes that
-# were "(rationale pending)" in docs/reference/warnings.md (1011, 1012,
-# 1013, 1017, 1018, 1033, 1047, 1079, 1081, 1106, 1107, 1111, 1126, 1128,
-# 1141, 1142, 1145, 1170, 1188, 1213, 1214, 1220, 1227, 1228, 1230), driving
-# the floor 51 -> 26. The remaining 26 codes were investigated (several
-# live-probed and confirmed to fire correctly, a few — 1072, 1102, and
-# strong circumstantial evidence for 1117/1120/1121/1135/1144/1199 —
-# appearing structurally unreachable through the public Transpiler API,
-# superseded by an earlier-intercepting code) but have no traceable corpus
-# case or existing test anywhere in the repo (an honest gap, not invented).
+# Current: 239 registered − 213 with a rationale − 10 RESERVED = 16. PEND-1
+# (2026-08-01, across a session-limit reset) added 25 of the 51 codes that
+# were "(rationale pending)" in docs/reference/warnings.md, driving the
+# floor 51 -> 26; the maintainer then reserved 10 codes (PEND-2a: 1072/1102
+# plus 1117/1120/1121/1135/1144/1199 — structurally unreachable, every
+# trigger reported under another code; PEND-1c: 1129/1130 consolidated into
+# 1214), driving it 26 -> 16. The remaining 16 codes were investigated
+# (several live-probed and confirmed to fire correctly) but have no
+# traceable corpus case or existing test anywhere in the repo (an honest
+# gap, not invented) — see docs/TODO.md PEND-1b.
 # ---------------------------------------------------------------------------
-_RATIONALE_UNCOVERED_FLOOR = 26
+_RATIONALE_UNCOVERED_FLOOR = 16
 
 _CASE_HEADER_RE = re.compile(
     r"^--\s*CASE\[[a-z]+\](?:\[[^\]]*\])*:\s*([A-Za-z0-9][A-Za-z0-9_-]*)\b"
@@ -158,7 +157,7 @@ def test_rationale_example_case_is_traceable():
 
 def test_rationale_coverage_ratchets_down():
     """Codes without a rationale must not exceed the committed floor."""
-    uncovered = sorted(set(DIAGNOSTICS) - set(RATIONALES))
+    uncovered = sorted(set(DIAGNOSTICS) - set(RATIONALES) - set(RESERVED))
     assert len(uncovered) <= _RATIONALE_UNCOVERED_FLOOR, (
         f"{len(uncovered)} diagnostic codes have no rationale "
         f"(floor {_RATIONALE_UNCOVERED_FLOOR}); a new code without a rationale "
@@ -166,3 +165,29 @@ def test_rationale_coverage_ratchets_down():
         "unique.core.rationales.RATIONALES, or lower the floor if you removed a "
         "code. The ratchet is monotonic downward."
     )
+
+
+def test_reserved_codes_are_registered_and_rationale_free():
+    """RESERVED keys must be real codes, never doubling as covered rationales
+    (a reserved code with a rationale would silently double-count), and each
+    must carry a non-empty status line."""
+    orphans = sorted(set(RESERVED) - set(DIAGNOSTICS))
+    assert not orphans, f"reserved but unregistered code(s): {orphans}"
+    overlap = sorted(set(RESERVED) & set(RATIONALES))
+    assert not overlap, f"code(s) both reserved and rationalized: {overlap}"
+    for code, status in RESERVED.items():
+        assert status and status.strip(), code
+
+
+def test_consolidated_codes_not_emitted():
+    """A code consolidated into a sibling must no longer appear at any emit
+    site — only the registries may mention it (append-only: the number is
+    reserved, not reused)."""
+    allowed = {"diagnostics.py", "rationales.py"}
+    for code in ("UNIQUE-1129", "UNIQUE-1130"):
+        offenders = [
+            str(p.relative_to(_ROOT))
+            for p in (_ROOT / "src" / "unique").rglob("*.py")
+            if p.name not in allowed and code in p.read_text(encoding="utf-8")
+        ]
+        assert not offenders, f"{code} still emitted from: {offenders}"

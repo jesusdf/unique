@@ -3183,18 +3183,15 @@ RATIONALES: dict[str, Rationale] = {
     ),
     "UNIQUE-1214": _R(
         construct=(
-            "A standalone T-SQL/MySQL SET TRANSACTION ISOLATION LEVEL "
-            "READ COMMITTED batch (→ Oracle)"
+            "SET TRANSACTION ISOLATION LEVEL READ COMMITTED "
+            "(T-SQL/MySQL/PostgreSQL) → Oracle"
         ),
         reason=(
             "READ COMMITTED is Oracle's default isolation level, and "
             "Oracle requires SET TRANSACTION to be a transaction's very "
             "first statement (ORA-01453 otherwise); keeping this one "
             "would block a following mapped SET TRANSACTION (e.g. READ "
-            "ONLY) from opening the transaction. Same no-op fact as "
-            "UNIQUE-1129: 1129 is reported when the statement shares a "
-            "batch with other statements; 1214 when it is (or opens) a "
-            "batch of its own."
+            "ONLY) from opening the transaction."
         ),
         example_case=(
             "tests/integration/test_challenge.py::TestSetTransactionModes::"
@@ -3674,5 +3671,36 @@ RATIONALES: dict[str, Rationale] = {
             "different bytes than SQL Server's GZIP output; DECOMPRESS on the "
             "matching engine still round-trips."
         ),
+    ),
+}
+
+#: Codes that stay registered (the registry is append-only — a number is
+#: never reused) but are not expected in transpiler output: either every
+#: construct that could trigger them is reported under another code, or the
+#: code was consolidated into a surviving sibling. Maintainer decision
+#: 2026-08-01 (PEND-2a / PEND-1c). Value = the one-line status shown in
+#: docs/reference/warnings.md; these codes are excluded from the
+#: rationale-coverage ratchet in tests/unit/core/test_diagnostics.py.
+RESERVED: dict[str, str] = {
+    "UNIQUE-1072": (
+        "not currently emitted — every construct that could trigger it is "
+        "reported under an earlier, more specific code"
+    ),
+    "UNIQUE-1102": (
+        "not currently emitted — every construct that could trigger it is "
+        "reported under an earlier, more specific code"
+    ),
+    "UNIQUE-1117": "not currently emitted — superseded by UNIQUE-1219",
+    "UNIQUE-1120": "not currently emitted — superseded by UNIQUE-1217",
+    "UNIQUE-1121": "not currently emitted — superseded by UNIQUE-1218",
+    "UNIQUE-1129": "consolidated into UNIQUE-1214 (2026-08-01)",
+    "UNIQUE-1130": "consolidated into UNIQUE-1214 (2026-08-01)",
+    "UNIQUE-1135": "not currently emitted — superseded by UNIQUE-1003",
+    "UNIQUE-1144": (
+        "not currently emitted — reachable only through an internal safety "
+        "net, with no known triggering SQL"
+    ),
+    "UNIQUE-1199": (
+        "not currently emitted — the calls it covered are reported under " "UNIQUE-1198"
     ),
 }

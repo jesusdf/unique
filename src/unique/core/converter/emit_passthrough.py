@@ -1092,8 +1092,8 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         )
     ):
         return (
-            "-- UNIQUE-1129: READ COMMITTED is Oracle's default isolation level "
-            "(no-op; kept as a note so a following SET TRANSACTION mode "
+            "-- UNIQUE-1214: READ COMMITTED is Oracle's default isolation "
+            "level (no-op; noted so a following SET TRANSACTION mode "
             "statement can still open the transaction)"
         )
 
@@ -1131,8 +1131,8 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 return f"SET TRANSACTION READ {mode}"
             if level == "READ COMMITTED":
                 return (
-                    "-- UNIQUE-1130: READ COMMITTED is Oracle's default isolation "
-                    "level (no-op; kept as a note so a following SET "
+                    "-- UNIQUE-1214: READ COMMITTED is Oracle's default "
+                    "isolation level (no-op; noted so a following SET "
                     "TRANSACTION mode statement can still open the "
                     "transaction)"
                 )

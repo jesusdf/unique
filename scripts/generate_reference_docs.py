@@ -59,7 +59,7 @@ sys.path.insert(0, str(_ROOT / "src"))
 from unique.core import builtins as core_builtins  # noqa: E402
 from unique.core import mappings  # noqa: E402
 from unique.core.diagnostics import DIAGNOSTICS  # noqa: E402
-from unique.core.rationales import RATIONALES  # noqa: E402
+from unique.core.rationales import RATIONALES, RESERVED  # noqa: E402
 
 _OUT_DIR = _ROOT / "docs" / "reference"
 _CHALLENGE_DIR = _ROOT / "tests" / "fixtures" / "challenge"
@@ -575,6 +575,20 @@ def _pending_table(codes: list[str]) -> str:
     return _table(headers, rows)
 
 
+def _reserved_table(codes: list[str]) -> str:
+    headers = ["Code", "Category", "Message template", "Status"]
+    rows = [
+        (
+            f'<a id="{code.lower()}"></a>`{code}`',
+            DIAGNOSTICS[code].category,
+            DIAGNOSTICS[code].message,
+            f"_Reserved_ — {RESERVED[code]}",
+        )
+        for code in codes
+    ]
+    return _table(headers, rows)
+
+
 def render_warnings_page() -> str:
     parts = [
         _preamble(
@@ -585,7 +599,8 @@ def render_warnings_page() -> str:
     ]
     codes = sorted(DIAGNOSTICS, key=_code_sort_key)
     with_rationale = [c for c in codes if c in RATIONALES]
-    without_rationale = [c for c in codes if c not in RATIONALES]
+    reserved = [c for c in codes if c in RESERVED]
+    without_rationale = [c for c in codes if c not in RATIONALES and c not in RESERVED]
     parts.append(
         "One entry per stable diagnostic code the transpiler can emit. `code` "
         "is the grep/suppress token (`-- UNIQUE-1234: …`); every code is "
@@ -608,9 +623,18 @@ def render_warnings_page() -> str:
     parts.append("## Diagnostics without a rationale yet\n\n")
     parts.append(_pending_table(without_rationale))
     parts.append(
+        "\n## Reserved codes\n\n"
+        "Registered so the number is never reused, but not expected in "
+        "transpiler output — either every construct that could trigger the "
+        "code is reported under another code, or the code was consolidated "
+        "into a surviving sibling.\n\n"
+    )
+    parts.append(_reserved_table(reserved))
+    parts.append(
         f"\n{len(codes)} codes across "
         f"{len({d.category for d in DIAGNOSTICS.values()})} categories "
-        f"({len(with_rationale)} with a rationale).\n"
+        f"({len(with_rationale)} with a rationale, {len(reserved)} "
+        "reserved).\n"
     )
     return "".join(parts)
 
