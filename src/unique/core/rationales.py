@@ -3192,13 +3192,9 @@ RATIONALES: dict[str, Rationale] = {
             "first statement (ORA-01453 otherwise); keeping this one "
             "would block a following mapped SET TRANSACTION (e.g. READ "
             "ONLY) from opening the transaction. Same no-op fact as "
-            "UNIQUE-1129, reached by a different route: 1129 fires once "
-            "the statement has survived into the sqlglot-based "
-            "passthrough pipeline as an ordinary node (e.g. it shares a "
-            "batch with a preceding statement); 1214 fires when the "
-            "statement is (or opens) its own whole batch, handled "
-            "directly at the orchestration layer before any sqlglot "
-            "parse of it."
+            "UNIQUE-1129: 1129 is reported when the statement shares a "
+            "batch with other statements; 1214 when it is (or opens) a "
+            "batch of its own."
         ),
         example_case=(
             "tests/integration/test_challenge.py::TestSetTransactionModes::"
