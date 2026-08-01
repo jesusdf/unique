@@ -508,7 +508,21 @@ worker agents**:
   ORA-00955, pg_type races) when several workers gate at once. Workers run
   the live-marked tests with a serial `pytest`; the parallel runner is for
   the offline suite.
-- **Concurrency is budget-bound:** keep it to **2–3 workers at a time** and
+- **Check the session-usage % before spending big (maintainer-authorized
+  2026-08-01, READ-ONLY).** When the session runs inside the user's `screen`
+  session (check `$STY`), the visible terminal — including the status bar's
+  "You've used N% of your session limit · resets HH:MM" line — can be
+  captured with:
+  ```bash
+  screen -S "$STY" -X hardcopy /tmp/…/screen-dump.txt   # then read the file
+  ```
+  Authorized use is **only** reading that usage % / reset time, read-only —
+  never to read anything else on screen, never `-X` commands that modify the
+  session. Check it **before launching a worker**, **before cutting a
+  release/tag**, and before any long operation; at **≥~85%** stop launching
+  new workers and instead order in-flight ones to commit at a stable point
+  (the A10-P3/PEND-1 stop-order pattern) — a session-limit death mid-worker
+  loses the whole uncommitted batch.
   batch the rest — the 2026-07-24 six-agent fan-out exhausted the session
   limit mid-campaign. Long-running workers go in the background; the
   architect keeps working.
