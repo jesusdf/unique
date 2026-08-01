@@ -519,10 +519,14 @@ worker agents**:
   Authorized use is **only** reading that usage % / reset time, read-only —
   never to read anything else on screen, never `-X` commands that modify the
   session. Check it **before launching a worker**, **before cutting a
-  release/tag**, and before any long operation; at **≥~85%** stop launching
+  release/tag**, and before any long operation; at **≥95%** stop launching
   new workers and instead order in-flight ones to commit at a stable point
   (the A10-P3/PEND-1 stop-order pattern) — a session-limit death mid-worker
-  loses the whole uncommitted batch.
+  loses the whole uncommitted batch. **Past 95%**, additionally start a
+  half-hourly screen check (a background loop: sleep 30 min → hardcopy →
+  grep the usage line): when the "You've used N%…" message resets
+  (disappears or the % drops back), the full ratio is available again —
+  **resume the pending work automatically**, without waiting for the user.
   batch the rest — the 2026-07-24 six-agent fan-out exhausted the session
   limit mid-campaign. Long-running workers go in the background; the
   architect keeps working.
