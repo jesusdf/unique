@@ -98,14 +98,21 @@ def test_is_registered():
 # the architecture ratchets (scripts/architecture_ratchets.py).
 #
 # To lower it: add honestly-sourced entries to unique.core.rationales.RATIONALES
-# (each traceable to a docs/rationale/ page, a docs/03-unsupported.md section,
-# or an emission-site docstring — never invented), then set this to the new,
-# smaller count. Current: 233 registered − 96 with a rationale = 137. This
-# session (statement/orchestration/validation categories only) added 63
-# entries, driving the floor 200 → 137; a sibling session covers the
-# procedural/expression/ddl categories and lowers it further separately.
+# (each traceable to a docs/fixtures/challenge/ corpus case or an existing
+# test node id — never invented), then set this to the new, smaller count.
+# Current: 239 registered − 213 with a rationale = 26. This session (PEND-1,
+# 2026-08-01, across a session-limit reset) added 25 of the 51 codes that
+# were "(rationale pending)" in docs/reference/warnings.md (1011, 1012,
+# 1013, 1017, 1018, 1033, 1047, 1079, 1081, 1106, 1107, 1111, 1126, 1128,
+# 1141, 1142, 1145, 1170, 1188, 1213, 1214, 1220, 1227, 1228, 1230), driving
+# the floor 51 -> 26. The remaining 26 codes were investigated (several
+# live-probed and confirmed to fire correctly, a few — 1072, 1102, and
+# strong circumstantial evidence for 1117/1120/1121/1135/1144/1199 —
+# appearing structurally unreachable through the public Transpiler API,
+# superseded by an earlier-intercepting code) but have no traceable corpus
+# case or existing test anywhere in the repo (an honest gap, not invented).
 # ---------------------------------------------------------------------------
-_RATIONALE_UNCOVERED_FLOOR = 51
+_RATIONALE_UNCOVERED_FLOOR = 26
 
 _CASE_HEADER_RE = re.compile(
     r"^--\s*CASE\[[a-z]+\](?:\[[^\]]*\])*:\s*([A-Za-z0-9][A-Za-z0-9_-]*)\b"
