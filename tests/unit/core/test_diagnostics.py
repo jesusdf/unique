@@ -98,14 +98,17 @@ def test_is_registered():
 # the architecture ratchets (scripts/architecture_ratchets.py).
 #
 # To lower it: add honestly-sourced entries to unique.core.rationales.RATIONALES
-# (each traceable to a docs/rationale/ page, a docs/03-unsupported.md section,
-# or an emission-site docstring — never invented), then set this to the new,
-# smaller count. Current: 233 registered − 96 with a rationale = 137. This
-# session (statement/orchestration/validation categories only) added 63
-# entries, driving the floor 200 → 137; a sibling session covers the
-# procedural/expression/ddl categories and lowers it further separately.
+# (each traceable to a docs/fixtures/challenge/ corpus case or an existing
+# test node id — never invented), then set this to the new, smaller count.
+# Current: 239 registered − 200 with a rationale = 39. This session (PEND-1,
+# 2026-08-01) added 12 of the 51 codes that were "(rationale pending)" in
+# docs/reference/warnings.md (1011, 1012, 1013, 1017, 1018, 1033, 1126, 1128,
+# 1142, 1145, 1170, 1188), driving the floor 51 -> 39; the remaining 39 codes
+# were live-probed and confirmed to fire correctly but have no traceable
+# corpus case or existing test anywhere in the repo (an honest gap, not
+# invented) — see the PEND-1 session notes for the per-code breakdown.
 # ---------------------------------------------------------------------------
-_RATIONALE_UNCOVERED_FLOOR = 51
+_RATIONALE_UNCOVERED_FLOOR = 39
 
 _CASE_HEADER_RE = re.compile(
     r"^--\s*CASE\[[a-z]+\](?:\[[^\]]*\])*:\s*([A-Za-z0-9][A-Za-z0-9_-]*)\b"

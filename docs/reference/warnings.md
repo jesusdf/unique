@@ -2,7 +2,7 @@
 
 > **Generated — do not edit by hand.** Produced by `python scripts/generate_reference_docs.py` from the `UNIQUE-NNNN` registry (`src/unique/core/diagnostics.py`) and the rationale side-table (`src/unique/core/rationales.py`). The CI freshness gate (`python scripts/generate_reference_docs.py --check`) fails the build if this file drifts from the source data.
 
-One entry per stable diagnostic code the transpiler can emit. `code` is the grep/suppress token (`-- UNIQUE-1234: …`); every code is anchored as `warnings.md#unique-1234`. A code with a rationale entry (188 of 239) renders as a recipe: **Problem** (the triggering construct), **Solution (pointer)** (what Unique does about it — a pointer, not a worked example: the registry carries no SQL sample), **Discussion** (the engine-level reason no direct mapping exists) and **See Also** (the corpus case or test that proves it). The remaining codes render in a compact table marked `_(rationale pending)_` until a rationale is added (the coverage ratchet in `tests/unit/core/test_diagnostics.py` drives that count down).
+One entry per stable diagnostic code the transpiler can emit. `code` is the grep/suppress token (`-- UNIQUE-1234: …`); every code is anchored as `warnings.md#unique-1234`. A code with a rationale entry (200 of 239) renders as a recipe: **Problem** (the triggering construct), **Solution (pointer)** (what Unique does about it — a pointer, not a worked example: the registry carries no SQL sample), **Discussion** (the engine-level reason no direct mapping exists) and **See Also** (the corpus case or test that proves it). The remaining codes render in a compact table marked `_(rationale pending)_` until a rationale is added (the coverage ratchet in `tests/unit/core/test_diagnostics.py` drives that count down).
 
 ## Diagnostics with a rationale
 
@@ -126,6 +126,42 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **See Also.** [`TestB10RunningColumnTypeAlterNullability::test_unknown_column_warns`](../../tests/integration/test_pg_source_wave1.py)
 
+### <a id="unique-1011"></a>`UNIQUE-1011` — A T-SQL named DEFAULT constraint (CONSTRAINT df_x DEFAULT ...) on an ADD/ALTER COLUMN (→ MySQL/PostgreSQL/Oracle)
+
+**Category:** `statement` · **Message:** named DEFAULT constraint {n} dropped (defaults are anonymous on this engine
+
+**Problem.** A T-SQL named DEFAULT constraint (CONSTRAINT df_x DEFAULT ...) on an ADD/ALTER COLUMN (→ MySQL/PostgreSQL/Oracle)
+
+**Solution (pointer).** Warned limit — the constraint's name is lost (nothing references it downstream); the default value and column definition are faithful.
+
+**Discussion.** Only T-SQL names its DEFAULT constraints as a separate object; every other engine's DEFAULT is an anonymous column attribute with no CONSTRAINT <name> spelling at all, so the name has nothing to bind to and is dropped while the default value itself is kept.
+
+**See Also.** [`test_named_default_constraint_dropped_with_note`](../../tests/integration/test_ddl_rename_dropindex.py)
+
+### <a id="unique-1012"></a>`UNIQUE-1012` — A T-SQL CREATE INDEX ... INCLUDE (col, ...) covering-columns clause (→ MySQL/Oracle)
+
+**Category:** `statement` · **Message:** {dialect} does not support INCLUDE covering columns; dropped: …
+
+**Problem.** A T-SQL CREATE INDEX ... INCLUDE (col, ...) covering-columns clause (→ MySQL/Oracle)
+
+**Solution (pointer).** Warned limit — the index no longer covers those columns; a query relying on them for an index-only scan now needs a table lookup (PostgreSQL keeps INCLUDE natively).
+
+**Discussion.** INCLUDE columns are stored in the index leaf but excluded from its key/sort order (a covering-index optimization); MySQL and Oracle indexes have no non-key column list at all, so there is no clause to carry the covering columns to.
+
+**See Also.** [`TestPortableIndex::test_include_index_flagged_elsewhere`](../../tests/integration/test_cross_dialect.py)
+
+### <a id="unique-1013"></a>`UNIQUE-1013` — A filtered (WHERE-predicated) CREATE INDEX (→ MySQL/Oracle)
+
+**Category:** `statement` · **Message:** {dialect} does not support filtered indexes; dropped predicate:…
+
+**Problem.** A filtered (WHERE-predicated) CREATE INDEX (→ MySQL/Oracle)
+
+**Solution (pointer).** Warned limit — the index now covers every row instead of just the filtered subset (PostgreSQL keeps the predicate natively).
+
+**Discussion.** MySQL and Oracle have no partial/filtered index at all — an index always covers every row of the table — so the predicate has no clause to attach to.
+
+**See Also.** [`TestPortableIndex::test_filtered_index_flagged_elsewhere`](../../tests/integration/test_cross_dialect.py)
+
 ### <a id="unique-1014"></a>`UNIQUE-1014` — Physical index storage clause, e.g. WITH (FILLFACTOR = n) (T-SQL)
 
 **Category:** `statement` · **Message:** {clauses} -- tsql-only, no {dialect} equivalent (physical index clause
@@ -161,6 +197,30 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 **Discussion.** MySQL has no CUBE / GROUPING SETS and only a trailing WITH ROLLUP, so a multi-element grouping's subtotal (super-aggregate) rows cannot be produced; only the base grouping is kept.
 
 **See Also.** [`pg-grouping-fn`](../../tests/fixtures/challenge/challenge_postgresql.sql)
+
+### <a id="unique-1017"></a>`UNIQUE-1017` — A multi-element GROUP BY combining CUBE/ROLLUP/GROUPING SETS in one clause, e.g. GROUP BY CUBE(a, b), ROLLUP(c) (→ MySQL)
+
+**Category:** `statement` · **Message:** MySQL has no multi-element GROUP BY (CUBE/ROLLUP/ GROUPING SETS combined); the base grouping is kept and the super-aggregate (subtotal) rows are omitted
+
+**Problem.** A multi-element GROUP BY combining CUBE/ROLLUP/GROUPING SETS in one clause, e.g. GROUP BY CUBE(a, b), ROLLUP(c) (→ MySQL)
+
+**Solution (pointer).** Warned limit — the base grouping is kept but every super-aggregate (subtotal) row the combined CUBE/ROLLUP/GROUPING SETS would have produced is omitted.
+
+**Discussion.** MySQL supports only a single trailing WITH ROLLUP modifier on the whole GROUP BY — it has no CUBE, no GROUPING SETS, and no way to combine multiple grouping elements — so a clause combining more than one such element has nothing to lower to beyond the plain column list.
+
+**See Also.** [`pg-groupby-multi-cube-rollup`](../../tests/fixtures/challenge/challenge_postgresql.sql)
+
+### <a id="unique-1018"></a>`UNIQUE-1018` — A top-level SELECT ... FOR XML / FOR JSON PATH row-serialization clause (T-SQL) (→ MySQL/PostgreSQL/Oracle)
+
+**Category:** `statement` · **Message:** T-SQL FOR XML/JSON row serialization has no cross-engine equivalent; the clause is dropped and the base rows are returned instead (see docs/03-unsupported.md
+
+**Problem.** A top-level SELECT ... FOR XML / FOR JSON PATH row-serialization clause (T-SQL) (→ MySQL/PostgreSQL/Oracle)
+
+**Solution (pointer).** Warned limit — the clause is dropped and the plain multi-row/multi-column result set is returned instead of the single serialized scalar; rebuild the aggregation with the target's own JSON/XML functions if the scalar form is required.
+
+**Discussion.** FOR XML/FOR JSON collapses the whole multi-row result set into a single XML or JSON scalar under T-SQL's own node-naming and null-omission rules; no other engine has a matching top-level row-serialization clause, so there is no faithful drop-in and shipping the base rows raw would silently turn one scalar row into many rows/columns.
+
+**See Also.** [`reda-ts-for-json`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1019"></a>`UNIQUE-1019` — SQL_CALC_FOUND_ROWS on a SELECT with LIMIT (MySQL) → other engines
 
@@ -305,6 +365,18 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 **Discussion.** Every engine spells its session/connection identifier differently (PostgreSQL pg_backend_pid(), MySQL CONNECTION_ID(), Oracle SYS_CONTEXT('USERENV','SID')) and the value is inherently per-connection, so it can never equal T-SQL's @@SPID even when mapped to the engine's closest equivalent.
 
 **See Also.** [`ts-spid-version`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
+
+### <a id="unique-1033"></a>`UNIQUE-1033` — Oracle SQL%ROWCOUNT used in a re-evaluated loop or EXIT condition (WHILE SQL%ROWCOUNT > 0 / EXIT WHEN SQL%ROWCOUNT = 0) (→ PostgreSQL)
+
+**Category:** `statement` · **Message:** SQL%ROWCOUNT has no top-level {dialect} equivalent
+
+**Problem.** Oracle SQL%ROWCOUNT used in a re-evaluated loop or EXIT condition (WHILE SQL%ROWCOUNT > 0 / EXIT WHEN SQL%ROWCOUNT = 0) (→ PostgreSQL)
+
+**Solution (pointer).** Warned limit — degrades to the constant 0; T-SQL and MySQL read the row count inline natively and are unaffected.
+
+**Discussion.** PostgreSQL reads the last statement's row count only through the GET DIAGNOSTICS statement, not an inline expression; a single hoisted capture placed before the loop would freeze the value instead of re-reading it each iteration the way SQL%ROWCOUNT does, so a condition re-evaluated every pass cannot be captured with one hoist and has no faithful inline substitute (a reference in the loop body, or in a single-evaluated position like an IF/assignment/RETURN, is captured by a hoisted local and never reaches this code).
+
+**See Also.** [`TestLoopConditionDegrades::test_while_condition_kept_as_carrier`](../../tests/integration/test_oracle_rowcount_hoist_b37.py)
 
 ### <a id="unique-1034"></a>`UNIQUE-1034` — TABLESAMPLE (→ MySQL)
 
@@ -1230,6 +1302,18 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **See Also.** [`TestDDLPassthrough::test_merge_to_mysql_documented`](../../tests/integration/test_cross_dialect.py)
 
+### <a id="unique-1126"></a>`UNIQUE-1126` — A WITH-clause (CTE) feeding an UPDATE/DELETE — either updating *through* the CTE name, or a data-modifying CTE body (WITH x AS (INSERT/UPDATE/DELETE ... RETURNING) SELECT ...) — transpiled cross-engine
+
+**Category:** `statement` · **Message:** CTE with unsupported embedded DML preserved as a comment; reason carried at runtime
+
+**Problem.** A WITH-clause (CTE) feeding an UPDATE/DELETE — either updating *through* the CTE name, or a data-modifying CTE body (WITH x AS (INSERT/UPDATE/DELETE ... RETURNING) SELECT ...) — transpiled cross-engine
+
+**Solution (pointer).** Warned limit — statement preserved as a comment.
+
+**Discussion.** Data-modifying CTE bodies are PostgreSQL-only syntax; updating through a CTE name is a T-SQL-only capability (no other engine resolves the CTE as an updatable view); and Oracle additionally rejects a WITH clause on UPDATE/DELETE outright, so none of the three shapes has a mechanical, engine-agnostic rewrite.
+
+**See Also.** [`TestCteDmlGate::test_oracle_no_with_on_dml_carrier`](../../tests/unit/core/test_emit_mutation_survivors.py)
+
 ### <a id="unique-1127"></a>`UNIQUE-1127` — BEGIN TRANSACTION (T-SQL) → Oracle
 
 **Category:** `statement` · **Message:** BEGIN TRANSACTION dropped -- Oracle starts a transaction implicitly
@@ -1241,6 +1325,18 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 **Discussion.** Oracle has no explicit 'start transaction' statement — a transaction begins implicitly with the first DML — so an explicit BEGIN TRANSACTION has nothing to map to and is simply redundant on Oracle, not an error to reproduce.
 
 **See Also.** [`TestTsqlBeginTransaction::test_oracle_drops_with_warning`](../../tests/integration/test_challenge.py)
+
+### <a id="unique-1128"></a>`UNIQUE-1128` — START TRANSACTION READ ONLY|READ WRITE (MySQL) → T-SQL
+
+**Category:** `statement` · **Message:** T-SQL transactions have no READ … access mode; started as a regular transaction (docs/03-unsupported.md
+
+**Problem.** START TRANSACTION READ ONLY|READ WRITE (MySQL) → T-SQL
+
+**Solution (pointer).** Warned limit — the transaction opens as a normal (read/write) transaction; the READ ONLY/WRITE intent is dropped.
+
+**Discussion.** T-SQL's BEGIN TRANSACTION has no access-mode clause at all — unlike MySQL/PostgreSQL, which accept READ ONLY/READ WRITE on the opener — so the requested mode has nothing to map to.
+
+**See Also.** [`TestSetTransactionModes::test_tsql_mode_noted`](../../tests/integration/test_challenge.py)
 
 ### <a id="unique-1132"></a>`UNIQUE-1132` — SET TRANSACTION ISOLATION LEVEL <lvl> READ ONLY|READ WRITE — combined isolation + access mode (PostgreSQL) → T-SQL
 
@@ -1338,6 +1434,18 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **See Also.** [`TestOutputClauseToMySQL::test_output_into_var_is_documented_not_returning`](../../tests/integration/test_procedural.py)
 
+### <a id="unique-1142"></a>`UNIQUE-1142` — T-SQL MERGE with a MATCHED UPDATE and a conditional MATCHED DELETE whose condition reads a column the UPDATE assigns (→ Oracle)
+
+**Category:** `statement` · **Message:** MERGE clause has no faithful rewrite; reason carried at runtime
+
+**Problem.** T-SQL MERGE with a MATCHED UPDATE and a conditional MATCHED DELETE whose condition reads a column the UPDATE assigns (→ Oracle)
+
+**Solution (pointer).** Warned limit — the whole MERGE is preserved as a comment; rewrite the two-clause fold by hand, preserving Oracle's post-update DELETE WHERE evaluation order.
+
+**Discussion.** Oracle folds a conditional MATCHED UPDATE/DELETE pair into one UPDATE (CASE-guarded) plus a trailing DELETE WHERE, but Oracle evaluates that DELETE WHERE against post-update values; when the DELETE's own condition reads a column the UPDATE just wrote, the fold would delete rows the source MERGE keeps, so the whole statement degrades rather than ship silently wrong rows.
+
+**See Also.** [`TestMergeConditionalDeleteFoldSafety::test_unsafe_delete_on_updated_column_degrades`](../../tests/integration/test_challenge.py)
+
 ### <a id="unique-1143"></a>`UNIQUE-1143` — A trailing FOR UPDATE / FOR SHARE row-lock clause (PostgreSQL/Oracle/MySQL) → T-SQL
 
 **Category:** `statement` · **Message:** T-SQL has no FOR UPDATE/FOR SHARE row-lock clause; lock the rows with a WITH (UPDLOCK, ROWLOCK) table hint
@@ -1349,6 +1457,18 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 **Discussion.** T-SQL has no trailing row-lock clause on SELECT at all; row locking is instead requested via a WITH (UPDLOCK, ROWLOCK) table hint on the FROM clause — a different syntactic position, not a drop-in keyword substitution.
 
 **See Also.** [`postgresql-qdrop-FOR`](../../tests/fixtures/challenge/challenge_postgresql.sql)
+
+### <a id="unique-1145"></a>`UNIQUE-1145` — A MySQL inline functional/plain INDEX table element (→ other engines)
+
+**Category:** `statement` · **Message:** inline INDEX table element has no {dialect} equivalent form; index omitted — queries run unindexed. Original: …
+
+**Problem.** A MySQL inline functional/plain INDEX table element (→ other engines)
+
+**Solution (pointer).** Warned limit — the index is omitted; queries still return correct rows, just unindexed. Write a separate CREATE INDEX by hand where the target supports the expression.
+
+**Discussion.** An inline INDEX inside CREATE TABLE is a MySQL-only spelling; every other engine treats an index as a separate, purely physical object with no bearing on query results, so there is no column/constraint-list form to carry it to.
+
+**See Also.** [`my-json-index`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
 ### <a id="unique-1146"></a>`UNIQUE-1146` — An EXCLUDE exclusion constraint (PostgreSQL) → T-SQL/MySQL/Oracle
 
@@ -1614,6 +1734,18 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **See Also.** [`red3-ts-goto-label-proc`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
+### <a id="unique-1170"></a>`UNIQUE-1170` — A procedural construct the parser cannot recognize at all (e.g. a PL/SQL collection-TYPE declaration inside a trigger's DECLARE section)
+
+**Category:** `procedural` · **Message:** could not translate; preserved for review
+
+**Problem.** A procedural construct the parser cannot recognize at all (e.g. a PL/SQL collection-TYPE declaration inside a trigger's DECLARE section)
+
+**Solution (pointer).** Warned limit — the whole routine/statement is preserved as a documented comment for manual review.
+
+**Discussion.** This code is the procedural pipeline's own generic 'could not parse this' escape valve — paired 1:1 with the parser's own fallback (it captures the unparsed token stream as a carrier), so the concrete unrecognized shape varies by call site rather than being fixed per code.
+
+**See Also.** [`test_unparseable_construct_does_not_duplicate_the_carrier_warning`](../../tests/integration/test_procedural_warning_codes.py)
+
 ### <a id="unique-1171"></a>`UNIQUE-1171` — A whole procedural construct the transformer recognizes but cannot map on the target (the shared transformer-degrade carrier)
 
 **Category:** `procedural` · **Message:** procedural statement preserved as a comment; reason carried at runtime
@@ -1805,6 +1937,18 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 **Discussion.** The T-SQL sibling of UNIQUE-1175 — the columns are resolvable and the loop expands completely (one @variable per column, positional FETCH NEXT), but without --db-url metadata each loop variable is declared as the permissive NVARCHAR(4000) rather than the column's real type.
 
 **See Also.** [`test_named_cursor_loop_expands_completely`](../../tests/integration/test_cursor_for_loop_tsql.py)
+
+### <a id="unique-1188"></a>`UNIQUE-1188` — SET TRANSACTION READ ONLY/READ WRITE inside a routine (→ T-SQL)
+
+**Category:** `procedural` · **Message:** SET TRANSACTION {mode} dropped -- T-SQL has no READ ONLY/READ WRITE transaction mode; only ISOLATION LEVEL is expressible (docs/03-unsupported.md
+
+**Problem.** SET TRANSACTION READ ONLY/READ WRITE inside a routine (→ T-SQL)
+
+**Solution (pointer).** Warned limit — the access mode is dropped; ISOLATION LEVEL modes on the same statement still map natively.
+
+**Discussion.** T-SQL's SET TRANSACTION only sets the ISOLATION LEVEL; it has no access-mode spelling at all (Oracle/PostgreSQL/MySQL all accept READ ONLY/READ WRITE natively), so the mode has no target keyword to map to.
+
+**See Also.** [`TestProcSetTransaction::test_tsql_degrades_read_only_with_warning`](../../tests/integration/test_challenge.py)
 
 ### <a id="unique-1190"></a>`UNIQUE-1190` — Oracle EXECUTE IMMEDIATE ... USING <binds> with no INTO clause (→ T-SQL)
 
@@ -2266,14 +2410,8 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 | Code | Category | Message template | Rationale |
 |---|---|---|---|
-| <a id="unique-1011"></a>`UNIQUE-1011` | statement | named DEFAULT constraint {n} dropped (defaults are anonymous on this engine | _(rationale pending)_ |
-| <a id="unique-1012"></a>`UNIQUE-1012` | statement | {dialect} does not support INCLUDE covering columns; dropped: … | _(rationale pending)_ |
-| <a id="unique-1013"></a>`UNIQUE-1013` | statement | {dialect} does not support filtered indexes; dropped predicate:… | _(rationale pending)_ |
-| <a id="unique-1017"></a>`UNIQUE-1017` | statement | MySQL has no multi-element GROUP BY (CUBE/ROLLUP/ GROUPING SETS combined); the base grouping is kept<br>and the super-aggregate (subtotal) rows are omitted | _(rationale pending)_ |
-| <a id="unique-1018"></a>`UNIQUE-1018` | statement | T-SQL FOR XML/JSON row serialization has no cross-engine equivalent; the clause is dropped and the<br>base rows are returned instead (see docs/03-unsupported.md | _(rationale pending)_ |
 | <a id="unique-1026"></a>`UNIQUE-1026` | statement | Oracle has no UPDATE ... FROM and this join shape (no ON condition) cannot become a correlated<br>subquery; rewrite as a MERGE. Original | _(rationale pending)_ |
 | <a id="unique-1029"></a>`UNIQUE-1029` | statement | @@ERROR has no top-level {dialect} equivalent; use an exception handler | _(rationale pending)_ |
-| <a id="unique-1033"></a>`UNIQUE-1033` | statement | SQL%ROWCOUNT has no top-level {dialect} equivalent | _(rationale pending)_ |
 | <a id="unique-1035"></a>`UNIQUE-1035` | statement | TABLESAMPLE by row count has no Oracle SAMPLE form (docs/03-unsupported.md | _(rationale pending)_ |
 | <a id="unique-1036"></a>`UNIQUE-1036` | statement | TABLESAMPLE by row count has no PostgreSQL equivalent (docs/03-unsupported.md | _(rationale pending)_ |
 | <a id="unique-1047"></a>`UNIQUE-1047` | ddl | MySQL SET type on {col_name} has no {dialect} equivalent; stored as {varchar}({total_len}). Allowed<br>members: {quoted_values} | _(rationale pending)_ |
@@ -2289,21 +2427,15 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 | <a id="unique-1117"></a>`UNIQUE-1117` | statement | MySQL admin command has no {dialect} equivalent; run the target's own maintenance. | _(rationale pending)_ |
 | <a id="unique-1120"></a>`UNIQUE-1120` | statement | SET SESSION AUTHORIZATION has no {dialect} equivalent; switch users natively. | _(rationale pending)_ |
 | <a id="unique-1121"></a>`UNIQUE-1121` | statement | PostgreSQL session setting has no {dialect} equivalent; configure the session natively. | _(rationale pending)_ |
-| <a id="unique-1126"></a>`UNIQUE-1126` | statement | CTE with unsupported embedded DML preserved as a comment; reason carried at runtime | _(rationale pending)_ |
-| <a id="unique-1128"></a>`UNIQUE-1128` | statement | T-SQL transactions have no READ … access mode; started as a regular transaction<br>(docs/03-unsupported.md | _(rationale pending)_ |
 | <a id="unique-1129"></a>`UNIQUE-1129` | statement | READ COMMITTED is Oracle's default isolation level (no-op; kept as a note so a following SET<br>TRANSACTION mode statement can still open the transaction | _(rationale pending)_ |
 | <a id="unique-1130"></a>`UNIQUE-1130` | statement | READ COMMITTED is Oracle's default isolation level (no-op; kept as a note so a following SET<br>TRANSACTION mode statement can still open the transaction | _(rationale pending)_ |
 | <a id="unique-1131"></a>`UNIQUE-1131` | statement | Oracle has no {level} isolation level (supports READ COMMITTED/SERIALIZABLE only); statement<br>dropped. Original | _(rationale pending)_ |
 | <a id="unique-1135"></a>`UNIQUE-1135` | statement | session-variable SELECT INTO has no cross-dialect equivalent; rewrite as the target's assignment<br>form. Original | _(rationale pending)_ |
 | <a id="unique-1141"></a>`UNIQUE-1141` | statement | MERGE WHEN NOT MATCHED DO NOTHING has no faithful rewrite; reason carried at runtime | _(rationale pending)_ |
-| <a id="unique-1142"></a>`UNIQUE-1142` | statement | MERGE clause has no faithful rewrite; reason carried at runtime | _(rationale pending)_ |
 | <a id="unique-1144"></a>`UNIQUE-1144` | statement | Unhandled … | _(rationale pending)_ |
-| <a id="unique-1145"></a>`UNIQUE-1145` | statement | inline INDEX table element has no {dialect} equivalent form; index omitted — queries run unindexed.<br>Original: … | _(rationale pending)_ |
 | <a id="unique-1149"></a>`UNIQUE-1149` | expression | UNPIVOT has no {dialect} equivalent and the source columns are not visible to rewrite it as UNION<br>ALL — see docs/03-unsupported.md | _(rationale pending)_ |
 | <a id="unique-1150"></a>`UNIQUE-1150` | expression | PIVOT has no {dialect} equivalent and the source columns are not visible to rewrite it as<br>conditional aggregation — see docs/03-unsupported.md | _(rationale pending)_ |
-| <a id="unique-1170"></a>`UNIQUE-1170` | procedural | could not translate; preserved for review | _(rationale pending)_ |
 | <a id="unique-1181"></a>`UNIQUE-1181` | procedural | INSTEAD OF trigger aggregates over the inserted/deleted transition table; PostgreSQL INSTEAD OF<br>triggers are row-level only — port by hand (docs/03-unsupported.md | _(rationale pending)_ |
-| <a id="unique-1188"></a>`UNIQUE-1188` | procedural | SET TRANSACTION {mode} dropped -- T-SQL has no READ ONLY/READ WRITE transaction mode; only ISOLATION<br>LEVEL is expressible (docs/03-unsupported.md | _(rationale pending)_ |
 | <a id="unique-1189"></a>`UNIQUE-1189` | procedural | EXECUTE IMMEDIATE USING bindings dropped; inline them or use sp_executesql parameters | _(rationale pending)_ |
 | <a id="unique-1191"></a>`UNIQUE-1191` | procedural | OUTPUT <expr> dropped — populate the temp table manually | _(rationale pending)_ |
 | <a id="unique-1199"></a>`UNIQUE-1199` | procedural | T-SQL system procedure has no … equivalent; original: {original} | _(rationale pending)_ |
@@ -2318,4 +2450,4 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 | <a id="unique-1230"></a>`UNIQUE-1230` | procedural | procedural parse note; the specific reason is carried at runtime | _(rationale pending)_ |
 | <a id="unique-1232"></a>`UNIQUE-1232` | procedural | procedural transpilation failed (internal error); the routine is preserved; the error is carried at<br>runtime | _(rationale pending)_ |
 
-239 codes across 6 categories (188 with a rationale).
+239 codes across 6 categories (200 with a rationale).
