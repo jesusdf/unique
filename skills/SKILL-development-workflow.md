@@ -513,23 +513,34 @@ worker agents**:
   session (check `$STY`), the visible terminal — including the status bar's
   "You've used N% of your session limit · resets HH:MM" line — can be read
   with the helper script (user, session and paths all come from the
-  environment — nothing hardcoded):
+  environment — nothing hardcoded; the reading log lives OUTSIDE the repo,
+  in `$XDG_RUNTIME_DIR`):
   ```bash
-  .claude/session-usage.sh   # prints the bare percentage, or "no-line" when
-                             # the status line is absent (below the warning
-                             # threshold, or the limit message just reset)
+  .claude/session-usage.sh          # live read: bare % or "no-line"; also
+                                    # logs the reading to the state file
+  .claude/session-usage.sh cached   # no screen access — last value + age +
+                                    # verdict: ok / below-threshold /
+                                    # above-threshold / reset-detected
+                                    # (",stale" if the sample is >15 min old)
+  .claude/session-usage.sh daemon   # detached single-instance sampler every
+                                    # 5 min; exits when the screen session ends
   ```
+  The cached history disambiguates what a single live read cannot: `no-line`
+  alone could mean "below the warning threshold" OR "the limit just reset" —
+  `reset-detected` (the usage line vanished or dropped sharply after being
+  visible) is unambiguous.
   Authorized use is **only** reading that usage % / reset time, read-only —
   never to read anything else on screen, never `-X` commands that modify the
   session. Check it **before launching a worker**, **before cutting a
   release/tag**, and before any long operation; at **≥90%** stop launching
   new workers and instead order in-flight ones to commit at a stable point
   (the A10-P3/PEND-1 stop-order pattern) — a session-limit death mid-worker
-  loses the whole uncommitted batch. **Past 90%**, additionally arm a
-  half-hourly cron that runs the script: when the "You've used N%…" message
-  resets (the line disappears or the % drops back), the full ratio is
-  available again — **resume the pending work automatically**, without
-  waiting for the user.
+  loses the whole uncommitted batch. **Past 90%**, additionally arm the
+  `daemon` once plus a half-hourly cron that consults `cached`: a
+  `reset-detected` verdict means the full ratio is back — **resume the
+  pending work automatically**, without waiting for the user. (The watch
+  must NOT be a background bash sleep-loop — the Bash tool caps at 10 min;
+  use the harness cron/wakeup mechanism for the half-hourly consult.)
 - **Concurrency is budget-bound:** keep it to **2–3 workers at a time** and
   batch the rest — the 2026-07-24 six-agent fan-out exhausted the session
   limit mid-campaign. Long-running workers go in the background; the
