@@ -511,22 +511,26 @@ worker agents**:
 - **Check the session-usage % before spending big (maintainer-authorized
   2026-08-01, READ-ONLY).** When the session runs inside the user's `screen`
   session (check `$STY`), the visible terminal — including the status bar's
-  "You've used N% of your session limit · resets HH:MM" line — can be
-  captured with:
+  "You've used N% of your session limit · resets HH:MM" line — can be read
+  with the helper script (user, session and paths all come from the
+  environment — nothing hardcoded):
   ```bash
-  screen -S "$STY" -X hardcopy /tmp/…/screen-dump.txt   # then read the file
+  .claude/session-usage.sh   # prints the bare percentage, or "no-line" when
+                             # the status line is absent (below the warning
+                             # threshold, or the limit message just reset)
   ```
   Authorized use is **only** reading that usage % / reset time, read-only —
   never to read anything else on screen, never `-X` commands that modify the
   session. Check it **before launching a worker**, **before cutting a
-  release/tag**, and before any long operation; at **≥95%** stop launching
+  release/tag**, and before any long operation; at **≥90%** stop launching
   new workers and instead order in-flight ones to commit at a stable point
   (the A10-P3/PEND-1 stop-order pattern) — a session-limit death mid-worker
-  loses the whole uncommitted batch. **Past 95%**, additionally start a
-  half-hourly screen check (a background loop: sleep 30 min → hardcopy →
-  grep the usage line): when the "You've used N%…" message resets
-  (disappears or the % drops back), the full ratio is available again —
-  **resume the pending work automatically**, without waiting for the user.
+  loses the whole uncommitted batch. **Past 90%**, additionally arm a
+  half-hourly cron that runs the script: when the "You've used N%…" message
+  resets (the line disappears or the % drops back), the full ratio is
+  available again — **resume the pending work automatically**, without
+  waiting for the user.
+- **Concurrency is budget-bound:** keep it to **2–3 workers at a time** and
   batch the rest — the 2026-07-24 six-agent fan-out exhausted the session
   limit mid-campaign. Long-running workers go in the background; the
   architect keeps working.
