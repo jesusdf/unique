@@ -266,6 +266,20 @@ def _call_table_state_with_rs_tail(conn: Any, engine: str, case: RoutineCase) ->
     conn.commit()
 
 
+def _is_mysql_connector(conn: Any) -> bool:
+    """True when *conn* is mysql-connector-python rather than PyMySQL.
+
+    The two drivers expose CALL results differently: PyMySQL's ``callproc``
+    binds ``@_name_i`` user variables and streams result sets on the calling
+    cursor, while mysql-connector resolves OUT params in ``callproc``'s return
+    value and parks result sets behind ``stored_results()``. Local runs have
+    PyMySQL installed; the CI nightly only installs mysql-connector — the
+    harness must work under either (first caught as 4 red mysql legs on the
+    2026-08-01 nightly: OUT params read back NULL, result sets empty).
+    """
+    return type(conn).__module__.startswith("mysql.connector")
+
+
 def _call_out(conn: Any, engine: str, case: RoutineCase) -> list[tuple]:
     """Call an OUT/INOUT-param procedure and read the output values, in param order.
 
@@ -313,11 +327,15 @@ def _call_out(conn: Any, engine: str, case: RoutineCase) -> list[tuple]:
         elif engine == "mysql":
             args = [
                 call_argument(case.args.get(p), engine) for p in order
-            ]  # INOUT slots seed @_proc_i with the input value
-            cur.callproc(case.name, tuple(args))
-            selects = ", ".join(f"@_{case.name}_{i}" for i in sorted(out_pos))
-            cur.execute(f"SELECT {selects}")
-            values = tuple(cur.fetchone())
+            ]  # INOUT slots seed the input value either way
+            if _is_mysql_connector(conn):
+                returned = cur.callproc(case.name, tuple(args))
+                values = tuple(returned[i] for i in sorted(out_pos))
+            else:  # PyMySQL: read back the @_name_i user variables it bound
+                cur.callproc(case.name, tuple(args))
+                selects = ", ".join(f"@_{case.name}_{i}" for i in sorted(out_pos))
+                cur.execute(f"SELECT {selects}")
+                values = tuple(cur.fetchone())
         else:  # postgresql
             placeholders = ", ".join(["%s"] * len(order))
             binds = [call_argument(case.args.get(p), engine) for p in order]
@@ -369,9 +387,12 @@ def _call_resultset(conn: Any, engine: str, case: RoutineCase) -> list[list[tupl
                 cur.nextset()
         else:  # mysql
             cur.callproc(case.name, tuple(in_args))
-            for _ in range(n):
-                sets.append(list(cur.fetchall()))
-                cur.nextset()
+            if _is_mysql_connector(conn):
+                sets = [list(r.fetchall()) for r in cur.stored_results()][:n]
+            else:  # PyMySQL streams the sets on the calling cursor
+                for _ in range(n):
+                    sets.append(list(cur.fetchall()))
+                    cur.nextset()
     finally:
         cur.close()
     conn.commit()
