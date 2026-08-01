@@ -83,6 +83,16 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
   reference regenerated. `TestOracleBareNumberToInteger` strengthened.
 (Both maintainer decisions resolved 2026-07-31.)
 
+- **PEND-2a** (P3, from PEND-1 2026-08-01) — `UNIQUE-1072`/`UNIQUE-1102`
+  appear DEAD under the pinned sqlglot version (no reachable trigger through
+  the public `Transpiler` API; superseded by earlier-intercepting codes), and
+  six more show strong unreachability evidence (`1117`/`1120`/`1121`
+  superseded by orchestration-level `1219`/`1217`/`1218`; `1135` by `1003`;
+  `1144` likely internal-exception-only; `1199` unreachable for T-SQL `EXEC`,
+  which always hits `1198`). Keep-or-retire is a **maintainer call**:
+  retiring shrinks the registry honestly, keeping means documenting them as
+  safety-net codes.
+
 ### Small findings (P3 unless noted)
 
 - **B61** (P2, found during RECLASS-2, probed) — PL/SQL `CONSTANT` variable
@@ -138,6 +148,24 @@ ledger (`tests/helpers/challenge_fe_exclusions.py`), ratchet floor 43.*
 - ~~B48~~ — DONE 2026-07-31: mysql un-gated (routed through the same
   derived-table rewrite tsql gets; live-executed on MySQL 8); Oracle's
   ORA-03048 degrade re-verified genuine and kept.
+
+### PEND-1 — warning-rationale coverage residue (P3)
+
+- ~~PEND-1~~ — DONE 2026-08-01: 25 of the 51 "(rationale pending)" codes in
+  `docs/reference/warnings.md` got full entries (coverage 188→213 of 239,
+  uncovered floor 51→26); every entry live-probed through
+  `Transpiler().transpile(...)` and traced to a real corpus slug or an
+  existing test node id — zero invented.
+- **PEND-1b** (P3) — the remaining 26 codes, three honest buckets:
+  (a) live-confirmed but no traceable corpus/test source (`1149, 1150, 1181,
+  1189, 1191, 1224, 1229, 1232`) — unblocking move: author corpus/test cases
+  that fire them, then write the entry; (b) structurally-unreachable
+  candidates (see PEND-2a under maintainer decisions); (c) not fully
+  resolved (`1026, 1029, 1035, 1036, 1070, 1086, 1129, 1130, 1131, 1204`).
+- **PEND-1c** (P3, fix-brief seed) — live-verified finding: `1129`/`1130`/
+  `1214` are three codes for the same "READ COMMITTED is Oracle's default"
+  no-op, reached via three different pipeline paths (source dialect / batch
+  embedding); candidate for consolidation into one code.
 
 ### D1b/D1c — rationale residue (P3)
 
