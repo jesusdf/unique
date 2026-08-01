@@ -802,6 +802,28 @@ RATIONALES: dict[str, Rationale] = {
             "semantics (bitwise operations, display) are not."
         ),
     ),
+    "UNIQUE-1047": _R(
+        construct=(
+            "MySQL SET column type — an unordered combination of values "
+            "(→ other engines)"
+        ),
+        reason=(
+            "Only MySQL has a 'combination of values' column type; unlike "
+            "ENUM (one value from a list, mappable to VARCHAR + CHECK IN "
+            "(...)), a SET holds any comma-joined subset of its allowed "
+            "members, which no single CHECK expression can validate, so it "
+            "maps to a plain VARCHAR with no CHECK, noting the allowed "
+            "members for reference."
+        ),
+        example_case=(
+            "tests/integration/test_real_world.py::TestOutputValidity::"
+            "test_statements_parse_in_target_dialect"
+        ),
+        divergence=(
+            "Warned limit — the value-combination constraint is not "
+            "enforced on the target."
+        ),
+    ),
     "UNIQUE-1048": _R(
         construct="T-SQL structure-clone CREATE TABLE t2 LIKE t1 (→ T-SQL / Oracle)",
         reason=(
@@ -1200,6 +1222,26 @@ RATIONALES: dict[str, Rationale] = {
             "PostgreSQL/Oracle, which support EXCLUDE natively."
         ),
     ),
+    "UNIQUE-1079": _R(
+        construct=(
+            "DATEADD/DATEDIFF with a unit no target engine expresses (e.g. "
+            "NANOSECOND) (→ PostgreSQL/Oracle/MySQL)"
+        ),
+        reason=(
+            "T-SQL's DATEADD/DATEDIFF accept any real datepart, including "
+            "ones finer than any other engine's date-arithmetic "
+            "vocabulary (no engine besides T-SQL has a NANOSECOND unit); "
+            "there is no unit to translate to, so the value cannot be "
+            "computed."
+        ),
+        example_case=(
+            "tests/integration/test_challenge.py::TestDateAddDiffUnits::"
+            "test_unmapped_diff_unit_degrades_not_invalid"
+        ),
+        divergence=(
+            "Warned limit — degrades to a NULL carrier naming the unit " "for review."
+        ),
+    ),
     "UNIQUE-1080": _R(
         construct="Sequence CURRVAL — current value without advancing (→ T-SQL)",
         reason=(
@@ -1208,6 +1250,27 @@ RATIONALES: dict[str, Rationale] = {
         ),
         example_case="ora-seq-use",
         divergence="Warned limit — capture NEXT VALUE FOR in a variable instead.",
+    ),
+    "UNIQUE-1081": _R(
+        construct=(
+            "A day-of-week value mapped to T-SQL DATEPART(WEEKDAY, ...) " "(→ T-SQL)"
+        ),
+        reason=(
+            "T-SQL's WEEKDAY datepart is not a fixed numbering — it "
+            "shifts with the session's @@DATEFIRST setting — while every "
+            "source engine's own day-of-week function (MySQL DAYOFWEEK, "
+            "PostgreSQL DOW, Oracle's anchor formula) is fixed Sunday=1; "
+            "the mapping is only correct under T-SQL's untouched default."
+        ),
+        example_case=(
+            "tests/integration/test_challenge.py::"
+            "TestFalseUnmapMappedSymmetrically::"
+            "test_mysql_dayofweek_maps_per_engine"
+        ),
+        divergence=(
+            "Faithful when @@DATEFIRST is left at its default "
+            "(7/Sunday); otherwise the value shifts."
+        ),
     ),
     "UNIQUE-1082": _R(
         construct="An empty-string result on Oracle ('' ≡ NULL)",
@@ -1500,6 +1563,42 @@ RATIONALES: dict[str, Rationale] = {
             "than leaked unchanged into a table-name position."
         ),
     ),
+    "UNIQUE-1106": _R(
+        construct=(
+            "CREATE INDEX over an expression, e.g. CREATE INDEX ix ON t "
+            "(a * 2) (→ T-SQL)"
+        ),
+        reason=(
+            "T-SQL has no expression/functional index at all — an index "
+            "can only cover column names — so there is no CREATE INDEX "
+            "form to target; a computed column plus an index on it is "
+            "the closest workaround, but it is a schema change the "
+            "transpiler cannot make unilaterally."
+        ),
+        example_case="ora-functional-index",
+        divergence=(
+            "Warned limit — statement preserved as a comment; add a "
+            "computed column and index it by hand."
+        ),
+    ),
+    "UNIQUE-1107": _R(
+        construct=(
+            "T-SQL SELECT IDENTITY(type, seed, incr) ... INTO t2 (→ " "other engines)"
+        ),
+        reason=(
+            "No engine has an IDENTITY() scalar function; the "
+            "row-numbering values it produces are reproduced with "
+            "ROW_NUMBER() so the id column's values match, but the "
+            "identity/auto-increment property (a schema attribute) has "
+            "no spelling inside a CREATE-TABLE-AS-SELECT on any target."
+        ),
+        example_case="reda-ts-select-into-identity",
+        divergence=(
+            "Faithful values, warned limit on the property — id values "
+            "match; the column is a plain (non-auto-increment) column "
+            "on the target."
+        ),
+    ),
     "UNIQUE-1108": _R(
         construct=(
             "ADD CONSTRAINT ... NOT VALID (PostgreSQL, deferred "
@@ -1554,6 +1653,27 @@ RATIONALES: dict[str, Rationale] = {
         divergence=(
             "Warned limit — statement preserved as a comment; convert the "
             "data manually."
+        ),
+    ),
+    "UNIQUE-1111": _R(
+        construct=(
+            "PostgreSQL ALTER COLUMN ... {SET|DROP} NOT NULL on a column "
+            "the script never declares (→ MySQL/T-SQL)"
+        ),
+        reason=(
+            "MySQL's MODIFY and T-SQL's ALTER COLUMN both require "
+            "re-stating the column's full type in the same clause that "
+            "changes its nullability (PostgreSQL's own form needs only "
+            "the constraint); without the script's own CREATE TABLE to "
+            "harvest that type from, there is nothing to re-state."
+        ),
+        example_case=(
+            "tests/integration/test_challenge.py::"
+            "TestCrossStatementMetadata::test_unknown_column_degrades_warned"
+        ),
+        divergence=(
+            "Warned limit — degrades to a documented carrier rather "
+            "than guessing a type."
         ),
     ),
     "UNIQUE-1112": _R(
@@ -3013,6 +3133,59 @@ RATIONALES: dict[str, Rationale] = {
             "set is documented, not produced."
         ),
     ),
+    "UNIQUE-1213": _R(
+        construct=(
+            "A T-SQL default-constraint value with no valid target "
+            "spelling (e.g. NEWID() → MySQL)"
+        ),
+        reason=(
+            "The default value is transpiled like any other expression, "
+            "but some T-SQL built-ins (NEWID's UUID generation, chief "
+            "among them) have no spelling on some targets at all; "
+            "shipping the untranslated fragment as a DEFAULT would leave "
+            "invalid DDL, so the whole default-constraint statement is "
+            "checked against the target's own grammar and, on failure, "
+            "preserved as a comment instead."
+        ),
+        example_case=(
+            "tests/unit/core/test_transpiler.py::TestTranspiler::"
+            "test_add_default_non_portable_value_falls_back"
+        ),
+        divergence=(
+            "Warned limit — the statement is preserved as a comment; add "
+            "the target-native equivalent (e.g. a UUID default/trigger) "
+            "by hand."
+        ),
+    ),
+    "UNIQUE-1214": _R(
+        construct=(
+            "A standalone T-SQL/MySQL SET TRANSACTION ISOLATION LEVEL "
+            "READ COMMITTED batch (→ Oracle)"
+        ),
+        reason=(
+            "READ COMMITTED is Oracle's default isolation level, and "
+            "Oracle requires SET TRANSACTION to be a transaction's very "
+            "first statement (ORA-01453 otherwise); keeping this one "
+            "would block a following mapped SET TRANSACTION (e.g. READ "
+            "ONLY) from opening the transaction. Same no-op fact as "
+            "UNIQUE-1129, reached by a different route: 1129 fires once "
+            "the statement has survived into the sqlglot-based "
+            "passthrough pipeline as an ordinary node (e.g. it shares a "
+            "batch with a preceding statement); 1214 fires when the "
+            "statement is (or opens) its own whole batch, handled "
+            "directly at the orchestration layer before any sqlglot "
+            "parse of it."
+        ),
+        example_case=(
+            "tests/integration/test_challenge.py::TestSetTransactionModes::"
+            "test_oracle_read_only"
+        ),
+        divergence=(
+            "Faithful (no-op on both engines) — kept as a comment so a "
+            "following SET TRANSACTION mode statement can still open the "
+            "transaction."
+        ),
+    ),
     "UNIQUE-1215": _R(
         construct="SET ROLE (PostgreSQL/MySQL/Oracle) → T-SQL",
         reason=(
@@ -3107,6 +3280,31 @@ RATIONALES: dict[str, Rationale] = {
         divergence=(
             "Warned limit — statement preserved as a comment; configure "
             "the session / run maintenance natively on the target."
+        ),
+    ),
+    "UNIQUE-1220": _R(
+        construct=(
+            "A transpiled statement that the sqlglot output gate accepts "
+            "but the real target engine rejects (opt-in live output "
+            "validation only)"
+        ),
+        reason=(
+            "sqlglot's writer is deliberately lenient (it renders SQL it "
+            "cannot fully validate rather than refuse); a live "
+            "connection to the actual target engine is the final "
+            "arbiter, so when a development run opts into it and the "
+            "engine itself raises on the generated statement, the "
+            "statement is degraded to a carrier with the engine's own "
+            "error rather than shipping SQL known to fail."
+        ),
+        example_case=(
+            "tests/integration/test_pg_source_wave1.py::"
+            "TestLiveOutputValidation::test_live_pg_rejects_become_carriers"
+        ),
+        divergence=(
+            "Warned limit — the statement is preserved as a comment "
+            "carrying the live engine's rejection reason; only reachable "
+            "with an explicit live-validation URL, not in normal use."
         ),
     ),
     "UNIQUE-1221": _R(
@@ -3216,6 +3414,82 @@ RATIONALES: dict[str, Rationale] = {
         divergence=(
             "Warned limit — only the THEN branch is translated; the ELSE "
             "branch is dropped and carried in the comment."
+        ),
+    ),
+    "UNIQUE-1227": _R(
+        construct=(
+            "T-SQL ALTER COLUMN ... NULL (a redundant, explicit "
+            "nullability re-statement) → Oracle"
+        ),
+        reason=(
+            "Oracle's MODIFY raises ORA-01451 if a column already "
+            "allows NULL and the statement redundantly re-states NULL "
+            "(only a change TO NOT NULL, or FROM NOT NULL back to "
+            "nullable, is a real MODIFY); since the column's current "
+            "nullability is what the source ALTER COLUMN is re-stating "
+            "unchanged, the redundant keyword is dropped rather than "
+            "shipped as an error-raising MODIFY."
+        ),
+        example_case=(
+            "tests/unit/core/test_transpiler.py::TestTranspiler::"
+            "test_alter_column_varbinary_max_omits_redundant_null"
+        ),
+        divergence=(
+            "Faithful — the column's nullability is unchanged either "
+            "way; only the redundant keyword is dropped, with a warning "
+            "so the directive isn't silently lost."
+        ),
+    ),
+    "UNIQUE-1228": _R(
+        construct=(
+            "Internal: a semantic sqlglot AST argument no converter "
+            "function reads while building the IR (a structural "
+            "safety-net, not a specific SQL construct)"
+        ),
+        reason=(
+            "The converter walks sqlglot's parsed AST and hands each "
+            "node's semantic args to a per-construct _convert_* function; "
+            "this tripwire records any arg sqlglot considers meaningful "
+            "(not in a reviewed allow-list of genuinely inert ones) that "
+            "no function ever reads — evidence a clause on that node type "
+            "may be silently dropped from the IR/output before anyone "
+            "specifically decided to drop it, rather than proof any given "
+            "run actually lost something."
+        ),
+        example_case=(
+            "tests/unit/core/test_unread_args.py::TestConverterIntegration::"
+            "test_warn_mode_flags_unread_arg"
+        ),
+        divergence=(
+            "Warned limit — the construct may be silently dropped; the "
+            "specific arg name is carried in the warning for review."
+        ),
+    ),
+    "UNIQUE-1230": _R(
+        construct=(
+            "A procedural-routine parse note with no more specific "
+            "diagnostic code to inherit (e.g. transpiling a routine to "
+            "its own source dialect, a no-op transform that leaves no "
+            "carrier in the output)"
+        ),
+        reason=(
+            "A procedural parse warning is raised without a fixed code "
+            "of its own; when the routine is rewritten, a later pass "
+            "normally infers the specific code from whichever carrier "
+            "comment ended up covering the same construct in the "
+            "output — but a same-dialect (no-op) transform, or any "
+            "other case that leaves no matching carrier, has nothing to "
+            "infer from, so the generic fallback code ships instead of "
+            "an invented specific one."
+        ),
+        example_case=(
+            "tests/integration/test_procedural_warning_codes.py::"
+            "test_genuinely_generic_parse_warning_keeps_fallback_code"
+        ),
+        divergence=(
+            "Warned note — informational; the routine's behavior is "
+            "unaffected, only the diagnostic code is generic rather than "
+            "specific."
         ),
     ),
     "UNIQUE-1231": _R(
