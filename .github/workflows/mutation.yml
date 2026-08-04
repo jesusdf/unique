@@ -1,14 +1,14 @@
-name: Mutation testing (nightly)
+name: Mutation testing (weekly)
 
 # Mutation testing is slow (it re-runs the tests once per mutant), so it runs
-# nightly and on demand rather than on every push. It measures test-assertion
+# weekly and on demand rather than on every push. It measures test-assertion
 # quality: the surviving mutants are lines a test executes but does not verify —
 # what line coverage cannot see. Informational (does not gate merges); the score
 # and survivors are written to the run summary.
 
 on:
   schedule:
-    - cron: "44 4 * * *"  # 04:44 UTC nightly
+    - cron: "44 4 * * 5"  # Fridays 04:44 UTC
   workflow_dispatch: {}
 
 permissions:
@@ -95,7 +95,7 @@ jobs:
           # 66% -- floors kept, because the expanded --tests selections above
           # (the four challenge assertion modules, +1,073 identity-killing
           # tests) will raise every measured score. The STALE check below
-          # forces the bump after the first nightly at this HEAD.
+          # forces the bump after the first scheduled run at this HEAD.
           FLOORS = {
               "convert.py": 65, "emit.py": 60, "_base.py": 38,
               "harvest.py": 48, "base.py": 52,  # transformer/base.py
@@ -125,7 +125,7 @@ jobs:
           ]
           # Self-ratcheting (audit B15/T7): a floor left >STALE_MARGIN under
           # the measurement is head-room that absorbs regressions -- the
-          # nightly itself demands the raise instead of waiting for an audit.
+          # scheduled run itself demands the raise instead of an audit.
           stale = [
               f"{n}: measured {p}% vs floor {FLOORS[n]}% -- raise to {p - 10}%"
               for n, p in scores.items()
@@ -151,13 +151,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          title="Nightly mutation regression"
+          title="Weekly mutation regression"
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           # Avoid spam: only open one if there is no open issue already.
           existing=$(gh issue list --state open --search "in:title $title" --json number --jq 'length')
           if [ "$existing" = "0" ]; then
             gh issue create --title "$title ($(date -u +%F))" --body \
-              "The nightly mutation job failed: a module's test-assertion score dropped below its floor, or the harness errored. Review the surviving mutants and add assertions (or fix the harness). Run: $run_url"
+              "The weekly mutation job failed: a module's test-assertion score dropped below its floor, or the harness errored. Review the surviving mutants and add assertions (or fix the harness). Run: $run_url"
           else
             echo "an open '$title' issue already exists — not duplicating."
           fi

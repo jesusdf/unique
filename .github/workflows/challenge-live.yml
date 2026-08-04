@@ -1,15 +1,15 @@
-name: Challenge live (nightly)
+name: Challenge live (weekly)
 
 # The challenge parse gate (test_challenge.py) proves transpiled output *parses*;
-# this nightly job proves the func-class cases return the *same result set*. It
+# this weekly job proves the func-class cases return the *same result set*. It
 # executes the curated FUNC_CASES (and any [fixed] case tagged [class=func]) on
 # the real source and target engines and diffs the answers — a semantic gate that
-# a permissive parser cannot see. Runs nightly and on demand (not per push): it
+# a permissive parser cannot see. Runs weekly and on demand (not per push): it
 # needs the four live engines and is a regression sentinel, not a merge gate.
 
 on:
   schedule:
-    - cron: "22 3 * * *"  # 03:22 UTC nightly (off the mutation job's 04:44)
+    - cron: "22 3 * * 5"  # Fridays 03:22 UTC (off the mutation job's 04:44)
   workflow_dispatch: {}
 
 permissions:
